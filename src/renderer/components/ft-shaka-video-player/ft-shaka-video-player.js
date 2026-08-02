@@ -179,6 +179,7 @@ export default defineComponent({
     'skip-to-next',
     'skip-to-prev',
     'player-reload-requested',
+    'sabr-refresh-requested',
   ],
   setup: function (props, { emit, expose }) {
     const { locale, t } = useI18n()
@@ -1325,6 +1326,53 @@ export default defineComponent({
         sabrAbortController.abort()
         emit('player-reload-requested')
       })
+      sabrStream.onRefreshNeeded(() => {
+        refreshSabrCredentials()
+      })
+    }
+
+    /** True while a credential refresh is in flight, so a second is not started */
+    let sabrRefreshInProgress = false
+
+    /**
+     * Fetches fresh SABR credentials from the watch view and swaps them into
+     * the running session, so an untrusted PO token can be replaced without
+     * tearing down the player. If the refresh cannot complete, the plugin's
+     * parked requests fall back to the full player reload by themselves.
+     */
+    async function refreshSabrCredentials() {
+      if (sabrRefreshInProgress || !sabrStream) return
+      sabrRefreshInProgress = true
+
+      try {
+        const formatIdsBefore = sabrStream.getFormatIds()
+
+        /** @type {{ sabrData: object, formatIds: string[] } | null} */
+        const result = await new Promise((resolve) => {
+          emit('sabr-refresh-requested', { onResult: resolve })
+        })
+
+        if (!result) {
+          sabrStream.abandonRefresh(new Error('SABR credential refresh failed'))
+          return
+        }
+
+        // The buffer is only reusable if the refreshed session still serves
+        // every format we hold init data for. An incompatible response
+        // abandons the park rather than releasing it: releasing parked
+        // requests into a session with different formats would fetch
+        // mismatched media into the existing buffer.
+        const formatsChanged = formatIdsBefore.some(id => !result.formatIds.includes(id))
+
+        if (formatsChanged) {
+          sabrStream.abandonRefresh(new Error('SABR formats changed across refresh'))
+          return
+        }
+
+        sabrStream.refresh(result.sabrData)
+      } finally {
+        sabrRefreshInProgress = false
+      }
     }
 
     // #endregion SABR

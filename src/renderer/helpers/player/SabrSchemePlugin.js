@@ -22,6 +22,38 @@ const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
 
 /**
+ * How many times to retry a segment that the server answered with a
+ * NextRequestPolicy and no media, while attestation is pending.
+ * Retrying sends a byte identical request, so a high number achieves nothing
+ * except hammering the server.
+ */
+const ATTESTATION_RETRY_LIMIT = 3
+
+/**
+ * How many credential refreshes to attempt before giving up on a video. Each
+ * refresh mints a fresh PO token, which the server may or may not trust, so
+ * retrying is worth something. Looping forever is not.
+ */
+const ATTESTATION_REFRESH_LIMIT = 5
+
+/**
+ * Survives player teardown, so that recovery attempts triggered by a
+ * distrusted PO token can be counted even across a full reload. Scoped to a
+ * single video: a new video starts with a full budget.
+ */
+const attestationState = {
+  /** @type {?string} */
+  videoId: null,
+  refreshes: 0,
+}
+
+/**
+ * The give-up error raised once the refresh budget is spent. The watch view
+ * matches on this message to show a real error instead of cycling formats.
+ */
+export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token for this session'
+
+/**
  * @typedef OperationInputs
  * @type {object}
  * @property {string} uri
@@ -55,6 +87,17 @@ const ShakaError = shaka.util.Error
  * @property {number} cumulativeBackOffTimeMs
  * @property {number} cumulativeBackOffRequested
  * @property {number} cumulativeRetryDueToNextRequestPolicy
+ * @property {number} generation
+ * @property {(abrRequest: VideoPlaybackAbrRequest, builtAtGeneration: number) => number} applyCredentials
+ * @property {() => ?PendingRefresh} getPendingRefresh
+ * @property {() => void} beginRefresh
+ */
+/**
+ * @typedef PendingRefresh
+ * @type {object}
+ * @property {Promise<void>} promise
+ * @property {() => void} resolve
+ * @property {(error: Error) => void} reject
  */
 /**
  * @typedef SabrStreamState
@@ -65,11 +108,14 @@ const ShakaError = shaka.util.Error
  * @property {?NextRequestPolicy} nextRequestPolicy
  * @property {boolean} playerReloadRequested
  * @property {number} requestNumber
+ * @property {boolean} refreshInFlight
  */
 /**
  * @typedef TimeoutController
  * @type {object}
  * @property {() => void} resetTimeoutOnce
+ * @property {() => void} suspend
+ * @property {() => void} resume
  * @property {() => void} clearTimeout
  */
 /**
@@ -77,6 +123,10 @@ const ShakaError = shaka.util.Error
  * @type {object}
  * @property {(cb: ({backoffMs: number}) => void) => void} onBackoffRequested
  * @property {(cb: () => void) => void} onReloadOnce
+ * @property {(cb: () => void) => void} onRefreshNeeded
+ * @property {(newSabrData: import('../../views/Watch/Watch').SabrData) => void} refresh
+ * @property {(error: Error) => void} abandonRefresh
+ * @property {() => string[]} getFormatIds
  * @property {() => void | undefined} cleanup
  */
 
@@ -220,6 +270,93 @@ function createRecoverableNetworkError(code, ...args) {
 }
 
 /**
+ * Asks the watch view to reload the player. Requests already in flight abort
+ * themselves once `playerReloadRequested` is set.
+ * @param {CurrentState} currentState
+ */
+function requestPlayerReload(currentState) {
+  currentState.sabrStreamState.playerReloadRequested = true
+  if (!currentState.abortController.signal.aborted) {
+    currentState.abortController.abort()
+    currentState.eventEmitter.emit('reload')
+  }
+}
+
+/**
+ * Re-applies the current credentials and SABR contexts to the request and
+ * re-encodes the body. Needed before any re-send, because the encoded body
+ * outlives the credentials it was built with.
+ * @param {CurrentState} currentState
+ */
+function rebuildRequestBody(currentState) {
+  currentState.generation = currentState.applyCredentials(currentState.abrRequest, currentState.generation)
+
+  const { sabrContexts, unsentSabrContexts } = prepareSabrContexts(currentState.sabrStreamState)
+
+  currentState.abrRequest.streamerContext.sabrContexts = sabrContexts
+  currentState.abrRequest.streamerContext.unsentSabrContexts = unsentSabrContexts
+
+  let body
+
+  try {
+    body = VideoPlaybackAbrRequest.encode(currentState.abrRequest).finish()
+  } catch (error) {
+    console.error('Invalid VideoPlaybackAbrRequest data', currentState.abrRequest)
+    throw error
+  }
+
+  currentState.requestInit = {
+    ...currentState.requestInit,
+    body,
+  }
+}
+
+/**
+ * Parks the request while a credential refresh is in flight, instead of
+ * failing it. The player keeps playing from its buffer in the meantime. Once
+ * released, the body is rebuilt against the fresh credentials. If the refresh
+ * is abandoned, falls back to the old full player reload.
+ * @param {OperationInputs} operationInputs
+ * @param {CurrentState} currentState
+ */
+async function parkUntilRefreshed(operationInputs, currentState) {
+  const pending = currentState.getPendingRefresh()
+  if (!pending) return
+
+  // Time spent parked is our latency, not the server's
+  currentState.timeoutController?.suspend()
+
+  try {
+    await pending.promise
+  } catch {
+    if (currentState.abortStatus.cancelled) {
+      // Woken by teardown, not by a failed refresh: bow out quietly
+      throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
+    }
+
+    requestPlayerReload(currentState)
+    throw createRecoverableNetworkError(
+      ShakaError.Code.HTTP_ERROR,
+      operationInputs.uri,
+      new Error('Reloading player: SABR credential refresh failed'),
+      operationInputs.requestType,
+    )
+  } finally {
+    currentState.timeoutController?.resume()
+  }
+
+  // The retry and backoff history belongs to the dead session. Left in place,
+  // the stale backoff tally plus the new session's routine start up backoff
+  // trips the loop detector and forces the full reload this refresh exists to
+  // avoid.
+  currentState.cumulativeRetryDueToNextRequestPolicy = 0
+  currentState.cumulativeBackOffRequested = 0
+  currentState.cumulativeBackOffTimeMs = 0
+
+  rebuildRequestBody(currentState)
+}
+
+/**
  * @param {SabrStreamState} sabrStreamState
  */
 function prepareSabrContexts(sabrStreamState) {
@@ -272,6 +409,17 @@ function createTimeoutController(callback, timeoutMs) {
       this._timeout = setTimeout(callback, timeoutMs)
       this._resetCount++
     },
+    /**
+     * Stops the clock without consuming the one shot reset. Used while a
+     * request is parked waiting for fresh credentials: time spent parked is
+     * our latency, not the server's, so it must not count against the request.
+     */
+    suspend() {
+      clearTimeout(this._timeout)
+    },
+    resume() {
+      this._timeout = setTimeout(callback, timeoutMs)
+    },
     clearTimeout() {
       clearTimeout(this._timeout)
     },
@@ -298,10 +446,16 @@ async function doRequest(
   let invalidPoToken = false
   let error
 
+  /** Latest value from a StreamProtectionStatus part. 2 means attestation pending. */
+  let protectionStatus = 0
+  let receivedMediaPart = false
+
   if (currentState.sabrStreamState.playerReloadRequested) {
     // Multiple requests might be issued at the same time, other requests should abort themselves once reload requested
     throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
   }
+
+  await parkUntilRefreshed(operationInputs, currentState)
 
   try {
     let shouldReloadDueToBackoffLoop = false
@@ -328,11 +482,7 @@ async function doRequest(
     }
     if (shouldReloadDueToBackoffLoop || currentState.cumulativeRetryDueToNextRequestPolicy >= 100) {
       // Fire fake reload event due to detecting retry loop
-      currentState.sabrStreamState.playerReloadRequested = true
-      if (!currentState.abortController.signal.aborted) {
-        currentState.abortController.abort()
-        currentState.eventEmitter.emit('reload')
-      }
+      requestPlayerReload(currentState)
     }
 
     const sabrURL = new URL(currentState.sabrStreamState.sabrUrl)
@@ -358,6 +508,11 @@ async function doRequest(
         switch (part.type) {
           case UMPPartId.STREAM_PROTECTION_STATUS: {
             const streamProtectionStatus = decodePart(part, StreamProtectionStatus)
+            protectionStatus = streamProtectionStatus?.status ?? 0
+            if (protectionStatus === 1) {
+              // The token is trusted, so earlier attestation failures no longer apply
+              attestationState.refreshes = 0
+            }
             if (streamProtectionStatus.status === 3) {
               invalidPoToken = true
             }
@@ -374,8 +529,13 @@ async function doRequest(
             const sabrRedirect = decodePart(part, SabrRedirect)
             if (!sabrRedirect) break
 
-            currentState.sabrUrl = sabrRedirect.url
-            shouldRetry = true
+            // The server sometimes sends a redirect part with an empty URL.
+            // Applying it breaks every request in the session with
+            // "Failed to construct 'URL'", so only follow parseable targets.
+            if (sabrRedirect.url && URL.canParse(sabrRedirect.url)) {
+              currentState.sabrStreamState.sabrUrl = sabrRedirect.url
+              shouldRetry = true
+            }
             break
           }
           case UMPPartId.MEDIA_HEADER: {
@@ -399,6 +559,7 @@ async function doRequest(
             break
           }
           case UMPPartId.MEDIA: {
+            receivedMediaPart = true
             if (mediaHeaderId === part.data.getUint8(0)) {
               responseDataChunks.push(...part.data.split(1).remainingBuffer.chunks)
             }
@@ -475,11 +636,7 @@ async function doRequest(
             if (!reloadPlaybackContext) break
 
             // Whole video cannot be played
-            currentState.sabrStreamState.playerReloadRequested = true
-            if (!currentState.abortController.signal.aborted) {
-              currentState.abortController.abort()
-              currentState.eventEmitter.emit('reload')
-            }
+            requestPlayerReload(currentState)
             break
           }
           default: {
@@ -514,6 +671,14 @@ async function doRequest(
     throw createRecoverableNetworkError(ShakaError.Code.TIMEOUT, operationInputs.uri, operationInputs.requestType)
   }
 
+  // The server answered without media because it does not trust the PO token
+  // (attestation pending). Retrying sends an identical request, so it cannot
+  // succeed. Reloading mints a new token, which sometimes is trusted.
+  const attestationBlocked = !invalidPoToken &&
+    protectionStatus >= 2 &&
+    !receivedMediaPart &&
+    currentState.cumulativeRetryDueToNextRequestPolicy >= ATTESTATION_RETRY_LIMIT
+
   if (responseDataChunks.length > 0 && segmentComplete) {
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
 
@@ -531,36 +696,42 @@ async function doRequest(
       fromCache: false,
       originalRequest: operationInputs.request,
     }
+  } else if (attestationBlocked) {
+    if (attestationState.refreshes >= ATTESTATION_REFRESH_LIMIT) {
+      throw new ShakaError(
+        ShakaError.Severity.CRITICAL,
+        ShakaError.Category.NETWORK,
+        ShakaError.Code.HTTP_ERROR,
+        operationInputs.uri,
+        new Error(ATTESTATION_GIVE_UP_MESSAGE),
+        operationInputs.requestType,
+      )
+    }
+
+    // Audio and video requests hit this at the same time, so only the first
+    // one starts the refresh and counts it against the budget. Both then park
+    // until the fresh credentials arrive and retry with them, without the
+    // player being torn down.
+    if (!currentState.sabrStreamState.refreshInFlight) {
+      currentState.sabrStreamState.refreshInFlight = true
+      attestationState.refreshes += 1
+      currentState.beginRefresh()
+      currentState.eventEmitter.emit('refresh-needed')
+    }
+
+    // parkUntilRefreshed resets the per session counters on resume
+    await parkUntilRefreshed(operationInputs, currentState)
+
+    currentState.abortStatus.timedOut = false
+    currentState.abortStatus.finished = false
+    return doRequest(operationInputs, currentState)
   } else if (shouldRetry) {
     if (shouldRetryDueToNextRequestPolicy) {
       // Only count on actual retry to avoid counting false positive (when segmentComplete
       currentState.cumulativeRetryDueToNextRequestPolicy += 1
     }
 
-    const { sabrContexts, unsentSabrContexts } = prepareSabrContexts(currentState.sabrStreamState)
-
-    currentState.abrRequest.streamerContext.sabrContexts = sabrContexts
-    currentState.abrRequest.streamerContext.unsentSabrContexts = unsentSabrContexts
-
-    let body
-
-    try {
-      body = VideoPlaybackAbrRequest.encode(currentState.abrRequest).finish()
-    } catch (error) {
-      console.error('Invalid VideoPlaybackAbrRequest data', currentState.abrRequest)
-      throw error
-    }
-
-    currentState.requestInit = {
-      body,
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-protobuf',
-        'accept-encoding': 'identity',
-        accept: 'application/vnd.yt-ump',
-      },
-      signal: currentState.abortController.signal,
-    }
+    rebuildRequestBody(currentState)
     currentState.abortStatus.timedOut = false
 
     currentState.abortStatus.finished = false
@@ -633,9 +804,72 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
    */
   const initDataCache = new Map()
 
-  const poToken = base64ToU8(sabrData.poToken)
-  const videoPlaybackUstreamerConfig = base64ToU8(sabrData.ustreamerConfig)
-  const clientInfo = deepCopy(sabrData.clientInfo)
+  /**
+   * Mutable so that credentials can be swapped underneath a running player
+   * without destroying it, see `refresh` below.
+   */
+  const credentials = {
+    poToken: base64ToU8(sabrData.poToken),
+    videoPlaybackUstreamerConfig: base64ToU8(sabrData.ustreamerConfig),
+    clientInfo: deepCopy(sabrData.clientInfo),
+  }
+
+  /**
+   * While a credential refresh is in flight, requests park on this promise
+   * instead of failing. Null means no refresh is in progress.
+   * @type {?PendingRefresh}
+   */
+  let pendingRefresh = null
+
+  function beginRefresh() {
+    if (pendingRefresh) return
+
+    let promiseResolve
+    let promiseReject
+    const promise = new Promise((resolve, reject) => {
+      promiseResolve = resolve
+      promiseReject = reject
+    })
+    // If every parked request is cancelled before an abandoned refresh
+    // rejects, nobody is awaiting: swallow the unhandled rejection
+    promise.catch(() => {})
+    pendingRefresh = { promise, resolve: promiseResolve, reject: promiseReject }
+  }
+
+  /**
+   * Incremented on every refresh. A request built before a refresh carries the
+   * old generation, which is how we know its playback cookie is dead.
+   */
+  let sessionGeneration = 0
+
+  /**
+   * Re-applies current credentials to a request immediately before encoding.
+   * The request body is built once when the Shaka request arrives and
+   * re-encoded from the same object on every retry, so mutable credentials
+   * alone are not enough: a request that parks across a refresh would still
+   * send the old PO token, which the new session answers with a 403.
+   * @param {VideoPlaybackAbrRequest} abrRequest
+   * @param {number} builtAtGeneration
+   */
+  function applyCredentials(abrRequest, builtAtGeneration) {
+    abrRequest.streamerContext.poToken = credentials.poToken
+    abrRequest.streamerContext.clientInfo = credentials.clientInfo
+    abrRequest.videoPlaybackUstreamerConfig = credentials.videoPlaybackUstreamerConfig
+
+    if (builtAtGeneration !== sessionGeneration) {
+      // The cookie identifies the dead session; sending it to the new one is
+      // worse than sending nothing. The backoff echo belongs to it too.
+      abrRequest.streamerContext.playbackCookie = undefined
+      abrRequest.streamerContext.backoffTimeMs = undefined
+    }
+
+    return sessionGeneration
+  }
+
+  if (attestationState.videoId !== sabrData.videoId) {
+    attestationState.videoId = sabrData.videoId
+    attestationState.refreshes = 0
+  }
 
   /** @type {SabrStreamState} */
   const sabrStreamState = {
@@ -645,6 +879,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     nextRequestPolicy: undefined,
     playerReloadRequested: false,
     requestNumber: 0,
+    refreshInFlight: false,
   }
 
   shaka.net.NetworkingEngine.registerScheme('sabr', (uri, request, requestType, _progressUpdated, headersReceived, _config) => {
@@ -744,14 +979,14 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
       selectedFormatIds: isInit ? [] : [audioFormatId, videoFormatId],
       bufferedRanges,
       streamerContext: {
-        poToken,
-        clientInfo,
+        poToken: credentials.poToken,
+        clientInfo: credentials.clientInfo,
         sabrContexts,
         unsentSabrContexts,
         playbackCookie: sabrStreamState.nextRequestPolicy?.playbackCookie ? PlaybackCookie.encode(sabrStreamState.nextRequestPolicy.playbackCookie).finish() : undefined,
       },
       field1000: [],
-      videoPlaybackUstreamerConfig,
+      videoPlaybackUstreamerConfig: credentials.videoPlaybackUstreamerConfig,
     }
 
     let body
@@ -829,6 +1064,10 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
       cumulativeBackOffTimeMs: 0,
       cumulativeBackOffRequested: 0,
       cumulativeRetryDueToNextRequestPolicy: 0,
+      generation: sessionGeneration,
+      applyCredentials,
+      getPendingRefresh: () => pendingRefresh,
+      beginRefresh,
     }
 
     const pendingRequest = doRequest(opInputs, currentState)
@@ -851,6 +1090,11 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
   const cleanup = () => {
     shaka.net.NetworkingEngine.unregisterScheme('sabr')
     initDataCache.clear()
+
+    // Release anything still parked, so requests cannot outlive the player
+    const refresh = pendingRefresh
+    pendingRefresh = null
+    refresh?.reject(new Error('SABR session cleaned up during refresh'))
   }
 
   return {
@@ -859,6 +1103,65 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     },
     onReloadOnce(callback) {
       eventEmitter.once('reload', callback)
+    },
+    /**
+     * Fires when the server has stopped serving media for the current PO
+     * token and fresh credentials are needed. The consumer answers with
+     * either `refresh` or `abandonRefresh`. Not `once`: a session can need
+     * refreshing more than once.
+     * @param {() => void} callback
+     */
+    onRefreshNeeded(callback) {
+      eventEmitter.on('refresh-needed', callback)
+    },
+    /**
+     * Swaps in fresh credentials without tearing down the player. Protocol
+     * state tied to the old streaming session is discarded; the init data
+     * cache is kept because the caller has verified the formats are
+     * unchanged.
+     * @param {import('../../views/Watch/Watch').SabrData} newSabrData
+     */
+    refresh(newSabrData) {
+      credentials.poToken = base64ToU8(newSabrData.poToken)
+      credentials.videoPlaybackUstreamerConfig = base64ToU8(newSabrData.ustreamerConfig)
+      credentials.clientInfo = deepCopy(newSabrData.clientInfo)
+
+      sabrStreamState.sabrUrl = newSabrData.url
+      sabrStreamState.activeSabrContextTypes.clear()
+      sabrStreamState.sabrContexts.clear()
+      sabrStreamState.nextRequestPolicy = undefined
+      sabrStreamState.playerReloadRequested = false
+      sabrStreamState.requestNumber = 0
+      sabrStreamState.refreshInFlight = false
+
+      // Must precede the release below so parked requests observe the new
+      // generation and rebuild their bodies against the new credentials
+      sessionGeneration += 1
+
+      const refresh = pendingRefresh
+      pendingRefresh = null
+      refresh?.resolve()
+    },
+    /**
+     * Aborts a refresh that could not complete. Parked requests reject and
+     * fall back to the full player reload.
+     * @param {Error} error
+     */
+    abandonRefresh(error) {
+      sabrStreamState.refreshInFlight = false
+
+      const refresh = pendingRefresh
+      pendingRefresh = null
+      refresh?.reject(error)
+    },
+    /**
+     * Format identifiers this session has served init data for. The caller
+     * compares them against a fresh player response to decide whether the
+     * existing buffer survives a refresh.
+     * @returns {string[]}
+     */
+    getFormatIds() {
+      return [...initDataCache.keys()]
     },
     cleanup,
   }

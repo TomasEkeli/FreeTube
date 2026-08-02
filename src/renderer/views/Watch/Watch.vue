@@ -55,6 +55,7 @@
           @skip-to-next="handleSkipToNext"
           @skip-to-prev="handleSkipToPrev"
           @player-reload-requested="onPlayerReloadRequested"
+          @sabr-refresh-requested="onSabrRefreshRequested"
         />
         <div
           v-if="!isLoading && (isUpcoming || errorMessage)"

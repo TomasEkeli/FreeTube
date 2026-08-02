@@ -288,7 +288,7 @@ class SabrManifestParser {
 /**
  * @param {SabrManifest['formats'][0]} format
  */
-function buildFormatId(format) {
+export function buildFormatId(format) {
   return `${format.itag}-${format.lastModified ?? '0'}-${format.xtags ?? ''}`
 }
 

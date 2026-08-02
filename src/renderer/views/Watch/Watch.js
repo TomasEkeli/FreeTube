@@ -39,12 +39,14 @@ import {
   youtubeImageUrlToInvidious
 } from '../../helpers/api/invidious'
 import { sortCaptions } from '../../helpers/player/utils'
-import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
+import { buildFormatId, MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
+import { ATTESTATION_GIVE_UP_MESSAGE } from '../../helpers/player/SabrSchemePlugin'
 import { useI18n } from 'vue-i18n'
 
 /**
  * @typedef {{
  *   url: string,
+ *   videoId: string,
  *   poToken: string,
  *   ustreamerConfig: string,
  *   clientInfo: {
@@ -906,6 +908,9 @@ export default defineComponent({
               ?.projection_type ?? null
 
             if (
+              // Without a PO token a SABR session is walled from the first
+              // request, so fall through to DASH instead
+              poToken &&
               videoInfo.info.streaming_data?.server_abr_streaming_url &&
               videoInfo.info.player_config.media_common_config.media_ustreamer_request_config
             ) {
@@ -1562,6 +1567,17 @@ export default defineComponent({
       const { Code } = shaka.util.Error
 
       if (error.code === Code.HTTP_ERROR) {
+        if (error.data[1]?.message === ATTESTATION_GIVE_UP_MESSAGE) {
+          // The SABR recovery budget is spent. The format fallback below
+          // cannot help here (the legacy URLs answer to the same distrusted
+          // session), so show an honest error instead of stalling silently.
+          this.handleWatchProgressAutoSaveWhenProgressEnabled()
+
+          this.errorMessage = 'YouTube is not serving this video to the current session (PO token rejected). Please try again later or switch networks.'
+          this.customErrorIcon = ['fas', 'shield']
+          return
+        }
+
         if (error.data[1]?.message === 'Failed to fetch' && !navigator.onLine) {
           // Internet connection was lost, do nothing on our side as
           // shaka-player will keep trying until the internet connection returns and resume playback automatically when it does
@@ -1647,22 +1663,36 @@ export default defineComponent({
     },
 
     /**
+     * Builds just the credential half of the SABR setup. Split out of
+     * createLocalSabrManifest so a credential refresh can reuse it without
+     * rebuilding the manifest.
+     * @param {import('youtubei.js').IParsedResponse} videoInfo
+     * @param {string} poToken
+     * @param {SabrData['clientInfo']} clientInfo
+     * @returns {SabrData}
+     */
+    buildSabrData: function (videoInfo, poToken, clientInfo) {
+      const url = new URL(videoInfo.streaming_data.server_abr_streaming_url)
+      url.searchParams.set('alr', 'yes')
+      url.searchParams.set('cpn', videoInfo.cpn)
+
+      return {
+        url: url.toString(),
+        videoId: this.videoId,
+        poToken,
+        ustreamerConfig: videoInfo.player_config.media_common_config.media_ustreamer_request_config.video_playback_ustreamer_config,
+        clientInfo
+      }
+    },
+
+    /**
      * @param {import('youtubei.js').IParsedResponse} videoInfo
      * @param {string} poToken
      * @param {SabrData['clientInfo']} clientInfo
      * @param {import('../../helpers/player/SabrManifestParser').SabrManifest['storyboards']} storyboards
      */
     createLocalSabrManifest: function (videoInfo, poToken, clientInfo, storyboards) {
-      const url = new URL(videoInfo.streaming_data.server_abr_streaming_url)
-      url.searchParams.set('alr', 'yes')
-      url.searchParams.set('cpn', videoInfo.cpn)
-
-      this.sabrData = {
-        url: url.toString(),
-        poToken,
-        ustreamerConfig: videoInfo.player_config.media_common_config.media_ustreamer_request_config.video_playback_ustreamer_config,
-        clientInfo
-      }
+      this.sabrData = this.buildSabrData(videoInfo, poToken, clientInfo)
 
       /** @type {import('../../helpers/player/SabrManifestParser').SabrManifest} */
       const sabrManifest = {
@@ -1950,6 +1980,56 @@ export default defineComponent({
       this.startNextVideoInFullscreen = uiState.startNextVideoInFullscreen
       this.startNextVideoInFullwindow = uiState.startNextVideoInFullwindow
       this.startNextVideoInPip = uiState.startNextVideoInPip
+    },
+
+    /**
+     * Fetches fresh SABR credentials (a new player response and PO token)
+     * without touching the rest of the view. Calls back with null if that is
+     * impossible, in which case the player falls back to a full reload.
+     *
+     * Also reports the format identifiers the refreshed session serves. The
+     * player cannot derive these itself: its own cache only records what the
+     * old session served, and reusing a buffer across a format change
+     * corrupts playback.
+     *
+     * @param {{ onResult: (result: { sabrData: SabrData, formatIds: string[] } | null) => void }} payload
+     */
+    async onSabrRefreshRequested({ onResult }) {
+      if (this.backendPreference !== 'local') {
+        onResult(null)
+        return
+      }
+
+      try {
+        const { info, poToken, clientInfo } = await getLocalVideoInfo(this.videoId)
+
+        // No token means getLocalVideoInfo could not mint one even with
+        // retries; a refresh with it would just install a walled session
+        if (!poToken ||
+          !info.streaming_data?.server_abr_streaming_url ||
+          !info.player_config?.media_common_config?.media_ustreamer_request_config) {
+          onResult(null)
+          return
+        }
+
+        const sabrData = this.buildSabrData(info, poToken, clientInfo)
+        this.sabrData = sabrData
+        this.streamingDataExpiryDate = info.streaming_data.expires
+
+        onResult({
+          sabrData,
+          // Reuses the manifest parser's own identifier builder so the two
+          // can never drift
+          formatIds: info.streaming_data.adaptive_formats.map(format => buildFormatId({
+            itag: format.itag,
+            lastModified: format.last_modified_ms,
+            xtags: format.xtags,
+          })),
+        })
+      } catch (error) {
+        console.error('SABR credential refresh failed', error)
+        onResult(null)
+      }
     },
 
     async onPlayerReloadRequested() {
