@@ -444,16 +444,28 @@ export async function getLocalVideoInfo(id) {
   let contentPoToken
 
   if (process.env.IS_ELECTRON) {
-    try {
-      contentPoToken = await window.ftElectron.generatePoToken(
-        id,
-        JSON.stringify(webInnertube.session.context)
-      )
+    // A single transient network failure here used to kill the whole video
+    // load with an error. Retry briefly, and if the token still cannot be
+    // minted, continue without one: the caller skips SABR in that case and
+    // degraded playback beats a dead video.
+    const PO_TOKEN_MINT_ATTEMPTS = 3
 
-      webInnertube.session.player.po_token = contentPoToken
-    } catch (error) {
-      console.error('Local API, poToken generation failed', error)
-      throw error
+    for (let attempt = 1; attempt <= PO_TOKEN_MINT_ATTEMPTS; attempt++) {
+      try {
+        contentPoToken = await window.ftElectron.generatePoToken(
+          id,
+          JSON.stringify(webInnertube.session.context)
+        )
+
+        webInnertube.session.player.po_token = contentPoToken
+        break
+      } catch (error) {
+        console.error(`Local API, poToken generation failed (attempt ${attempt} of ${PO_TOKEN_MINT_ATTEMPTS})`, error)
+
+        if (attempt < PO_TOKEN_MINT_ATTEMPTS) {
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt))
+        }
+      }
     }
   }
 
