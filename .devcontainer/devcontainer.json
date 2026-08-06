@@ -1,0 +1,75 @@
+// Dev container for FreeTube: Node 24 + pnpm 10 (matching CI) with the
+// Electron runtime libraries and Claude Code, so no toolchain is needed on the host.
+//
+// GUI: the WSLg X11/Wayland sockets are mounted through, so `pnpm dev`
+// launches the Electron window straight onto your Windows desktop.
+// Browser-only development works too: `pnpm dev:web` on forwarded port 9080.
+//
+// Paths are deliberately mirrored from the host (same user name, same home,
+// same workspace path) so that Claude Code's plugin registry, memory and
+// session history — all of which store absolute paths — resolve unchanged.
+{
+  "name": "FreeTube",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "USERNAME": "${localEnv:USER}",
+      "USER_HOME": "${localEnv:HOME}"
+    }
+  },
+  "remoteUser": "${localEnv:USER}",
+  "containerUser": "${localEnv:USER}",
+
+  // Mirror the host workspace path so the Claude project key is identical and
+  // `claude --resume` finds sessions started outside the container.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
+
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "mounts": [
+    // WSLg display sockets (X11 + Wayland + PulseAudio)
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=/mnt/wslg,target=/mnt/wslg,type=bind",
+    // Claude Code config: credentials, plugins, skills, memory, session history
+    "source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind",
+    // Persist the pnpm store across container rebuilds
+    "source=freetube-pnpm-store,target=${localEnv:HOME}/.local/share/pnpm/store,type=volume"
+  ],
+
+  "containerEnv": {
+    "DISPLAY": ":0",
+    "WAYLAND_DISPLAY": "wayland-0",
+    "XDG_RUNTIME_DIR": "/mnt/wslg/runtime-dir",
+    "PULSE_SERVER": "/mnt/wslg/PulseServer",
+    // Chromium's SUID sandbox can't be used in an unprivileged container
+    "ELECTRON_DISABLE_SANDBOX": "1"
+  },
+
+  "forwardPorts": [9080],
+  "portsAttributes": {
+    "9080": {
+      "label": "FreeTube dev server (web)",
+      "onAutoForward": "notify"
+    }
+  },
+
+  // confirmModulesPurge=false: pnpm otherwise tries to interactively confirm
+  // wiping node_modules whenever its recorded store path differs, which cannot
+  // be answered during a non-TTY create step.
+  "postCreateCommand": "pnpm install --config.confirmModulesPurge=false",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Vue.volar",
+        "dbaeumer.vscode-eslint",
+        "stylelint.vscode-stylelint",
+        "EditorConfig.EditorConfig"
+      ]
+    }
+  }
+}
