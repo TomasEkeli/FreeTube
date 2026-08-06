@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FreeTube: run (dev)",
+      "type": "shell",
+      "command": "pnpm dev",
+      "options": {
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "FT_NO_DEVTOOLS": "1"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "FreeTube: run (dev, log to /tmp/freetube-dev.log)",
+      "detail": "Renderer console forwarded to the terminal and captured to a file another session can tail",
+      "type": "shell",
+      "command": "pnpm dev 2>&1 | tee /tmp/freetube-dev.log",
+      "options": {
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "FT_NO_DEVTOOLS": "1",
+          "ELECTRON_ENABLE_LOGGING": "1"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    }
+  ]
+}

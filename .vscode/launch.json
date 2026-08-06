@@ -6,7 +6,26 @@
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/_scripts/dev-runner.js",
-      "args": ["--remote-debug"]
+      "args": ["--remote-debug"],
+      "env": {
+        // The devcontainer has no user namespace for the Chromium sandbox
+        "ELECTRON_DISABLE_SANDBOX": "1",
+        // Auto-opened devtools crash the renderer under WSLg (SIGTRAP)
+        "FT_NO_DEVTOOLS": "1"
+      }
+    },
+    {
+      "name": "dev-runner (Electron, renderer log)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/_scripts/dev-runner.js",
+      "env": {
+        "ELECTRON_DISABLE_SANDBOX": "1",
+        "FT_NO_DEVTOOLS": "1",
+        // Forwards renderer console messages to the terminal, so the app can
+        // be observed without devtools (which crash the renderer under WSLg)
+        "ELECTRON_ENABLE_LOGGING": "1"
+      }
     },
     {
       "name": "Attach to renderer process (Electron)",

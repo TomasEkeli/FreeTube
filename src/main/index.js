@@ -1142,7 +1142,9 @@ function runApp() {
     const showWindow = () => {
       if (newWindow.isVisible()) {
         // only open the dev tools if they aren't already open
-        if (process.env.NODE_ENV === 'development' && !newWindow.webContents.isDevToolsOpened()) {
+        // FT_NO_DEVTOOLS suppresses them: under WSLg software rendering,
+        // opening devtools crashes the renderer with SIGTRAP
+        if (process.env.NODE_ENV === 'development' && !process.env.FT_NO_DEVTOOLS && !newWindow.webContents.isDevToolsOpened()) {
           newWindow.webContents.openDevTools({ activate: false })
         }
         return
@@ -1155,7 +1157,7 @@ function runApp() {
         newWindow.focus()
       }
 
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'development' && !process.env.FT_NO_DEVTOOLS) {
         newWindow.webContents.openDevTools({ activate: false })
       }
     }
