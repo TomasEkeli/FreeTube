@@ -1,3 +1,19 @@
+# A personal fork of FreeTube
+
+This is [Tomas Ekeli](https://github.com/TomasEkeli)'s personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It carries fixes I want in my own build, currently around SABR (server-side adaptive bitrate) playback and comment loading. It is not the official FreeTube repository, and the FreeTube team does not support or endorse it.
+
+If you want FreeTube, you almost certainly want the official project: [FreeTubeApp/FreeTube](https://github.com/FreeTubeApp/FreeTube), with downloads at [freetubeapp.io](https://freetubeapp.io/#download). All credit for the application belongs to its contributors.
+
+If you want the fixes here, you are welcome to them. FreeTube is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE), which this fork keeps, and which gives anyone the right to use, study, change and share it. Builds for Windows, macOS and Linux are produced on every push to `main`: pick the newest [build workflow run](https://github.com/TomasEkeli/FreeTube/actions/workflows/build.yml) and download the artifact for your platform (downloading artifacts needs a GitHub account).
+
+The `development` branch mirrors upstream; `main` is upstream plus my fixes. Issues here are fine for the fork's own changes, but anything about FreeTube itself belongs with [the official project](https://github.com/FreeTubeApp/FreeTube/issues).
+
+---
+
+The original FreeTube README follows.
+
+---
+
 <p align="center">
  <img alt="" src="/_icons/logoColor.svg" width=500 align="center">
 </p>
