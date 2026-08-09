@@ -21,6 +21,62 @@ export function loudnessDbToGain(loudnessDb) {
 const GAIN_RAMP_SECONDS = 0.02
 
 /**
+ * The window's one and only `AudioContext`, created the first time something needs
+ * amplifying and then kept for the rest of the window's life.
+ *
+ * One shared context rather than one per video, because an `AudioContext` is an
+ * expensive, limited resource: browsers cap how many a page may have at once, and
+ * creating and closing one per video would churn through that budget while a
+ * playlist plays. Nothing needs closing at teardown either, which keeps the
+ * riskiest moment, the video element being destroyed, as simple as possible.
+ *
+ * @type {AudioContext|null}
+ */
+let sharedContext = null
+
+/**
+ * @returns {AudioContext|null} the shared context, or `null` when it isn't safe to
+ * route an element through it
+ */
+function getRunningSharedContext() {
+  if (sharedContext === null || sharedContext.state === 'closed') {
+    const context = new AudioContext()
+
+    if (context.state !== 'running') {
+      // A context that isn't running silences the elements feeding it rather than
+      // merely stopping the graph, and only a user gesture can start it. Since
+      // routing an element through Web Audio cannot be undone, nothing is
+      // connected until the context is known to be running: playing at normal
+      // volume is a far better outcome than playing silently.
+      console.warn('Volume boost unavailable, the audio context would not start')
+
+      context.close()
+
+      return null
+    }
+
+    // A context can be suspended later on, by the browser or the machine
+    context.addEventListener('statechange', () => {
+      if (context.state === 'suspended') {
+        context.resume()
+      }
+    })
+
+    sharedContext = context
+  }
+
+  if (sharedContext.state !== 'running') {
+    // Ask for it back and let the next request use it. Resuming is asynchronous,
+    // so there is no way to connect an element safely in this moment.
+    sharedContext.resume()
+
+    return null
+  }
+
+  return sharedContext
+}
+
+/**
  * Amplification beyond what the video element can do on its own.
  *
  * `HTMLMediaElement.volume` is capped at 1 by specification, so going louder
@@ -48,9 +104,6 @@ export class AudioGainStage {
     /** @private */
     this.element_ = element
 
-    /** @private {AudioContext|null} */
-    this.context_ = null
-
     /** @private {MediaElementAudioSourceNode|null} */
     this.source_ = null
 
@@ -64,19 +117,19 @@ export class AudioGainStage {
     this.gain_ = 1
 
     /**
-     * A suspended `AudioContext` doesn't just stop the graph, it silences the
-     * routed element completely, so every opportunity to resume it is taken.
+     * A suspended context silences the element it is fed by, so every opportunity
+     * to get it running again is taken.
      * @private
      */
     this.resume_ = () => {
-      if (this.context_?.state === 'suspended') {
-        this.context_.resume()
+      if (sharedContext?.state === 'suspended') {
+        sharedContext.resume()
       }
     }
   }
 
   /**
-   * The gain currently asked for, where 1 means "no amplification".
+   * The gain currently in force, where 1 means "no amplification".
    * @returns {number}
    */
   get gain() {
@@ -105,7 +158,7 @@ export class AudioGainStage {
 
     this.gain_ = gain
 
-    const now = this.context_.currentTime
+    const now = this.gainNode_.context.currentTime
     const gainParam = this.gainNode_.gain
 
     gainParam.cancelScheduledValues(now)
@@ -116,31 +169,18 @@ export class AudioGainStage {
   }
 
   /**
-   * Builds the audio graph. Only ever called once, unless it fails.
+   * Routes this element through the shared context. Only ever called once, unless
+   * it fails.
    * @returns {boolean} whether the graph is now in place
    * @private
    */
   build_() {
-    const context = new AudioContext()
+    const context = getRunningSharedContext()
 
-    // An `AudioContext` that isn't running silences the element that feeds it,
-    // and it can only be started by a user gesture. Since routing an element
-    // through Web Audio can't be undone, that has to be settled before the
-    // element is connected: playing at normal volume is a far better outcome
-    // than playing silently.
-    if (context.state !== 'running') {
-      // TEMPORARY, see the volume decision log in ft-shaka-video-player.js
-      console.warn('[ft volume] gain stage refused, context state was %o', context.state)
-
-      context.close()
-
+    if (context === null) {
       return false
     }
 
-    // TEMPORARY, see the volume decision log in ft-shaka-video-player.js
-    console.warn('[ft volume] gain stage built')
-
-    this.context_ = context
     this.source_ = context.createMediaElementSource(this.element_)
 
     this.gainNode_ = context.createGain()
@@ -158,29 +198,23 @@ export class AudioGainStage {
     this.limiter_.connect(context.destination)
 
     this.element_.addEventListener('play', this.resume_)
-    context.addEventListener('statechange', this.resume_)
 
     return true
   }
 
   release() {
-    // TEMPORARY, see the volume decision log in ft-shaka-video-player.js
-    console.warn('[ft volume] gain stage releasing, graph existed: %o', this.context_ !== null)
-
-    if (this.context_ === null) {
+    if (this.gainNode_ === null) {
       return
     }
 
     this.element_.removeEventListener('play', this.resume_)
-    this.context_.removeEventListener('statechange', this.resume_)
 
+    // Disconnecting is what lets the element and its source node be collected.
+    // The context itself is shared and outlives this stage, so it stays open.
     this.source_.disconnect()
     this.gainNode_.disconnect()
     this.limiter_.disconnect()
 
-    this.context_.close()
-
-    this.context_ = null
     this.source_ = null
     this.gainNode_ = null
     this.limiter_ = null
