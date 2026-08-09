@@ -70,7 +70,7 @@ const ATTESTATION_PAGE_RELOAD_LIMIT = 1
 /**
  * How many media bearing responses count as the video genuinely having
  * recovered, at which point the reload budgets are restored. Without a
- * threshold, a video that wallsed and recovered every half minute would mint
+ * threshold, a video that walled and recovered every half minute would mint
  * itself an unlimited supply of reloads.
  */
 const ATTESTATION_RECOVERY_SEGMENTS = 10
@@ -396,11 +396,14 @@ function noteMediaServed() {
   }
 
   attestationState.refreshes = 0
-  attestationState.mediaResponsesSinceReload += 1
 
-  if (attestationState.mediaResponsesSinceReload >= ATTESTATION_RECOVERY_SEGMENTS) {
-    attestationState.hardReloads = 0
-    attestationState.pageReloads = 0
+  if (attestationState.mediaResponsesSinceReload < ATTESTATION_RECOVERY_SEGMENTS) {
+    attestationState.mediaResponsesSinceReload += 1
+
+    if (attestationState.mediaResponsesSinceReload === ATTESTATION_RECOVERY_SEGMENTS) {
+      attestationState.hardReloads = 0
+      attestationState.pageReloads = 0
+    }
   }
 }
 
@@ -838,15 +841,15 @@ async function doRequest(
         throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
       }
 
+      const reason = bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS
+        ? `buffer down to ${bufferAhead.toFixed(1)}s`
+        : `${attestationState.refreshes} refreshes, the limit`
+
       // Rebuilding the session is what a viewer does by hand when they reopen
       // a walled video, and it succeeds where refreshing the credentials
       // underneath a running session does not. Why is not established: a
       // reload both takes longer and starts a genuinely new session, and we
       // cannot yet tell which of the two is the cure.
-      const reason = bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS
-        ? `buffer down to ${bufferAhead.toFixed(1)}s`
-        : `${attestationState.refreshes} refreshes, the limit`
-
       if (attestationState.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
         attestationState.hardReloads += 1
         attestationState.mediaResponsesSinceReload = 0

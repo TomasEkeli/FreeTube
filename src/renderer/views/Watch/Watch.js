@@ -1608,10 +1608,11 @@ export default defineComponent({
     async retryVideo() {
       resetAttestationBudget(this.videoId)
 
-      // Left in place until reloadView clears it: clearing it here would
-      // remount the player against the credentials that just failed, for the
-      // moment it takes to get to the reload
       const timestamp = this.errorRetryTimestamp
+
+      // The error stays on screen until reloadView clears it. Clearing it here
+      // would remount the player against the credentials that just failed, for
+      // the moment it takes to get to the reload.
 
       if (timestamp > 0) {
         try {
