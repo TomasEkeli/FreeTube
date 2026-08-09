@@ -950,6 +950,7 @@ Video:
       Player Dimensions: 'Player Dimensions: {width}x{height}'
       Bitrate: 'Bitrate: {bitrate} kbps'
       Volume: 'Volume: {volumePercentage}%'
+      Content Loudness: 'Content Loudness: {loudnessDb} dB (normalization {normalizationPercentage}%)'
       Bandwidth: 'Bandwidth: {bandwidth} kbps'
       Buffered: 'Buffered: {bufferedPercentage}%'
       Dropped Frames / Total Frames: 'Dropped Frames: {droppedFrames} / Total Frames: {totalFrames}'

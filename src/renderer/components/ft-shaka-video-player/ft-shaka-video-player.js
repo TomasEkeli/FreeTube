@@ -29,6 +29,7 @@ import {
   removeFromArrayIfExists,
   copyToClipboard,
 } from '../../helpers/utils'
+import { loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
 import { setupSabrScheme } from '../../helpers/player/SabrSchemePlugin'
 
@@ -167,6 +168,15 @@ export default defineComponent({
       type: Number,
       default: 0
     },
+    /**
+     * How much louder this video is than YouTube's reference loudness, in dB.
+     * `null` when unknown, which is always the case for Invidious as it never
+     * reports it. `0` is a legitimate value, so never test this for truthiness.
+     */
+    loudnessDb: {
+      type: Number,
+      default: null
+    },
   },
   emits: [
     'error',
@@ -250,6 +260,19 @@ export default defineComponent({
       width: playerWidth.value,
       height: playerHeight.value
     }))
+
+    /**
+     * The loudness correction for this video as a percentage, for the stats overlay.
+     * `null` when the video's loudness is unknown.
+     * @type {import('vue').ComputedRef<string|null>}
+     */
+    const normalizationPercentage = computed(() => {
+      if (props.loudnessDb == null) {
+        return null
+      }
+
+      return (loudnessDbToGain(props.loudnessDb) * 100).toFixed(1)
+    })
 
     // #region settings
 
@@ -3425,6 +3448,7 @@ export default defineComponent({
       showStats,
       stats,
       playerDimensions,
+      normalizationPercentage,
 
       autoplayVideos,
       sponsorBlockShowSkippedToast,

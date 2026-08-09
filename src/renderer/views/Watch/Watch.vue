@@ -44,6 +44,7 @@
           :start-in-pip="startNextVideoInPip"
           :current-playback-rate="currentPlaybackRate"
           :delay-load-until-unix="adEndTimeUnixMs"
+          :loudness-db="loudnessDb"
           class="videoPlayer"
           @error="handlePlayerError"
           @loaded="handleVideoLoaded"
