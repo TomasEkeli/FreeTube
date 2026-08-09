@@ -17,7 +17,7 @@ import {
 import shaka from 'shaka-player'
 
 import { deepCopy } from '../utils'
-import { noteCredentialsInstalled, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
+import { noteCredentialsInstalled, noteSessionServing, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
@@ -887,6 +887,7 @@ async function doRequest(
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
 
     noteMediaServed(currentState)
+    noteSessionServing()
 
     if (operationInputs.isInit) {
       currentState.initDataCache.set(operationInputs.formatIdString, data)
@@ -1159,6 +1160,8 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     // credentials are fresh ones the simulated wall should count
     noteCredentialsInstalled()
   }
+
+  noteSessionStarted()
 
   // A new session gets a full refresh budget, whatever produced it: a new
   // video, the user reopening a walled one, or a recovery reload. Carrying a

@@ -69,6 +69,18 @@ if (CONFIG !== null) {
 let credentialsInstalled = 0
 
 /**
+ * When the current session first served anything, or null if it has not.
+ *
+ * The delay is counted from here rather than from when the session was built,
+ * because building one takes several seconds during which it plays nothing. A
+ * session whose grace expired while it was still starting up walls a second
+ * after it recovers, which no real server does and which made every rebuilt
+ * session look like an immediate failure.
+ * @type {?number}
+ */
+let servingSince = null
+
+/**
  * Records that a fresh set of credentials is in use, whether from a refresh
  * underneath the running session or from a rebuilt one. Enough of them lift
  * the simulated wall.
@@ -87,6 +99,26 @@ export function resetWallInjection() {
   if (CONFIG === null) { return }
 
   credentialsInstalled = 0
+  servingSince = null
+}
+
+/**
+ * Starts a session's grace period over, to be counted from the first thing it
+ * manages to serve.
+ */
+export function noteSessionStarted() {
+  if (CONFIG === null) { return }
+
+  servingSince = null
+}
+
+/**
+ * Records that the session is serving, which is when its grace begins.
+ */
+export function noteSessionServing() {
+  if (CONFIG === null || servingSince !== null) { return }
+
+  servingSince = Date.now()
 }
 
 /**
@@ -98,5 +130,7 @@ export function shouldInjectWall(sessionStartedAt) {
   if (CONFIG === null) { return false }
   if (credentialsInstalled >= CONFIG.credentialsUntilTrusted) { return false }
 
-  return Date.now() - sessionStartedAt >= CONFIG.delayMs
+  // A session that has served nothing has no grace to run down, so a delay of
+  // zero walls it from its first request and any other delay lets it start
+  return Date.now() - (servingSince ?? sessionStartedAt) >= CONFIG.delayMs
 }
