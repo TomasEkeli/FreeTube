@@ -1,0 +1,164 @@
+import i18n from '../i18n/index'
+
+import { copyToClipboard, showToast } from './utils'
+
+/**
+ * Outcomes of fetching one channel's feed.
+ *
+ * Before these existed, nearly every failure path returned an empty array,
+ * which is also what a channel with no videos returns. That made "YouTube
+ * blocked us" indistinguishable from "nothing posted here", so nothing could
+ * decide whether a refresh was worth retrying.
+ */
+
+/** Got an answer. The entries are trustworthy, even if there are none. */
+export const FETCH_OK = 'ok'
+
+/** Blocked, HTTP 403 or 429. Retryable, and must never overwrite the cache. */
+export const FETCH_RATE_LIMITED = 'rateLimited'
+
+/**
+ * The channel is gone: its playlist feed and its channel feed both 404.
+ * Not retryable, and caching emptiness for it is correct.
+ */
+export const FETCH_UNAVAILABLE = 'unavailable'
+
+/**
+ * Threw, or returned something unparseable, and every fallback was exhausted.
+ * Retryable, and must never overwrite the cache.
+ */
+export const FETCH_FAILED = 'failed'
+
+/** @param {string} status */
+export function isRetryableFetchStatus(status) {
+  return status === FETCH_RATE_LIMITED || status === FETCH_FAILED
+}
+
+/**
+ * @typedef {object} FetchErrorCollector
+ * @property {number} total
+ * @property {{ channelId: string, channelName: string, api: string, error: unknown }[]} errors
+ * @property {number} rateLimited
+ */
+
+/** @type {Map<string, FetchErrorCollector>} */
+const collectors = new Map()
+
+/**
+ * Start collecting fetch errors for a feed instead of showing them one by one.
+ *
+ * Each failed channel used to raise its own ten second click-to-copy toast, and
+ * the retry ladder could raise three per channel. A few hundred blocked
+ * channels therefore produced the better part of a thousand toasts, which is
+ * how a mass failure announced itself. One summary is more use than that.
+ *
+ * @param {string} feed
+ * @param {number} total how many channels this refresh will attempt
+ */
+export function beginFetchErrorCollection(feed, total) {
+  collectors.set(feed, { total, errors: [], rateLimited: 0 })
+}
+
+/**
+ * Record a channel that could not be fetched. Falls back to a toast when no
+ * collection is open, so single-channel callers keep their existing behaviour.
+ *
+ * @param {string} feed
+ * @param {object} details
+ * @param {{ id: string, name?: string }} details.channel
+ * @param {unknown} details.error
+ * @param {'local' | 'invidious'} details.api
+ */
+export function reportFetchError(feed, { channel, error, api }) {
+  console.error(error)
+
+  const collector = collectors.get(feed)
+
+  if (collector == null) {
+    const message = api === 'invidious'
+      ? i18n.global.t('Invidious API Error (Click to copy)')
+      : i18n.global.t('Local API Error (Click to copy)')
+
+    showToast(`${message}: ${error}`, 10000, () => {
+      copyToClipboard(error)
+    })
+
+    return
+  }
+
+  collector.errors.push({
+    channelId: channel.id,
+    channelName: channel.name ?? channel.id,
+    api,
+    error
+  })
+}
+
+/**
+ * Note that a channel was rate limited. Counted separately from errors because
+ * being blocked says something different from a channel being broken, and it is
+ * the number that tells you to back off rather than investigate.
+ *
+ * @param {string} feed
+ */
+export function reportRateLimited(feed) {
+  const collector = collectors.get(feed)
+
+  if (collector != null) {
+    collector.rateLimited++
+  }
+}
+
+/**
+ * Close collection and show one summary if anything went wrong. Returns the
+ * collected detail so callers can decide what to do next.
+ *
+ * @param {string} feed
+ * @returns {FetchErrorCollector | undefined}
+ */
+export function endFetchErrorCollection(feed) {
+  const collector = collectors.get(feed)
+
+  if (collector == null) { return }
+
+  collectors.delete(feed)
+
+  const failed = collector.errors.length + collector.rateLimited
+
+  if (failed === 0) { return collector }
+
+  const message = collector.rateLimited > 0
+    ? i18n.global.t('Subscriptions.Fetch Errors Rate Limited', {
+        failed,
+        total: collector.total,
+        rateLimited: collector.rateLimited
+      })
+    : i18n.global.t('Subscriptions.Fetch Errors', {
+        failed,
+        total: collector.total
+      })
+
+  showToast(message, 10000, () => {
+    copyToClipboard(formatErrorReport(feed, collector))
+  })
+
+  return collector
+}
+
+/**
+ * @param {string} feed
+ * @param {FetchErrorCollector} collector
+ */
+function formatErrorReport(feed, collector) {
+  const lines = [
+    `Subscription fetch errors (${feed})`,
+    `${collector.errors.length} errored, ${collector.rateLimited} rate limited, out of ${collector.total} channels`,
+    ''
+  ]
+
+  for (const { channelId, channelName, api, error } of collector.errors) {
+    lines.push(`${channelName} (${channelId}) via ${api}: ${error}`)
+  }
+
+  return lines.join('\n')
+}

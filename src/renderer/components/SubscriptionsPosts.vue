@@ -20,7 +20,7 @@ import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
 import store from '../store/index'
 
-import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../helpers/utils'
+import { getRelativeTimeFromDate } from '../helpers/utils'
 import { getLocalChannelCommunity } from '../helpers/api/local'
 import { invidiousGetCommunityPosts } from '../helpers/api/invidious'
 import {
@@ -29,12 +29,28 @@ import {
   SUBSCRIPTION_SCRAPER_CHUNK_SIZE
 } from '../helpers/subscriptions'
 import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
+import {
+  beginFetchErrorCollection,
+  endFetchErrorCollection,
+  isRetryableFetchStatus,
+  reportFetchError,
+  FETCH_FAILED,
+  FETCH_OK,
+  FETCH_UNAVAILABLE
+} from '../helpers/subscriptionFetchStatus'
 
 const { t } = useI18n()
 
 const isLoading = ref(true)
 const postList = shallowRef([])
 const errorChannels = ref([])
+/**
+ * Channels whose last fetch failed in a way worth retrying, as opposed to
+ * `errorChannels`, which is for channels that are simply gone. Consumed by the
+ * tiered recovery that retries them in smaller, slower batches.
+ * @type {import('vue').Ref<{ id: string, name?: string }[]>}
+ */
+const unresolvedChannels = ref([])
 const attemptedFetch = ref(false)
 /** @type {import('vue').Ref<number | null>} */
 const lastRemoteRefreshSuccessTimestamp = ref(null)
@@ -195,6 +211,7 @@ async function loadPostsForSubscriptionsFromRemote() {
   attemptedFetch.value = true
 
   errorChannels.value = []
+  unresolvedChannels.value = []
   const subscriptionUpdates = []
   const postListFromRemote = []
 
@@ -204,33 +221,42 @@ async function loadPostsForSubscriptionsFromRemote() {
     useRss: false,
     backend: backendPreference.value
   })
+  beginFetchErrorCollection('posts', channelsToLoadFromRemote.length)
 
   const processChannel = async (channel) => {
-    let posts
+    let posts, status
 
     const traceDone = traceChannelFetch('posts', channel.id)
 
     try {
       if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-        posts = await getChannelPostsInvidious(channel)
+        ({ status, posts } = await getChannelPostsInvidious(channel))
       } else {
-        posts = await getChannelPostsLocal(channel)
+        ({ status, posts } = await getChannelPostsLocal(channel))
       }
     } finally {
-      // the posts fetchers always resolve to an array, never the null sentinel
-      traceDone({ entries: posts?.length ?? null })
+      traceDone({ entries: posts?.length ?? null, outcome: status ?? 'threw' })
+    }
+
+    if (isRetryableFetchStatus(status)) {
+      unresolvedChannels.value.push(channel)
     }
 
     channelCount++
     const percentageComplete = (channelCount / channelsToLoadFromRemote.length) * 100
     store.commit('setProgressBarPercentage', percentageComplete)
 
-    store.dispatch('updateSubscriptionPostsCacheByChannel', {
-      channelId: channel.id,
-      posts
-    })
+    // A failed fetch must not overwrite what we already had. This write used to
+    // be unconditional, so one failed refresh emptied the cached posts for
+    // every channel it could not reach.
+    if (posts != null) {
+      store.dispatch('updateSubscriptionPostsCacheByChannel', {
+        channelId: channel.id,
+        posts
+      })
+    }
 
-    if (posts.length > 0) {
+    if (posts != null && posts.length > 0) {
       const post = posts.find(post => post.authorId === channel.id)
 
       if (post) {
@@ -251,8 +277,9 @@ async function loadPostsForSubscriptionsFromRemote() {
       }
     }
 
-    posts = posts.filter(post => !forbiddenTitles.value.some(text => post.author.toLowerCase().includes(text)))
-    return posts
+    if (posts == null) { return [] }
+
+    return posts.filter(post => !forbiddenTitles.value.some(text => post.author.toLowerCase().includes(text)))
   }
 
   const results = await processInChunks(channelsToLoadFromRemote, processChannel, {
@@ -264,6 +291,7 @@ async function loadPostsForSubscriptionsFromRemote() {
   postListFromRemote.push(...results.flat())
 
   endSubscriptionTrace('posts')
+  endFetchErrorCollection('posts')
 
   postListFromRemote.sort((a, b) => {
     return b.publishedTime - a.publishedTime
@@ -282,24 +310,29 @@ async function getChannelPostsLocal(channel) {
     const entries = await getLocalChannelCommunity(channel.id)
 
     if (entries === null) {
+      // ChannelError, so the channel is gone rather than the request having failed
       errorChannels.value.push(channel)
-      return []
+      return {
+        status: FETCH_UNAVAILABLE,
+        posts: []
+      }
     }
 
-    return entries
+    return {
+      status: FETCH_OK,
+      posts: entries
+    }
   } catch (err) {
-    console.error(err)
-    const errorMessage = t('Local API Error (Click to copy)')
-    showToast(`${errorMessage}: ${err}`, 10000, () => {
-      copyToClipboard(err)
-    })
+    reportFetchError('posts', { channel, error: err, api: 'local' })
 
     if (backendPreference.value === 'local' && backendFallback.value) {
-      showToast(t('Falling back to Invidious API'))
       return await getChannelPostsInvidious(channel)
     }
 
-    return []
+    return {
+      status: FETCH_FAILED,
+      posts: null
+    }
   }
 }
 
@@ -307,19 +340,20 @@ async function getChannelPostsInvidious(channel) {
   try {
     const result = await invidiousGetCommunityPosts(channel.id)
 
-    return result.posts
+    return {
+      status: FETCH_OK,
+      posts: result.posts
+    }
   } catch (err) {
-    console.error(err)
-    const errorMessage = t('Invidious API Error (Click to copy)')
-    showToast(`${errorMessage}: ${err}`, 10000, () => {
-      copyToClipboard(err)
-    })
+    reportFetchError('posts', { channel, error: err, api: 'invidious' })
 
     if (process.env.SUPPORTS_LOCAL_API && backendPreference.value === 'invidious' && backendFallback.value) {
-      showToast(t('Falling back to Local API'))
       return await getChannelPostsLocal(channel)
     } else {
-      return []
+      return {
+        status: FETCH_FAILED,
+        posts: null
+      }
     }
   }
 }

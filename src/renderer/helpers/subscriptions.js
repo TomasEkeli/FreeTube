@@ -89,13 +89,34 @@ export function updateVideoListAfterProcessing(videos) {
 }
 
 /**
+ * Parse a YouTube Atom feed.
+ *
+ * A feed that parses but has no `entry` elements is a real answer: the channel
+ * has nothing of this kind. A feed that does not parse is not, and the
+ * difference matters, because YouTube answers some requests it dislikes with
+ * HTTP 200 and an HTML page. That used to come back as an empty video list,
+ * indistinguishable from an empty channel, and got written to the cache as
+ * emptiness. `videos: null` marks it instead, which the callers already treat
+ * as "do not touch the cache".
+ *
  * @param {string} rssString
  * @param {string} channelId
+ * @returns {Promise<{ name?: string, videos: any[] | null, parseFailed?: boolean }>}
  */
 export async function parseYouTubeRSSFeed(rssString, channelId) {
   // doesn't need to be asynchronous, but doing it allows us to do the relatively slow DOM querying in parallel
   try {
     const xmlDom = new DOMParser().parseFromString(rssString, 'application/xml')
+
+    // DOMParser reports malformed input as a document containing this element
+    // rather than by throwing
+    if (xmlDom.querySelector('parsererror') != null) {
+      return {
+        videos: null,
+        parseFailed: true
+      }
+    }
+
     const channelName = xmlDom.querySelector('author > name').textContent
     const entries = xmlDom.querySelectorAll('entry')
 
@@ -111,7 +132,8 @@ export async function parseYouTubeRSSFeed(rssString, channelId) {
     }
   } catch {
     return {
-      videos: []
+      videos: null,
+      parseFailed: true
     }
   }
 }

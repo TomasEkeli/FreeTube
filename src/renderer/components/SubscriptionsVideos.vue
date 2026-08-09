@@ -19,9 +19,7 @@ import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
 import store from '../store/index'
 
 import {
-  copyToClipboard,
   getRelativeTimeFromDate,
-  showToast,
   getChannelPlaylistId
 } from '../helpers/utils'
 import { getInvidiousChannelVideos, invidiousFetch } from '../helpers/api/invidious'
@@ -35,12 +33,30 @@ import {
   SUBSCRIPTION_SCRAPER_CHUNK_SIZE
 } from '../helpers/subscriptions'
 import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
+import {
+  beginFetchErrorCollection,
+  endFetchErrorCollection,
+  isRetryableFetchStatus,
+  reportFetchError,
+  reportRateLimited,
+  FETCH_FAILED,
+  FETCH_OK,
+  FETCH_RATE_LIMITED,
+  FETCH_UNAVAILABLE
+} from '../helpers/subscriptionFetchStatus'
 
 const { t } = useI18n()
 
 const isLoading = ref(true)
 const videoList = shallowRef([])
 const errorChannels = ref([])
+/**
+ * Channels whose last fetch failed in a way worth retrying, as opposed to
+ * `errorChannels`, which is for channels that are simply gone. Consumed by the
+ * tiered recovery that retries them in smaller, slower batches.
+ * @type {import('vue').Ref<{ id: string, name?: string }[]>}
+ */
+const unresolvedChannels = ref([])
 const attemptedFetch = ref(false)
 /** @type {import('vue').Ref<number | null>} */
 const lastRemoteRefreshSuccessTimestamp = ref(null)
@@ -199,6 +215,7 @@ async function loadVideosForSubscriptionsFromRemote() {
   attemptedFetch.value = true
 
   errorChannels.value = []
+  unresolvedChannels.value = []
   const subscriptionUpdates = []
   const videoListFromRemote = []
 
@@ -207,32 +224,36 @@ async function loadVideosForSubscriptionsFromRemote() {
     useRss,
     backend: backendPreference.value
   })
+  beginFetchErrorCollection('videos', channelsToLoadFromRemote.length)
 
   const processChannel = async (channel) => {
-    let videos, name, thumbnailUrl
+    let videos, name, thumbnailUrl, status
 
     const traceDone = traceChannelFetch('videos', channel.id)
 
     try {
       if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
         if (useRss) {
-          ({ videos, name, thumbnailUrl } = await getChannelVideosInvidiousRSS(channel))
+          ({ status, videos, name, thumbnailUrl } = await getChannelVideosInvidiousRSS(channel))
         } else {
-          ({ videos, name, thumbnailUrl } = await getChannelVideosInvidiousScraper(channel))
+          ({ status, videos, name, thumbnailUrl } = await getChannelVideosInvidiousScraper(channel))
         }
       } else {
         if (useRss) {
-          ({ videos, name, thumbnailUrl } = await getChannelVideosLocalRSS(channel))
+          ({ status, videos, name, thumbnailUrl } = await getChannelVideosLocalRSS(channel))
         } else {
-          ({ videos, name, thumbnailUrl } = await getChannelVideosLocalScraper(channel))
+          ({ status, videos, name, thumbnailUrl } = await getChannelVideosLocalScraper(channel))
         }
       }
     } finally {
       traceDone({
         entries: videos?.length ?? null,
-        // `null` is the rate limit sentinel, an empty array is a real answer
-        outcome: videos == null ? 'noData' : 'ok'
+        outcome: status ?? 'threw'
       })
+    }
+
+    if (isRetryableFetchStatus(status)) {
+      unresolvedChannels.value.push(channel)
     }
 
     channelCount++
@@ -265,6 +286,7 @@ async function loadVideosForSubscriptionsFromRemote() {
   videoListFromRemote.push(...results.flat())
 
   endSubscriptionTrace('videos')
+  endFetchErrorCollection('videos')
 
   videoList.value = updateVideoListAfterProcessing(videoListFromRemote)
   isLoading.value = false
@@ -279,37 +301,39 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
     const result = await getLocalChannelVideos(channel.id)
 
     if (result === null) {
+      // ChannelError, so the channel is gone rather than the request having failed
       errorChannels.value.push(channel)
       return {
+        status: FETCH_UNAVAILABLE,
         videos: []
       }
     }
 
-    return result
+    return {
+      status: FETCH_OK,
+      ...result
+    }
   } catch (err) {
-    console.error(err)
-    const errorMessage = t('Local API Error (Click to copy)')
-    showToast(`${errorMessage}: ${err}`, 10000, () => {
-      copyToClipboard(err)
-    })
+    reportFetchError('videos', { channel, error: err, api: 'local' })
 
     switch (failedAttempts) {
       case 0:
         return await getChannelVideosLocalRSS(channel, failedAttempts + 1)
       case 1:
         if (backendFallback.value) {
-          showToast(t('Falling back to Invidious API'))
           return await getChannelVideosInvidiousScraper(channel, failedAttempts + 1)
         } else {
           return {
-            videos: []
+            status: FETCH_FAILED,
+            videos: null
           }
         }
       case 2:
         return await getChannelVideosLocalRSS(channel, failedAttempts + 1)
       default:
         return {
-          videos: []
+          status: FETCH_FAILED,
+          videos: null
         }
     }
   }
@@ -322,8 +346,11 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
   try {
     const response = await fetch(feedUrl)
 
-    if (response.status === 403) {
+    if (response.status === 403 || response.status === 429) {
+      reportRateLimited('videos')
+
       return {
+        status: FETCH_RATE_LIMITED,
         videos: null
       }
     }
@@ -338,38 +365,58 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
 
       if (response2.status === 404) {
         errorChannels.value.push(channel)
+
+        return {
+          status: FETCH_UNAVAILABLE,
+          videos: []
+        }
       }
 
+      // the channel is alive, it just has no videos tab
       return {
+        status: FETCH_OK,
         videos: []
       }
     }
 
-    return await parseYouTubeRSSFeed(await response.text(), channel.id)
+    const parsed = await parseYouTubeRSSFeed(await response.text(), channel.id)
+
+    if (parsed.parseFailed) {
+      // A 200 carrying something that is not a feed, which is one of the ways
+      // YouTube says no. Deliberately not escalating the ladder here: firing
+      // more requests at a host that just refused one is the wrong instinct,
+      // and the channel stays retryable for later.
+      return {
+        status: FETCH_FAILED,
+        videos: null
+      }
+    }
+
+    return {
+      status: FETCH_OK,
+      ...parsed
+    }
   } catch (error) {
-    console.error(error)
-    const errorMessage = t('Local API Error (Click to copy)')
-    showToast(`${errorMessage}: ${error}`, 10000, () => {
-      copyToClipboard(error)
-    })
+    reportFetchError('videos', { channel, error, api: 'local' })
 
     switch (failedAttempts) {
       case 0:
         return await getChannelVideosLocalScraper(channel, failedAttempts + 1)
       case 1:
         if (backendFallback.value) {
-          showToast(t('Falling back to Invidious API'))
           return await getChannelVideosInvidiousRSS(channel, failedAttempts + 1)
         } else {
           return {
-            videos: []
+            status: FETCH_FAILED,
+            videos: null
           }
         }
       case 2:
         return await getChannelVideosLocalScraper(channel, failedAttempts + 1)
       default:
         return {
-          videos: []
+          status: FETCH_FAILED,
+          videos: null
         }
     }
   }
@@ -386,33 +433,31 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
     }
 
     return {
+      status: FETCH_OK,
       name,
       videos: result.videos
     }
   } catch (err) {
-    console.error(err)
-    const errorMessage = t('Invidious API Error (Click to copy)')
-    showToast(`${errorMessage}: ${err}`, 10000, () => {
-      copyToClipboard(err)
-    })
+    reportFetchError('videos', { channel, error: err, api: 'invidious' })
 
     switch (failedAttempts) {
       case 0:
         return await getChannelVideosInvidiousRSS(channel, failedAttempts + 1)
       case 1:
         if (process.env.SUPPORTS_LOCAL_API && backendFallback.value) {
-          showToast(t('Falling back to Local API'))
           return await getChannelVideosLocalScraper(channel, failedAttempts + 1)
         } else {
           return {
-            videos: []
+            status: FETCH_FAILED,
+            videos: null
           }
         }
       case 2:
         return await getChannelVideosInvidiousRSS(channel, failedAttempts + 1)
       default:
         return {
-          videos: []
+          status: FETCH_FAILED,
+          videos: null
         }
     }
   }
@@ -425,6 +470,15 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
   try {
     const response = await invidiousFetch(feedUrl)
 
+    if (response.status === 403 || response.status === 429) {
+      reportRateLimited('videos')
+
+      return {
+        status: FETCH_RATE_LIMITED,
+        videos: null
+      }
+    }
+
     if (response.status === 404) {
       // playlists don't exist if the channel was terminated but also if it doesn't have the tab,
       // so we need to check the channel feed too before deciding it errored, as that only 404s if the channel was terminated
@@ -435,38 +489,53 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
 
       if (response2.status === 404) {
         errorChannels.value.push(channel)
+
+        return {
+          status: FETCH_UNAVAILABLE,
+          videos: []
+        }
       }
 
       return {
+        status: FETCH_OK,
         videos: []
       }
     }
 
-    return await parseYouTubeRSSFeed(await response.text(), channel.id)
+    const parsed = await parseYouTubeRSSFeed(await response.text(), channel.id)
+
+    if (parsed.parseFailed) {
+      return {
+        status: FETCH_FAILED,
+        videos: null
+      }
+    }
+
+    return {
+      status: FETCH_OK,
+      ...parsed
+    }
   } catch (error) {
-    console.error(error)
-    const errorMessage = t('Invidious API Error (Click to copy)')
-    showToast(`${errorMessage}: ${error}`, 10000, () => {
-      copyToClipboard(error)
-    })
+    reportFetchError('videos', { channel, error, api: 'invidious' })
 
     switch (failedAttempts) {
       case 0:
         return await getChannelVideosInvidiousScraper(channel, failedAttempts + 1)
       case 1:
         if (process.env.SUPPORTS_LOCAL_API && backendFallback.value) {
-          showToast(t('Falling back to Local API'))
           return await getChannelVideosLocalRSS(channel, failedAttempts + 1)
         } else {
           return {
-            videos: []
+            status: FETCH_FAILED,
+            videos: null
           }
         }
       case 2:
         return await getChannelVideosInvidiousScraper(channel, failedAttempts + 1)
       default:
         return {
-          videos: []
+          status: FETCH_FAILED,
+          videos: null
         }
     }
   }
