@@ -166,6 +166,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {() => void} beginRefresh
  * @property {() => shaka.Player} getPlayer
  * @property {number} sessionStartedAt
+ * @property {() => boolean} isTornDown
  */
 /**
  * @typedef PendingRefresh
@@ -375,6 +376,10 @@ function bufferedSecondsAhead(player) {
  * @param {'reload' | 'hard-reload-needed'} event
  */
 function endSessionForRecovery(currentState, event) {
+  // A session that has been cleaned up has no player left to recover, and
+  // asking for one reloads a page the viewer is already looking at
+  if (currentState.isTornDown()) { return }
+
   currentState.sabrStreamState.playerReloadRequested = true
   if (!currentState.abortController.signal.aborted) {
     currentState.abortController.abort()
@@ -465,7 +470,7 @@ async function parkUntilRefreshed(operationInputs, currentState) {
   try {
     await pending.promise
   } catch {
-    if (currentState.abortStatus.cancelled) {
+    if (currentState.abortStatus.cancelled || currentState.isTornDown()) {
       // Woken by teardown, not by a failed refresh: bow out quietly
       throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
     }
@@ -1049,6 +1054,13 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
    */
   let pendingRefresh = null
 
+  /**
+   * Set once this session has been cleaned up. Everything still in flight then
+   * belongs to a player that no longer exists, so it must fail quietly rather
+   * than ask for a recovery nobody wanted.
+   */
+  let tornDown = false
+
   function beginRefresh() {
     if (pendingRefresh) return
 
@@ -1312,6 +1324,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
       beginRefresh,
       getPlayer,
       sessionStartedAt,
+      isTornDown: () => tornDown,
     }
 
     const pendingRequest = doRequest(opInputs, currentState)
@@ -1332,6 +1345,8 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
   })
 
   const cleanup = () => {
+    tornDown = true
+
     shaka.net.NetworkingEngine.unregisterScheme('sabr')
     initDataCache.clear()
 
