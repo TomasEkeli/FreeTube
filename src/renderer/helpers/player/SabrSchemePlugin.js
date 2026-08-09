@@ -95,6 +95,12 @@ const attestationState = {
   mediaResponsesSinceReload: 0,
   /** Whether an episode of this is under way, so its end can be reported */
   recovering: false,
+  /**
+   * Refreshes made during the current episode. Separate from the budget
+   * counter above, which a trusted token clears the moment it arrives,
+   * usually in the same response as the media that ends the episode.
+   */
+  refreshesThisEpisode: 0,
 }
 
 /**
@@ -110,6 +116,7 @@ export function resetAttestationBudget(videoId) {
   attestationState.pageReloads = 0
   attestationState.mediaResponsesSinceReload = 0
   attestationState.recovering = false
+  attestationState.refreshesThisEpisode = 0
 }
 
 /**
@@ -390,9 +397,11 @@ function noteMediaServed() {
     attestationState.recovering = false
 
     console.warn(
-      `${RECOVERY_LOG} playing again after ${attestationState.refreshes} refreshes, ` +
+      `${RECOVERY_LOG} playing again after ${attestationState.refreshesThisEpisode} refreshes, ` +
       `${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads`
     )
+
+    attestationState.refreshesThisEpisode = 0
   }
 
   attestationState.refreshes = 0
@@ -896,6 +905,7 @@ async function doRequest(
     if (!currentState.sabrStreamState.refreshInFlight) {
       currentState.sabrStreamState.refreshInFlight = true
       attestationState.refreshes += 1
+      attestationState.refreshesThisEpisode += 1
       attestationState.recovering = true
 
       console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${attestationState.refreshes}, ${bufferAhead.toFixed(1)}s of buffer left)`)

@@ -1569,6 +1569,10 @@ export default defineComponent({
         const useAutoQuality = player.getConfiguration().abr.enabled
         const activeVariant = player.getVariantTracks().find(track => track.active)
 
+        // Speed is trick play state, which belongs to the load rather than to
+        // the player, so it does not survive on its own
+        const playbackRate = player.getPlaybackRate()
+
         const activeCaptionIndex = player.getTextTracks().findIndex(caption => caption.active)
         restoreCaptionIndex = activeCaptionIndex >= 0 ? activeCaptionIndex : null
 
@@ -1592,6 +1596,10 @@ export default defineComponent({
         await player.load(props.manifestSrc, playbackPosition, props.manifestMimeType)
 
         restoreTrackSelection(useAutoQuality, activeVariant)
+
+        if (playbackRate !== defaultPlaybackRate.value) {
+          player.trickPlay(playbackRate, false)
+        }
 
         if (wasPaused) {
           video_.pause()
