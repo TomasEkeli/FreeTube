@@ -211,6 +211,43 @@
   font-size: 32px;
 }
 
+/*
+  The part of the volume bar past 100%, where the gain stage rather than the video
+  element supplies the volume. The tick at its start marks 100%, so that it is
+  obvious when the volume is boosted.
+ */
+:deep(.ft-volume-bar-container.ft-can-boost)::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline: var(--ft-volume-boost-start) 0;
+  border-inline-start: 2px solid var(--primary-color);
+  background-color: var(--primary-color);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* keep the thumb visible where it overlaps the boost zone */
+:deep(.ft-volume-bar) {
+  z-index: 1;
+}
+
+/*
+  States the volume actually being played at when it differs from the volume that
+  was asked for, as the volume bar itself is hidden until the controls are hovered.
+ */
+:deep(.ft-volume-badge) {
+  display: none;
+  align-self: center;
+  margin-inline: 2px;
+  color: var(--primary-color);
+  font-size: 0.8em;
+}
+
+:deep(.ft-volume-badge.ft-visible) {
+  display: block;
+}
+
 .ftVideoPlayer:fullscreen :deep(.theatre-button),
 .ftVideoPlayer:fullscreen :deep(.full-window-button),
 .fullWindow :deep(.theatre-button) {

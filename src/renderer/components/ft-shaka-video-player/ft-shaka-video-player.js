@@ -12,6 +12,7 @@ import { StatsButton } from './player-components/StatsButton'
 import { TheatreModeButton } from './player-components/TheatreModeButton'
 import { AutoplayToggle } from './player-components/AutoplayToggle'
 import { SkipButton } from './player-components/SkipButton'
+import { VolumeBar } from './player-components/VolumeBar'
 import {
   deduplicateAudioTracks,
   findMostSimilarAudioBandwidth,
@@ -29,11 +30,22 @@ import {
   removeFromArrayIfExists,
   copyToClipboard,
 } from '../../helpers/utils'
-import { loudnessDbToGain } from '../../helpers/player/audioGain'
+import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
 import { setupSabrScheme } from '../../helpers/player/SabrSchemePlugin'
 
 /** @typedef {import('../../helpers/sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
+
+/**
+ * Everything the volume bar needs from the component that owns the video element.
+ * @typedef {object} VolumeState
+ * @property {number} maxPercent the ceiling of the volume range, in percent
+ * @property {number} basePercent the volume the user asked for, in percent
+ * @property {number} normalizationGain this video's loudness correction
+ * @property {number} gain the amplification currently applied past 100%
+ * @property {(percent: number) => void} setBasePercent
+ * @property {(gain: number) => void} setGain
+ */
 
 // The UTF-8 characters "h", "t", "t", and "p".
 const HTTP_IN_HEX = 0x68747470
@@ -342,6 +354,30 @@ export default defineComponent({
 
     const videoPlaybackRateInterval = computed(() => {
       return parseFloat(store.getters.getVideoPlaybackRateInterval)
+    })
+
+    /** @type {import('vue').ComputedRef<number>} */
+    const maxVolume = computed(() => {
+      return store.getters.getMaxVolume
+    })
+
+    /** @type {import('vue').ComputedRef<boolean>} */
+    const normalizeLoudness = computed(() => {
+      return store.getters.getNormalizeLoudness
+    })
+
+    /**
+     * How much this video's volume has to be multiplied by to bring it to
+     * YouTube's reference loudness. 1 when the correction is turned off or the
+     * video's loudness is unknown.
+     * @type {import('vue').ComputedRef<number>}
+     */
+    const normalizationGain = computed(() => {
+      if (!normalizeLoudness.value || props.loudnessDb == null) {
+        return 1
+      }
+
+      return loudnessDbToGain(props.loudnessDb)
     })
 
     const playbackRates = computed(() => {
@@ -819,7 +855,7 @@ export default defineComponent({
         'play_pause',
         'ft_skip_next',
         'mute',
-        'volume',
+        'ft_volume',
         'time_and_duration',
         'spacer'
       ]
@@ -1232,28 +1268,95 @@ export default defineComponent({
       }
     }
 
+    // #region volume
+
+    /** @type {AudioGainStage|null} */
+    let gainStage = null
+
+    /**
+     * The volume the user asked for, as a fraction, before this video's loudness
+     * correction is applied to it. May exceed 1, unlike the video element's own volume.
+     */
+    let baseVolume = 1
+
+    /**
+     * Splits the user's volume preference into the part the video element can
+     * express and the gain factor for the rest, as the element refuses anything
+     * above 1. The two always multiply back to the preference.
+     * @param {number} volume
+     */
+    function storeBaseVolume(volume) {
+      baseVolume = volume
+
+      sessionStorage.setItem('volume', Math.min(volume, 1).toString())
+      sessionStorage.setItem('gain', Math.max(volume, 1).toString())
+    }
+
+    function restoreBaseVolume() {
+      const volume = sessionStorage.getItem('volume')
+      const gain = sessionStorage.getItem('gain')
+
+      if (volume !== null) {
+        baseVolume = parseFloat(volume) * (gain === null ? 1 : parseFloat(gain))
+      }
+    }
+
+    /** @type {VolumeState} */
+    const volumeState = {
+      get maxPercent() {
+        return maxVolume.value
+      },
+      get basePercent() {
+        return baseVolume * 100
+      },
+      get normalizationGain() {
+        return normalizationGain.value
+      },
+      get gain() {
+        return gainStage?.gain ?? 1
+      },
+      setBasePercent: (percent) => {
+        storeBaseVolume(percent / 100)
+      },
+      setGain: (gain) => {
+        gainStage?.setGain(gain)
+      }
+    }
+
+    // Both the ceiling and the correction can change while a video is playing
+    watch([maxVolume, normalizationGain], () => {
+      events.dispatchEvent(new CustomEvent('volumeSettingsChanged'))
+    })
+
     function updateVolume() {
       const video_ = video.value
+
+      // What the user hears: the element's own volume, times whatever the gain
+      // stage adds on top of it
+      const effectiveVolume = video_.volume * volumeState.gain
+
+      // The volume preference itself is stored by the volume bar as the user
+      // changes it, rather than being read back from the element here, because
+      // what the element ends up playing at has this video's loudness correction
+      // and the volume ceiling folded into it.
+
       // https://docs.videojs.com/html5#volume
       if (sessionStorage.getItem('muted') === 'false' && video_.volume === 0) {
         // If video is muted by dragging volume slider, it doesn't change 'muted' in sessionStorage to true
         // hence compare it with 'false' and set volume to defaultVolume.
-        const volume = parseFloat(sessionStorage.getItem('defaultVolume'))
-        const muted = true
-        sessionStorage.setItem('volume', volume.toString())
-        sessionStorage.setItem('muted', String(muted))
+        storeBaseVolume(parseFloat(sessionStorage.getItem('defaultVolume')))
+        sessionStorage.setItem('muted', 'true')
       } else {
         // If volume isn't muted by dragging the slider, muted and volume values are carried over to next video.
-        const volume = video_.volume
-        const muted = video_.muted
-        sessionStorage.setItem('volume', volume.toString())
-        sessionStorage.setItem('muted', String(muted))
+        sessionStorage.setItem('muted', String(video_.muted))
       }
 
       if (showStats.value) {
-        stats.volume = (video_.volume * 100).toFixed(1)
+        stats.volume = (effectiveVolume * 100).toFixed(1)
       }
     }
+
+    // #endregion volume
 
     function handleTimeupdate() {
       if (video.value) {
@@ -1627,7 +1730,7 @@ export default defineComponent({
       /** @type {HTMLVideoElement} */
       const video_ = video.value
 
-      stats.volume = (video_.volume * 100).toFixed(1)
+      stats.volume = (video_.volume * volumeState.gain * 100).toFixed(1)
 
       if (props.format === 'legacy') {
         updateLegacyQualityStats(activeLegacyFormat.value)
@@ -2055,6 +2158,19 @@ export default defineComponent({
       shakaOverflowMenu.registerElement('ft_skip_previous', new SkipPreviousButtonFactory())
     }
 
+    function registerVolumeBar() {
+      /**
+       * @implements {shaka.extern.IUIElement.Factory}
+       */
+      class VolumeBarFactory {
+        create(rootElement, controls) {
+          return new VolumeBar(volumeState, events, rootElement, controls)
+        }
+      }
+
+      shakaControls.registerElement('ft_volume', new VolumeBarFactory())
+    }
+
     /**
      * As shaka-player doesn't let you unregister custom control factories,
      * overwrite them with `null` instead so the referenced objects
@@ -2086,6 +2202,8 @@ export default defineComponent({
 
       shakaControls.registerElement('ft_skip_previous', null)
       shakaOverflowMenu.registerElement('ft_skip_previous', null)
+
+      shakaControls.registerElement('ft_volume', null)
     }
 
     // #endregion custom player controls
@@ -2098,13 +2216,17 @@ export default defineComponent({
     function changeVolume(step) {
       const volumeBar = container.value.querySelector('.shaka-volume-bar')
 
+      // The ceiling is the volume bar's own, as it knows whether boosting past
+      // 100% is possible for this video
+      const maxValue = parseFloat(volumeBar.max)
+
       const oldValue = parseFloat(volumeBar.value)
       const newValue = oldValue + (step * 100)
 
       if (newValue < 0) {
         volumeBar.value = 0
-      } else if (newValue > 100) {
-        volumeBar.value = 100
+      } else if (newValue > maxValue) {
+        volumeBar.value = maxValue
       } else {
         volumeBar.value = newValue
       }
@@ -2119,7 +2241,7 @@ export default defineComponent({
       } else if (newValue > 0 && newValue > oldValue) {
         messageIcon = 'volume-high'
       }
-      showValueChange(`${Math.round(video.value.volume * 100)}%`, messageIcon)
+      showValueChange(`${Math.round(parseFloat(volumeBar.value))}%`, messageIcon)
     }
 
     /**
@@ -2801,10 +2923,13 @@ export default defineComponent({
     onMounted(async () => {
       const videoElement = video.value
 
-      const volume = sessionStorage.getItem('volume')
-      if (volume !== null) {
-        videoElement.volume = parseFloat(volume)
-      }
+      restoreBaseVolume()
+      gainStage = new AudioGainStage(videoElement)
+
+      // Only the part of the volume the element can express itself. Anything past
+      // that needs the gain stage, which the volume bar engages once it knows
+      // whether this video's audio can go through it at all.
+      videoElement.volume = Math.min(baseVolume, 1)
 
       const muted = sessionStorage.getItem('muted')
       if (muted !== null) {
@@ -2870,6 +2995,7 @@ export default defineComponent({
       registerLegacyQualitySelection()
       registerStatsButton()
       registerSkipButtons()
+      registerVolumeBar()
 
       if (ui.isMobile()) {
         onlyUseOverFlowMenu.value = true
@@ -3305,6 +3431,9 @@ export default defineComponent({
       }
 
       cleanUpCustomPlayerControls()
+
+      gainStage?.release()
+      gainStage = null
 
       stopPowerSaveBlocker()
       window.removeEventListener('beforeunload', stopPowerSaveBlocker)
