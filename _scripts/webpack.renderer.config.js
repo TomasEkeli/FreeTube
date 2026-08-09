@@ -152,7 +152,8 @@ const config = {
       'process.env.SHAKA_LOCALES_PREBUNDLED': JSON.stringify(SHAKA_LOCALES_PREBUNDLED),
       // The renderer has no runtime process.env, so opt-in subscription
       // tracing has to be baked in at build time. Set on the launch command.
-      'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? '')
+      'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? ''),
+      'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? '')
     }),
     new HtmlWebpackPlugin({
       filename: 'index.html',

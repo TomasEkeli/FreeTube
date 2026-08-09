@@ -142,7 +142,8 @@ const config = {
       __VUE_I18N_FULL_INSTALL__: 'false',
       __INTLIFY_PROD_DEVTOOLS__: 'false',
       'process.env.SWIPER_VERSION': `'${swiperVersion}'`,
-      'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? '')
+      'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? ''),
+      'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? '')
     }),
     new webpack.ProvidePlugin({
       process: 'process/browser.js'

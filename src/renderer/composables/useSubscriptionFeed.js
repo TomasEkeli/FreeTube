@@ -20,6 +20,7 @@ import {
   isRetryableFetchStatus
 } from '../helpers/subscriptionFetchStatus'
 import { detailBackfillRevision } from '../helpers/subscriptionDetailBackfill'
+import { injectedFetchFailure } from '../helpers/subscriptionFailureInjection'
 
 /**
  * The parts of a subscription feed that are the same for videos, live streams,
@@ -237,7 +238,9 @@ export function useSubscriptionFeed(descriptor) {
       const traceDone = traceChannelFetch(feed, channel.id)
 
       try {
-        result = await fetchChannel(channel, { useRss })
+        // Only ever returns anything when FT_SUBS_FAIL is set, and the whole
+        // branch is removed from a build that does not set it
+        result = injectedFetchFailure() ?? await fetchChannel(channel, { useRss })
       } finally {
         traceDone({
           entries: result?.entries?.length ?? null,
