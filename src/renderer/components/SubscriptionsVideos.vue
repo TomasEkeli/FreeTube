@@ -27,7 +27,6 @@ import { getLocalChannelVideos } from '../helpers/api/local'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
 import {
   reportFetchError,
-  reportRateLimited,
   FETCH_FAILED,
   FETCH_OK,
   FETCH_RATE_LIMITED,
@@ -121,8 +120,6 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
     const response = await fetch(feedUrl)
 
     if (response.status === 403 || response.status === 429) {
-      reportRateLimited('videos')
-
       return {
         status: FETCH_RATE_LIMITED,
         entries: null
@@ -246,8 +243,6 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
     const response = await invidiousFetch(feedUrl)
 
     if (response.status === 403 || response.status === 429) {
-      reportRateLimited('videos')
-
       return {
         status: FETCH_RATE_LIMITED,
         entries: null

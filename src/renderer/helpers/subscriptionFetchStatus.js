@@ -47,6 +47,9 @@ const collectors = new Map()
 /** How many individual failures reach the console during one refresh. */
 const MAX_LOGGED_ERRORS_PER_RUN = 5
 
+/** How many entries each list in the copied report carries before it is cut short. */
+const MAX_REPORTED_ITEMS = 40
+
 /**
  * Start collecting fetch errors for a feed instead of showing them one by one.
  *
@@ -110,9 +113,12 @@ export function reportFetchError(feed, { channel, error, api }) {
 }
 
 /**
- * Note that a channel was rate limited. Counted separately from errors because
- * being blocked says something different from a channel being broken, and it is
- * the number that tells you to back off rather than investigate.
+ * Note that a channel ended up rate limited. Counted separately from errors
+ * because being blocked says something different from a channel being broken,
+ * and it is the number that says to back off rather than investigate.
+ *
+ * Called once per channel, from whatever settles that channel's outcome, rather
+ * than at each place an HTTP 403 is read.
  *
  * @param {string} feed
  */
@@ -175,22 +181,44 @@ function formatErrorReport(feed, collector, unresolvedChannels) {
   const lines = [
     `Subscription fetch (${feed})`,
     `${unresolvedChannels.length} of ${collector.total} channels could not be fetched`,
-    `${collector.errors.length} failed attempt(s) in total, ${collector.rateLimited} rate limited`,
-    '',
-    'Channels left unresolved:'
+    `${collector.rateLimited} rate limited, ${collector.errors.length} failed attempt(s) across all retries`,
+    ''
   ]
 
-  for (const channel of unresolvedChannels) {
-    lines.push(`  ${channel.name ?? channel.id} (${channel.id})`)
-  }
+  appendCapped(lines, 'Channels left unresolved', unresolvedChannels,
+    channel => `  ${channel.name ?? channel.id} (${channel.id})`)
 
-  // Every attempt, including the ones a fallback went on to recover, because
-  // which rung failed is the useful part when working out what is wrong
-  lines.push('', 'All failed attempts:')
-
-  for (const { channelId, channelName, api, error } of collector.errors) {
-    lines.push(`  ${channelName} (${channelId}) via ${api}: ${error}`)
-  }
+  // Every attempt, including ones a fallback went on to recover, because which
+  // rung failed is the useful part when working out what is wrong
+  appendCapped(lines, 'Failed attempts', collector.errors,
+    ({ channelId, channelName, api, error }) => `  ${channelName} (${channelId}) via ${api}: ${error}`)
 
   return lines.join('\n')
+}
+
+/**
+ * A mass failure can leave hundreds of channels unresolved, and a report that
+ * long stops being something anyone reads or can paste anywhere useful. The
+ * first few dozen say what is going on; the rest only say it again.
+ *
+ * @template T
+ * @param {string[]} lines
+ * @param {string} heading
+ * @param {T[]} items
+ * @param {(item: T) => string} format
+ */
+function appendCapped(lines, heading, items, format) {
+  if (items.length === 0) { return }
+
+  lines.push(`${heading} (${items.length}):`)
+
+  for (const item of items.slice(0, MAX_REPORTED_ITEMS)) {
+    lines.push(format(item))
+  }
+
+  if (items.length > MAX_REPORTED_ITEMS) {
+    lines.push(`  ... and ${items.length - MAX_REPORTED_ITEMS} more`)
+  }
+
+  lines.push('')
 }

@@ -25,7 +25,6 @@ import { invidiousFetch } from '../helpers/api/invidious'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
 import {
   reportFetchError,
-  reportRateLimited,
   FETCH_FAILED,
   FETCH_OK,
   FETCH_RATE_LIMITED,
@@ -75,8 +74,6 @@ async function getChannelShortsLocal(channel, failedAttempts = 0) {
     const response = await fetch(feedUrl)
 
     if (response.status === 403 || response.status === 429) {
-      reportRateLimited('shorts')
-
       return {
         status: FETCH_RATE_LIMITED,
         entries: null
@@ -151,8 +148,6 @@ async function getChannelShortsInvidious(channel, failedAttempts = 0) {
     const response = await invidiousFetch(feedUrl)
 
     if (response.status === 403 || response.status === 429) {
-      reportRateLimited('shorts')
-
       return {
         status: FETCH_RATE_LIMITED,
         entries: null

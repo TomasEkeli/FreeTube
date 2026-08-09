@@ -17,7 +17,9 @@ import {
 import {
   beginFetchErrorCollection,
   endFetchErrorCollection,
-  isRetryableFetchStatus
+  isRetryableFetchStatus,
+  reportRateLimited,
+  FETCH_RATE_LIMITED
 } from '../helpers/subscriptionFetchStatus'
 import { detailBackfillRevision } from '../helpers/subscriptionDetailBackfill'
 import { injectedFetchFailure } from '../helpers/subscriptionFailureInjection'
@@ -249,6 +251,14 @@ export function useSubscriptionFeed(descriptor) {
       }
 
       const { status, entries, name, thumbnailUrl } = result
+
+      // Counted here rather than where the 403 is read, so that the tally
+      // follows from the outcome itself. Anything that produces a rate limited
+      // channel is counted, without each fetch path having to remember to say
+      // so, which is how injected failures came to report none at all.
+      if (status === FETCH_RATE_LIMITED) {
+        reportRateLimited(feed)
+      }
 
       if (isRetryableFetchStatus(status)) {
         unresolvedChannels.value.push(channel)
