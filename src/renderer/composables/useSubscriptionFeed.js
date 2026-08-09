@@ -206,6 +206,10 @@ export function useSubscriptionFeed(descriptor) {
     }
 
     if (fetchSubscriptionsAutomatically.value) {
+      // Deliberately not keeping what is on screen, unlike a refresh or the
+      // first load. Getting here means the cache cannot supply this profile, so
+      // whatever is displayed belongs to a different set of channels and
+      // leaving it up would be showing the wrong feed.
       // `isLoading.value = false` is called inside `loadFromRemote` when needed
       loadFromRemote()
       return
@@ -436,6 +440,26 @@ export function useSubscriptionFeed(descriptor) {
     store.commit(autoFetchMutation)
   }
 
+  /**
+   * Refresh because someone asked for one.
+   *
+   * The feed already on screen is for this same profile and is still perfectly
+   * readable, so it stays up while the refresh runs behind it, exactly as it
+   * does on startup. Replacing it with a spinner for the half minute that six
+   * hundred channels take hides the thing being read in order to announce that
+   * it is being brought up to date.
+   *
+   * Only when there is nothing on screen does the spinner make sense. Otherwise
+   * the empty-feed message would sit there for the whole refresh insisting
+   * there is nothing to show.
+   *
+   * Takes no arguments deliberately: it is bound to a template event, and a
+   * payload arriving as an options object would quietly change what it does.
+   */
+  function refresh() {
+    return loadFromRemote({ keepShowingCurrentEntries: entryList.value.length > 0 })
+  }
+
   watch(activeSubscriptionList, () => {
     // Switching profile means the channels being recovered are for a feed
     // nobody is looking at any more
@@ -489,6 +513,6 @@ export function useSubscriptionFeed(descriptor) {
     unresolvedChannels,
     attemptedFetch,
     lastRefreshTimestamp,
-    refresh: loadFromRemote
+    refresh
   }
 }
