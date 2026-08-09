@@ -110,36 +110,42 @@ export function reportRateLimited(feed) {
 }
 
 /**
- * Close collection and show one summary if anything went wrong. Returns the
- * collected detail so callers can decide what to do next.
+ * Close collection and, if any channel was left unresolved, show one summary.
+ *
+ * The count that matters is channels the refresh could not get, which is not the
+ * number of errors: one channel can error at every rung of its retry ladder, and
+ * the ladder usually recovers it by falling back to another source. A run that
+ * logged forty-two errors but resolved all but eight of them should say eight,
+ * and a run whose ladder recovered everything should say nothing at all. So the
+ * caller passes in the channels actually left unresolved, being the only party
+ * that knows.
  *
  * @param {string} feed
+ * @param {{ id: string, name?: string }[]} [unresolvedChannels]
  * @returns {FetchErrorCollector | undefined}
  */
-export function endFetchErrorCollection(feed) {
+export function endFetchErrorCollection(feed, unresolvedChannels = []) {
   const collector = collectors.get(feed)
 
   if (collector == null) { return }
 
   collectors.delete(feed)
 
-  const failed = collector.errors.length + collector.rateLimited
-
-  if (failed === 0) { return collector }
+  if (unresolvedChannels.length === 0) { return collector }
 
   const message = collector.rateLimited > 0
     ? i18n.global.t('Subscriptions.Fetch Errors Rate Limited', {
-        failed,
+        failed: unresolvedChannels.length,
         total: collector.total,
         rateLimited: collector.rateLimited
       })
     : i18n.global.t('Subscriptions.Fetch Errors', {
-        failed,
+        failed: unresolvedChannels.length,
         total: collector.total
       })
 
   showToast(message, 10000, () => {
-    copyToClipboard(formatErrorReport(feed, collector))
+    copyToClipboard(formatErrorReport(feed, collector, unresolvedChannels))
   })
 
   return collector
@@ -148,16 +154,27 @@ export function endFetchErrorCollection(feed) {
 /**
  * @param {string} feed
  * @param {FetchErrorCollector} collector
+ * @param {{ id: string, name?: string }[]} unresolvedChannels
  */
-function formatErrorReport(feed, collector) {
+function formatErrorReport(feed, collector, unresolvedChannels) {
   const lines = [
-    `Subscription fetch errors (${feed})`,
-    `${collector.errors.length} errored, ${collector.rateLimited} rate limited, out of ${collector.total} channels`,
-    ''
+    `Subscription fetch (${feed})`,
+    `${unresolvedChannels.length} of ${collector.total} channels could not be fetched`,
+    `${collector.errors.length} failed attempt(s) in total, ${collector.rateLimited} rate limited`,
+    '',
+    'Channels left unresolved:'
   ]
 
+  for (const channel of unresolvedChannels) {
+    lines.push(`  ${channel.name ?? channel.id} (${channel.id})`)
+  }
+
+  // Every attempt, including the ones a fallback went on to recover, because
+  // which rung failed is the useful part when working out what is wrong
+  lines.push('', 'All failed attempts:')
+
   for (const { channelId, channelName, api, error } of collector.errors) {
-    lines.push(`${channelName} (${channelId}) via ${api}: ${error}`)
+    lines.push(`  ${channelName} (${channelId}) via ${api}: ${error}`)
   }
 
   return lines.join('\n')

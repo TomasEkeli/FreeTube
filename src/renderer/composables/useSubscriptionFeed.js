@@ -276,7 +276,7 @@ export function useSubscriptionFeed(descriptor) {
     })
 
     endSubscriptionTrace(feed)
-    endFetchErrorCollection(feed)
+    endFetchErrorCollection(feed, unresolvedChannels.value)
 
     entryList.value = postProcess(results.flat())
     isLoading.value = false
