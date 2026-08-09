@@ -112,11 +112,20 @@
                 aria-hidden="true"
                 class="errorIcon"
               />
-              <p
-                class="errorMessage"
-              >
-                {{ errorMessage }}
-              </p>
+              <div class="errorText">
+                <p
+                  class="errorMessage"
+                >
+                  {{ errorMessage }}
+                </p>
+                <FtButton
+                  v-if="errorIsRetryable"
+                  :label="$t('Video.Try Again')"
+                  :icon="['fas', 'sync']"
+                  class="errorRetryButton"
+                  @click="retryVideo"
+                />
+              </div>
             </div>
           </div>
         </div>
