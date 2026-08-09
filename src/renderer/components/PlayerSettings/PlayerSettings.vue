@@ -159,8 +159,8 @@
         :label="t('Settings.Player Settings.Max Volume')"
         :default-value="maxVolume"
         :min-value="100"
-        :max-value="1000"
-        :step="10"
+        :max-value="3000"
+        :step="50"
         value-extension="%"
         @change="updateMaxVolume"
       />

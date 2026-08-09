@@ -236,8 +236,10 @@ const state = {
   maxVideoPlaybackRate: 3,
   // The volume slider's ceiling, as a percentage. Anything above 100% is
   // achieved with a Web Audio gain stage, as the video element itself stops at 100%.
-  // 400% is +12 dB. Set this to 100 to disable volume boost entirely.
-  maxVolume: 400,
+  // 1000% is +20 dB, which covers the quietest content seen in the wild
+  // (-18.9 dB, needing 883%) without the loudness correction being clamped.
+  // Set this to 100 to disable volume boost entirely.
+  maxVolume: 1000,
   // Correct each video's volume for how loud it was mastered, using the loudness
   // YouTube reports. Off by default because it is two-way: loud videos get quieter.
   normalizeLoudness: false,
