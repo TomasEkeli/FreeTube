@@ -163,7 +163,11 @@ const state = {
   backendFallback: false,
   backendPreference: !process.env.SUPPORTS_LOCAL_API ? 'invidious' : 'local',
   barColor: false,
-  checkForUpdates: true,
+  // Off by default: this is a fork, and the check polls upstream's releases.
+  // Upstream will eventually publish a version numerically above this one, at
+  // which point the banner offers a build carrying none of the changes that
+  // make this fork worth running. The setting stays, so it can be turned on.
+  checkForUpdates: false,
   baseTheme: 'system',
   mainColor: 'Red',
   secColor: 'Blue',
