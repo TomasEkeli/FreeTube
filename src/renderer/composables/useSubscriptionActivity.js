@@ -1,6 +1,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import store from '../store/index'
+
 import {
   cancelSubscriptionRecovery,
   subscriptionRecoveryProgress
@@ -20,7 +22,12 @@ import { subscriptionWorkerProgress } from '../helpers/subscriptionWorker'
  * it is. The counts behind it are diagnostics, and belong in the trace rather
  * than in front of someone who only wants to know whether to keep waiting.
  */
-export function useSubscriptionActivity() {
+/**
+ * @param {object} sources
+ * @param {import('vue').Ref<boolean>} sources.isRefreshing whether a remote
+ *   refresh is in flight for the feed being shown
+ */
+export function useSubscriptionActivity({ isRefreshing }) {
   const { t } = useI18n()
 
   const recovery = subscriptionRecoveryProgress
@@ -31,6 +38,15 @@ export function useSubscriptionActivity() {
    * reported while both are outstanding.
    */
   const label = computed(() => {
+    // Said during a refresh as well as after one, because a refresh that runs
+    // behind an existing feed has no spinner to announce it. It also keeps the
+    // last-updated time off screen while it churns: that time is the oldest of
+    // six hundred cached timestamps, and a refresh rewrites them one at a time,
+    // so it jitters for the whole half minute.
+    if (isRefreshing.value) {
+      return t('Subscriptions.Refreshing')
+    }
+
     if (recovery.active) {
       // Whether it is working through profiles or down to single channels is an
       // implementation detail; the progress already conveys how near the end it is
@@ -55,6 +71,11 @@ export function useSubscriptionActivity() {
    * @type {import('vue').ComputedRef<number | null>}
    */
   const progress = computed(() => {
+    if (isRefreshing.value) {
+      // The refresh already counts itself for the window's progress bar
+      return store.getters.getProgressBarPercentage / 100
+    }
+
     if (recovery.active) {
       const total = recovery.recovered + recovery.remaining
 

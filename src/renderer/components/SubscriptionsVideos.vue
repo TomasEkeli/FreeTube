@@ -1,6 +1,7 @@
 <template>
   <SubscriptionsTabUi
     :is-loading="isLoading"
+    :is-refreshing="isRefreshing"
     :video-list="entryList"
     :error-channels="errorChannels"
     :last-refresh-timestamp="lastRefreshTimestamp"
@@ -43,6 +44,7 @@ const currentInvidiousInstanceUrl = computed(() => store.getters.getCurrentInvid
 
 const {
   isLoading,
+  isRefreshing,
   entryList,
   errorChannels,
   attemptedFetch,

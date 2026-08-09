@@ -1,6 +1,7 @@
 <template>
   <SubscriptionsTabUi
     :is-loading="isLoading"
+    :is-refreshing="isRefreshing"
     :video-list="entryList"
     :error-channels="errorChannels"
     :attempted-fetch="attemptedFetch"
@@ -43,6 +44,7 @@ const forbiddenTitles = computed(() => {
 
 const {
   isLoading,
+  isRefreshing,
   entryList,
   errorChannels,
   attemptedFetch,

@@ -80,6 +80,14 @@ export function useSubscriptionFeed(descriptor) {
   } = descriptor
 
   const isLoading = ref(true)
+
+  /**
+   * A remote refresh is in flight. Distinct from isLoading, which means "there
+   * is nothing to look at yet": a refresh behind an existing feed is running
+   * without being loading.
+   */
+  const isRefreshing = ref(false)
+
   const entryList = shallowRef([])
 
   /**
@@ -209,7 +217,12 @@ export function useSubscriptionFeed(descriptor) {
     isLoading.value = false
   }
 
-  async function loadFromRemote() {
+  /**
+   * @param {object} [options]
+   * @param {boolean} [options.keepShowingCurrentEntries] refresh without
+   *   emptying the feed first, for when there is already something worth reading
+   */
+  async function loadFromRemote({ keepShowingCurrentEntries = false } = {}) {
     if (activeSubscriptionList.value.length === 0) {
       isLoading.value = false
       entryList.value = []
@@ -221,7 +234,15 @@ export function useSubscriptionFeed(descriptor) {
 
     const channelsToLoadFromRemote = activeSubscriptionList.value
     let channelCount = 0
-    isLoading.value = true
+
+    // The spinner replaces the feed with a hole, so it is only right when there
+    // is nothing to replace. Six hundred channels take half a minute, which is
+    // a long time to look at a hole while holding a perfectly good cached copy.
+    if (!keepShowingCurrentEntries) {
+      isLoading.value = true
+    }
+
+    isRefreshing.value = true
 
     // Read once, so that changing the setting midway cannot split one refresh
     // across both strategies
@@ -292,6 +313,7 @@ export function useSubscriptionFeed(descriptor) {
 
     entryList.value = postProcess(results.flat())
     isLoading.value = false
+    isRefreshing.value = false
     store.commit('setShowProgressBar', false)
     lastRemoteRefreshSuccessTimestamp.value = Date.now()
 
@@ -397,7 +419,20 @@ export function useSubscriptionFeed(descriptor) {
     }
 
     alreadyLoadedRemotely = true
-    loadFromRemote()
+
+    // Put the cached feed up first if there is one. It is a few seconds old at
+    // worst and entirely readable, where the alternative is half a minute of
+    // empty page before anything appears at all. The refresh then runs behind
+    // it and replaces it in one go, rather than growing the list underneath
+    // whoever is reading it.
+    const haveSomethingToShow = subscriptionCacheReady.value &&
+      cacheForAllActiveProfileChannelsPresent.value
+
+    if (haveSomethingToShow) {
+      loadFromCacheForAllActiveProfileChannels()
+    }
+
+    loadFromRemote({ keepShowingCurrentEntries: haveSomethingToShow })
     store.commit(autoFetchMutation)
   }
 
@@ -429,6 +464,15 @@ export function useSubscriptionFeed(descriptor) {
     watch(subscriptionCacheReady, () => {
       if (!alreadyLoadedRemotely) {
         loadFromCacheSometimes()
+        return
+      }
+
+      // The cache finishes loading after this view is mounted, so the automatic
+      // refresh on startup begins before there is anything to show. As soon as
+      // there is, put it up: waiting for the refresh means half a minute of
+      // empty page while holding a perfectly readable copy.
+      if (entryList.value.length === 0 && cacheForAllActiveProfileChannelsPresent.value) {
+        loadFromCacheForAllActiveProfileChannels()
       }
     })
   }
@@ -439,6 +483,7 @@ export function useSubscriptionFeed(descriptor) {
 
   return {
     isLoading,
+    isRefreshing,
     entryList,
     errorChannels,
     unresolvedChannels,

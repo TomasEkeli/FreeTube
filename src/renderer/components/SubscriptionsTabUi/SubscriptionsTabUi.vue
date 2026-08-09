@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 
 import FtAutoLoadNextPageWrapper from '../FtAutoLoadNextPageWrapper.vue'
 import FtButton from '../FtButton/FtButton.vue'
@@ -94,6 +94,11 @@ import { KeyboardShortcuts } from '../../../constants'
 
 const props = defineProps({
   isLoading: {
+    type: Boolean,
+    default: false
+  },
+  /** A remote refresh is running, whether or not the feed is empty meanwhile. */
+  isRefreshing: {
     type: Boolean,
     default: false
   },
@@ -142,7 +147,7 @@ const {
   progress: activityProgress,
   canStop: canStopActivity,
   stop: stopActivity
-} = useSubscriptionActivity()
+} = useSubscriptionActivity({ isRefreshing: toRef(props, 'isRefreshing') })
 
 const subscriptionLimit = sessionStorage.getItem('subscriptionLimit')
 
