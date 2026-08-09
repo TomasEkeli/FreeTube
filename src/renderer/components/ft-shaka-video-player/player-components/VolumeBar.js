@@ -3,6 +3,38 @@ import shaka from 'shaka-player'
 const LoadMode = shaka.Player.LoadMode
 
 /**
+ * The bottom of the bar, in dB relative to 100%. -40 dB is 1%, which is quiet
+ * enough to be a floor while leaving the rest of the range room on the bar.
+ */
+const MIN_DB = -40
+
+/**
+ * @param {number} percent
+ * @returns {number} the same volume in dB relative to 100%
+ */
+function percentToDb(percent) {
+  if (percent <= 0) {
+    return MIN_DB
+  }
+
+  return Math.max(MIN_DB, 20 * Math.log10(percent / 100))
+}
+
+/**
+ * @param {number} db
+ * @returns {number} the same volume as a percentage
+ */
+function dbToPercent(db) {
+  // The very bottom of the travel is silence rather than 1%, the way an audio
+  // fader's travel ends at minus infinity
+  if (db <= MIN_DB) {
+    return 0
+  }
+
+  return 100 * 10 ** (db / 20)
+}
+
+/**
  * A replacement for `shaka.ui.VolumeBar` whose range goes past 100%.
  *
  * It has to be a replacement rather than a subclass: everything that makes
@@ -15,6 +47,13 @@ const LoadMode = shaka.Player.LoadMode
  * That is the volume they asked for, times this video's loudness correction,
  * clamped to the ceiling. Up to 100% the video element produces it on its own;
  * above that the element sits at 100% and the gain stage supplies the rest.
+ *
+ * Its travel is logarithmic, so the bar's own values are dB relative to 100%
+ * while everything it talks to stays in percent. Loudness correction spans a far
+ * wider range than a linear bar can serve: measured content runs from 14% to
+ * 883% effective, which linearly would put the thumb 1.4px and 88px along a
+ * 100px bar. In dB that is -17 and +18.9, either side of the 100% mark, and
+ * equal movement of the thumb is equal change in loudness wherever it is.
  */
 export class VolumeBar extends shaka.ui.RangeElement {
   /**
@@ -123,7 +162,7 @@ export class VolumeBar extends shaka.ui.RangeElement {
    * @override
    */
   onChange() {
-    const effectivePercent = this.getValue()
+    const effectivePercent = dbToPercent(this.getValue())
 
     // Remember what the user asked for without this video's correction baked in,
     // so that the preference carries to the next video rather than the correction.
@@ -146,9 +185,9 @@ export class VolumeBar extends shaka.ui.RangeElement {
    * @private
    */
   get effectivePercent_() {
-    const max = parseFloat(this.bar.max)
+    const maxPercent = dbToPercent(parseFloat(this.bar.max))
 
-    return Math.min(this.state_.basePercent * this.state_.normalizationGain, max)
+    return Math.min(this.state_.basePercent * this.state_.normalizationGain, maxPercent)
   }
 
   /**
@@ -170,7 +209,7 @@ export class VolumeBar extends shaka.ui.RangeElement {
    * @private
    */
   applyEffectiveVolume_(effectivePercent) {
-    const clamped = Math.min(Math.max(effectivePercent, 0), parseFloat(this.bar.max))
+    const clamped = Math.min(Math.max(effectivePercent, 0), dbToPercent(parseFloat(this.bar.max)))
 
     if (clamped <= 100) {
       this.state_.setGain(1)
@@ -190,7 +229,9 @@ export class VolumeBar extends shaka.ui.RangeElement {
    * @private
    */
   syncToPresentation_() {
-    this.setValue(this.video.muted ? 0 : this.video.volume * this.state_.gain * 100)
+    const actualPercent = this.video.muted ? 0 : this.video.volume * this.state_.gain * 100
+
+    this.setValue(percentToDb(actualPercent))
 
     this.updateColors_()
     this.updateBadge_()
@@ -208,12 +249,16 @@ export class VolumeBar extends shaka.ui.RangeElement {
     const canBoost = this.state_.maxPercent > 100 &&
       this.player.getLoadMode() === LoadMode.MEDIA_SOURCE
 
-    const max = canBoost ? this.state_.maxPercent : 100
+    const maxDb = percentToDb(canBoost ? this.state_.maxPercent : 100)
 
-    this.setRange(0, max)
+    this.setRange(MIN_DB, maxDb)
 
-    // Where 100% sits along the bar, for the tick and the tint beyond it
-    this.container.style.setProperty('--ft-volume-boost-start', `${(100 / max) * 100}%`)
+    // Where 100% sits along the bar. A logarithmic bar puts it in the middle
+    // rather than at the end, so it needs a mark of its own, and the boost zone
+    // is tinted from there on.
+    const unityPosition = ((0 - MIN_DB) / (maxDb - MIN_DB)) * 100
+
+    this.container.style.setProperty('--ft-volume-unity-position', `${unityPosition}%`)
     this.container.classList.toggle('ft-can-boost', canBoost)
   }
 
@@ -222,7 +267,10 @@ export class VolumeBar extends shaka.ui.RangeElement {
    */
   updateColors_() {
     const colors = this.config_.volumeBarColors
-    const fraction = (this.getValue() / parseFloat(this.bar.max)) * 100
+
+    const min = parseFloat(this.bar.min)
+    const max = parseFloat(this.bar.max)
+    const fraction = ((this.getValue() - min) / (max - min)) * 100
 
     const gradient = [
       'to right',
@@ -279,10 +327,14 @@ export class VolumeBar extends shaka.ui.RangeElement {
 
     event.preventDefault()
 
-    const step = event.deltaY > 0 ? -1 : 1
-    const newValue = this.getValue() + step
+    // A dB per notch, the bar's travel being logarithmic
+    const newValue = this.getValue() + (event.deltaY > 0 ? -1 : 1)
 
-    this.setValue(Math.max(0, Math.min(parseFloat(this.bar.max), newValue)))
+    this.setValue(Math.max(
+      parseFloat(this.bar.min),
+      Math.min(parseFloat(this.bar.max), newValue)
+    ))
+
     this.onChange()
   }
 }

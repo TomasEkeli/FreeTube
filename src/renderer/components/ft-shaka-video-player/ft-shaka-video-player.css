@@ -213,17 +213,31 @@
 
 /*
   The part of the volume bar past 100%, where the gain stage rather than the video
-  element supplies the volume. The tick at its start marks 100%, so that it is
-  obvious when the volume is boosted.
+  element supplies the volume.
  */
 :deep(.ft-volume-bar-container.ft-can-boost)::after {
   content: '';
   position: absolute;
   inset-block: 0;
-  inset-inline: var(--ft-volume-boost-start) 0;
-  border-inline-start: 2px solid var(--primary-color);
+  inset-inline: var(--ft-volume-unity-position) 0;
   background-color: var(--primary-color);
   opacity: 0.35;
+  pointer-events: none;
+}
+
+/*
+  The 100% mark. The bar's travel is logarithmic, which puts 100% somewhere in the
+  middle rather than at the end, so it needs marking. Taller than the track so it
+  stays legible against the fill on either side of it.
+ */
+:deep(.ft-volume-bar-container.ft-can-boost)::before {
+  content: '';
+  position: absolute;
+  inset-block: -3px;
+  inset-inline-start: var(--ft-volume-unity-position);
+  width: 2px;
+  background-color: #fff;
+  opacity: 0.85;
   pointer-events: none;
 }
 

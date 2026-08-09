@@ -52,6 +52,13 @@ const HTTP_IN_HEX = 0x68747470
 
 const USE_OVERFLOW_MENU_WIDTH_THRESHOLD = 634
 
+/**
+ * How much a keyboard shortcut or a scroll over the player changes the volume by,
+ * in dB. Two dB is a small but clearly audible step, and crosses the default
+ * range of the volume bar in about 30 presses.
+ */
+const VOLUME_STEP_DB = 2
+
 const RequestType = shaka.net.NetworkingEngine.RequestType
 const AdvancedRequestType = shaka.net.NetworkingEngine.AdvancedRequestType
 const TrackLabelFormat = shaka.ui.Overlay.TrackLabelFormat
@@ -2211,37 +2218,38 @@ export default defineComponent({
     // #region mouse and keyboard helpers
 
     /**
-     * @param {number} step
+     * @param {number} stepDb how much to change the volume by, in dB. The volume
+     * bar's travel is logarithmic, and its bounds are its own, as it knows both
+     * the ceiling and whether boosting past 100% is possible for this video.
      */
-    function changeVolume(step) {
+    function changeVolume(stepDb) {
       const volumeBar = container.value.querySelector('.shaka-volume-bar')
 
-      // The ceiling is the volume bar's own, as it knows whether boosting past
-      // 100% is possible for this video
+      const minValue = parseFloat(volumeBar.min)
       const maxValue = parseFloat(volumeBar.max)
 
       const oldValue = parseFloat(volumeBar.value)
-      const newValue = oldValue + (step * 100)
+      const newValue = Math.min(Math.max(oldValue + stepDb, minValue), maxValue)
 
-      if (newValue < 0) {
-        volumeBar.value = 0
-      } else if (newValue > maxValue) {
-        volumeBar.value = maxValue
-      } else {
-        volumeBar.value = newValue
-      }
+      volumeBar.value = newValue
 
       volumeBar.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }))
 
       let messageIcon
-      if (newValue <= 0) {
+      if (newValue <= minValue) {
         messageIcon = 'volume-mute'
-      } else if (newValue > 0 && newValue < oldValue) {
+      } else if (newValue < oldValue) {
         messageIcon = 'volume-low'
-      } else if (newValue > 0 && newValue > oldValue) {
+      } else if (newValue > oldValue) {
         messageIcon = 'volume-high'
       }
-      showValueChange(`${Math.round(parseFloat(volumeBar.value))}%`, messageIcon)
+
+      // Reported as a percentage, which is what the rest of the player speaks in,
+      // and read back from the element so that a refused boost isn't claimed
+      showValueChange(
+        `${Math.round(video.value.volume * volumeState.gain * 100)}%`,
+        messageIcon
+      )
     }
 
     /**
@@ -2390,9 +2398,9 @@ export default defineComponent({
 
       if (!video_.muted) {
         if ((event.deltaY < 0 || event.deltaX > 0)) {
-          changeVolume(0.05)
+          changeVolume(VOLUME_STEP_DB)
         } else if ((event.deltaY > 0 || event.deltaX < 0)) {
-          changeVolume(-0.05)
+          changeVolume(-VOLUME_STEP_DB)
         }
       }
     }
@@ -2638,12 +2646,12 @@ export default defineComponent({
         case KeyboardShortcuts.VIDEO_PLAYER.GENERAL.VOLUME_UP:
           // Increase volume
           event.preventDefault()
-          changeVolume(0.05)
+          changeVolume(VOLUME_STEP_DB)
           break
         case KeyboardShortcuts.VIDEO_PLAYER.GENERAL.VOLUME_DOWN:
           // Decrease Volume
           event.preventDefault()
-          changeVolume(-0.05)
+          changeVolume(-VOLUME_STEP_DB)
           break
         case KeyboardShortcuts.VIDEO_PLAYER.PLAYBACK.SMALL_REWIND:
           if (event.shiftKey) {
