@@ -1559,7 +1559,21 @@ export default defineComponent({
      * is never worse than before this existed.
      */
     async function hardReloadSabrSession() {
-      if (isRebuildingSabrSession.value || !sabrStream) return
+      if (!sabrStream) return
+
+      if (isRebuildingSabrSession.value) {
+        // The plugin ends a session before asking for this, so the session the
+        // rebuild already under way is loading against has just been killed
+        // and its load can never finish. Ignoring the request leaves the video
+        // waiting on it forever, which is the one outcome worse than the
+        // reload we can still fall back to.
+        console.error('[SABR recovery] a second session reload was needed while one was still loading, falling back to a page reload')
+
+        sabrAbortController?.abort()
+        emit('player-reload-requested')
+        return
+      }
+
       isRebuildingSabrSession.value = true
 
       // The session that asked for this is already finished, so nothing it

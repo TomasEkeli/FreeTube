@@ -212,6 +212,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {boolean} playerReloadRequested
  * @property {number} requestNumber
  * @property {boolean} refreshInFlight
+ * @property {boolean} hasServedMedia
  */
 /**
  * @typedef TimeoutController
@@ -886,6 +887,8 @@ async function doRequest(
   if (responseDataChunks.length > 0 && segmentComplete) {
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
 
+    currentState.sabrStreamState.hasServedMedia = true
+
     noteMediaServed(currentState)
     noteSessionServing()
 
@@ -906,12 +909,19 @@ async function doRequest(
   } else if (attestationBlocked) {
     const playbackLeft = secondsOfPlaybackLeft(currentState.getPlayer())
 
+    // A session that has not served anything yet has an empty buffer because
+    // it has not started, not because it is about to stop, and reading that as
+    // an imminent stall makes every fresh session escalate on its first block.
+    // Rebuilding one rebuilt a moment ago is the one thing that cannot help.
+    const runwayIsMeaningful = currentState.sabrStreamState.hasServedMedia
+
     // Refreshing costs the viewer nothing for as long as the buffer covers
     // playback, so there is no reason to stop while it does. Once the buffer
     // is nearly gone the video is about to stall whatever we do, which is the
     // moment a more disruptive remedy stops being a downgrade.
     const outOfPatience = attestationState.refreshes >= ATTESTATION_REFRESH_FLOOR &&
-      (playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS || attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
+      ((runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS) ||
+        attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
 
     if (outOfPatience) {
       // Audio and video reach this together, so the first one to escalate
@@ -921,7 +931,7 @@ async function doRequest(
         throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
       }
 
-      const reason = playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
+      const reason = runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
         ? `${playbackLeft.toFixed(1)}s of watching left`
         : `${attestationState.refreshes} refreshes, the limit`
 
@@ -1180,6 +1190,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     playerReloadRequested: false,
     requestNumber: 0,
     refreshInFlight: false,
+    hasServedMedia: false,
   }
 
   shaka.net.NetworkingEngine.registerScheme('sabr', (uri, request, requestType, _progressUpdated, headersReceived, _config) => {
