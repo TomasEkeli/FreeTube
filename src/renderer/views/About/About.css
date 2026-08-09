@@ -71,3 +71,9 @@
     inline-size: 90%;
   }
 }
+
+.buildStamp {
+  color: var(--tertiary-text-color);
+  font-size: 13px;
+  margin-block-start: 4px;
+}
