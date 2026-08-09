@@ -26,6 +26,7 @@ import {
   showToast
 } from '../helpers/utils'
 import { invidiousFetch } from '../helpers/api/invidious'
+import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
 
 const { t } = useI18n()
 
@@ -186,13 +187,29 @@ async function loadVideosForSubscriptionsFromRemote() {
   errorChannels.value = []
   const subscriptionUpdates = []
 
+  beginSubscriptionTrace('shorts', {
+    channelCount: channelsToLoadFromRemote.length,
+    // shorts have no scraper path, the shorts tab carries no publish dates
+    useRss: true,
+    backend: backendPreference.value
+  })
+
   const videoListFromRemote = (await Promise.all(channelsToLoadFromRemote.map(async (channel) => {
     let videos, name
 
-    if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-      ({ videos, name } = await getChannelShortsInvidious(channel))
-    } else {
-      ({ videos, name } = await getChannelShortsLocal(channel))
+    const traceDone = traceChannelFetch('shorts', channel.id)
+
+    try {
+      if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
+        ({ videos, name } = await getChannelShortsInvidious(channel))
+      } else {
+        ({ videos, name } = await getChannelShortsLocal(channel))
+      }
+    } finally {
+      traceDone({
+        entries: videos?.length ?? null,
+        outcome: videos == null ? 'noData' : 'ok'
+      })
     }
 
     channelCount++
@@ -215,6 +232,8 @@ async function loadVideosForSubscriptionsFromRemote() {
 
     return videos ?? []
   }))).flat()
+
+  endSubscriptionTrace('shorts')
 
   videoList.value = updateVideoListAfterProcessing(videoListFromRemote)
   isLoading.value = false

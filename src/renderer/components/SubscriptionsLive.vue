@@ -27,6 +27,7 @@ import {
 import { getInvidiousChannelLive, invidiousFetch } from '../helpers/api/invidious'
 import { getLocalChannelLiveStreams } from '../helpers/api/local'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
+import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
 
 const { t } = useI18n()
 
@@ -195,21 +196,36 @@ async function loadVideosForSubscriptionsFromRemote() {
   const subscriptionUpdates = []
   const videoListFromRemote = []
 
+  beginSubscriptionTrace('live', {
+    channelCount: channelsToLoadFromRemote.length,
+    useRss,
+    backend: backendPreference.value
+  })
+
   const processChannel = async (channel) => {
     let videos, name, thumbnailUrl
 
-    if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-      if (useRss) {
-        ({ videos, name, thumbnailUrl } = await getChannelLiveInvidiousRSS(channel))
+    const traceDone = traceChannelFetch('live', channel.id)
+
+    try {
+      if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
+        if (useRss) {
+          ({ videos, name, thumbnailUrl } = await getChannelLiveInvidiousRSS(channel))
+        } else {
+          ({ videos, name, thumbnailUrl } = await getChannelLiveInvidious(channel))
+        }
       } else {
-        ({ videos, name, thumbnailUrl } = await getChannelLiveInvidious(channel))
+        if (useRss) {
+          ({ videos, name, thumbnailUrl } = await getChannelLiveLocalRSS(channel))
+        } else {
+          ({ videos, name, thumbnailUrl } = await getChannelLiveLocal(channel))
+        }
       }
-    } else {
-      if (useRss) {
-        ({ videos, name, thumbnailUrl } = await getChannelLiveLocalRSS(channel))
-      } else {
-        ({ videos, name, thumbnailUrl } = await getChannelLiveLocal(channel))
-      }
+    } finally {
+      traceDone({
+        entries: videos?.length ?? null,
+        outcome: videos == null ? 'noData' : 'ok'
+      })
     }
 
     channelCount++
@@ -251,6 +267,8 @@ async function loadVideosForSubscriptionsFromRemote() {
       videoListFromRemote.push(...chunkResults.flat())
     }
   }
+
+  endSubscriptionTrace('live')
 
   videoList.value = updateVideoListAfterProcessing(videoListFromRemote)
   isLoading.value = false

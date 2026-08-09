@@ -27,6 +27,7 @@ import {
 import { getInvidiousChannelVideos, invidiousFetch } from '../helpers/api/invidious'
 import { getLocalChannelVideos } from '../helpers/api/local'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
+import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
 
 const { t } = useI18n()
 
@@ -194,21 +195,37 @@ async function loadVideosForSubscriptionsFromRemote() {
   const subscriptionUpdates = []
   const videoListFromRemote = []
 
+  beginSubscriptionTrace('videos', {
+    channelCount: channelsToLoadFromRemote.length,
+    useRss,
+    backend: backendPreference.value
+  })
+
   const processChannel = async (channel) => {
     let videos, name, thumbnailUrl
 
-    if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-      if (useRss) {
-        ({ videos, name, thumbnailUrl } = await getChannelVideosInvidiousRSS(channel))
+    const traceDone = traceChannelFetch('videos', channel.id)
+
+    try {
+      if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
+        if (useRss) {
+          ({ videos, name, thumbnailUrl } = await getChannelVideosInvidiousRSS(channel))
+        } else {
+          ({ videos, name, thumbnailUrl } = await getChannelVideosInvidiousScraper(channel))
+        }
       } else {
-        ({ videos, name, thumbnailUrl } = await getChannelVideosInvidiousScraper(channel))
+        if (useRss) {
+          ({ videos, name, thumbnailUrl } = await getChannelVideosLocalRSS(channel))
+        } else {
+          ({ videos, name, thumbnailUrl } = await getChannelVideosLocalScraper(channel))
+        }
       }
-    } else {
-      if (useRss) {
-        ({ videos, name, thumbnailUrl } = await getChannelVideosLocalRSS(channel))
-      } else {
-        ({ videos, name, thumbnailUrl } = await getChannelVideosLocalScraper(channel))
-      }
+    } finally {
+      traceDone({
+        entries: videos?.length ?? null,
+        // `null` is the rate limit sentinel, an empty array is a real answer
+        outcome: videos == null ? 'noData' : 'ok'
+      })
     }
 
     channelCount++
@@ -250,6 +267,8 @@ async function loadVideosForSubscriptionsFromRemote() {
       videoListFromRemote.push(...chunkResults.flat())
     }
   }
+
+  endSubscriptionTrace('videos')
 
   videoList.value = updateVideoListAfterProcessing(videoListFromRemote)
   isLoading.value = false

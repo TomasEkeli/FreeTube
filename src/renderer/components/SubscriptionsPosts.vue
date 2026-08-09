@@ -23,6 +23,7 @@ import store from '../store/index'
 import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../helpers/utils'
 import { getLocalChannelCommunity } from '../helpers/api/local'
 import { invidiousGetCommunityPosts } from '../helpers/api/invidious'
+import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
 
 const { t } = useI18n()
 
@@ -192,12 +193,27 @@ async function loadPostsForSubscriptionsFromRemote() {
   const subscriptionUpdates = []
   const postListFromRemote = []
 
+  beginSubscriptionTrace('posts', {
+    channelCount: channelsToLoadFromRemote.length,
+    // posts have no RSS path at all
+    useRss: false,
+    backend: backendPreference.value
+  })
+
   const processChannel = async (channel) => {
     let posts
-    if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-      posts = await getChannelPostsInvidious(channel)
-    } else {
-      posts = await getChannelPostsLocal(channel)
+
+    const traceDone = traceChannelFetch('posts', channel.id)
+
+    try {
+      if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
+        posts = await getChannelPostsInvidious(channel)
+      } else {
+        posts = await getChannelPostsLocal(channel)
+      }
+    } finally {
+      // the posts fetchers always resolve to an array, never the null sentinel
+      traceDone({ entries: posts?.length ?? null })
     }
 
     channelCount++
@@ -246,6 +262,8 @@ async function loadPostsForSubscriptionsFromRemote() {
     const chunkResults = await Promise.all(chunk.map(processChannel))
     postListFromRemote.push(...chunkResults.flat())
   }
+
+  endSubscriptionTrace('posts')
 
   postListFromRemote.sort((a, b) => {
     return b.publishedTime - a.publishedTime
