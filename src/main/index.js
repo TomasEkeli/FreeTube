@@ -2073,6 +2073,15 @@ function runApp() {
           )
           return null
 
+        case DBActions.SUBSCRIPTION_CACHE.UPDATE_VIDEOS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL:
+          await baseHandlers.subscriptionCache.updateVideosWithChannelPageVideosByChannelId(data.channelId, data.entries)
+          syncOtherWindows(
+            IpcChannels.SYNC_SUBSCRIPTION_CACHE,
+            event,
+            { event: SyncEvents.SUBSCRIPTION_CACHE.UPDATE_VIDEOS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL, data }
+          )
+          return null
+
         case DBActions.SUBSCRIPTION_CACHE.UPDATE_SHORTS_WITH_CHANNEL_PAGE_SHORTS_BY_CHANNEL:
           await baseHandlers.subscriptionCache.updateShortsWithChannelPageShortsByChannelId(data.channelId, data.entries)
           syncOtherWindows(

@@ -1,5 +1,7 @@
 import * as db from '../index'
 
+import { mergeChannelPageVideoDetails } from '../../subscriptionVideoDetails'
+
 class Settings {
   static async find() {
     const currentLocale = await db.settings.findOneAsync({ _id: 'currentLocale' })
@@ -323,6 +325,23 @@ class SubscriptionCache {
       { $set: { shorts: entries, shortsTimestamp: timestamp } },
       { upsert: true }
     )
+  }
+
+  static async updateVideosWithChannelPageVideosByChannelId(channelId, entries) {
+    const doc = await db.subscriptionCache.findOneAsync({ _id: channelId }, { videos: 1 })
+
+    if (!Array.isArray(doc?.videos)) {
+      return
+    }
+
+    // Note that the timestamp is deliberately not bumped: this fills in detail
+    // that was missing, it does not make the feed any fresher than it was.
+    if (mergeChannelPageVideoDetails(doc.videos, entries)) {
+      await db.subscriptionCache.updateAsync(
+        { _id: channelId },
+        { $set: { videos: doc.videos } }
+      )
+    }
   }
 
   static async updateShortsWithChannelPageShortsByChannelId(channelId, entries) {

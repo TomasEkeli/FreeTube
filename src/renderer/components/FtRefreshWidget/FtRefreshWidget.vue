@@ -3,11 +3,26 @@
     class="floatingRefreshSection"
   >
     <p
-      v-if="lastRefreshTimestamp"
+      v-if="activityLabel"
+      class="activityLabel"
+    >
+      {{ activityLabel }}
+    </p>
+    <p
+      v-else-if="lastRefreshTimestamp"
       class="lastRefreshTimestamp"
     >
       {{ t('Feed.Feed Last Updated', { feedName: title, date: lastRefreshTimestamp }) }}
     </p>
+    <FtIconButton
+      v-if="canStopActivity"
+      :icon="['fas', 'xmark']"
+      class="stopActivityButton"
+      :title="t('Subscriptions.Stop Recovering')"
+      :size="12"
+      theme="secondary"
+      @click="stopActivity"
+    />
     <FtIconButton
       :disabled="disableRefresh"
       :icon="['fas', 'sync']"
@@ -17,6 +32,16 @@
       theme="primary"
       @click="click"
     />
+    <div
+      v-if="activityLabel"
+      class="activityProgressTrack"
+    >
+      <div
+        class="activityProgressFill"
+        :class="{ indeterminate: activityProgress === null }"
+        :style="activityProgress === null ? undefined : { inlineSize: `${Math.round(activityProgress * 100)}%` }"
+      />
+    </div>
   </div>
 </template>
 
@@ -41,6 +66,24 @@ const props = defineProps({
   title: {
     type: String,
     required: true
+  },
+  /**
+   * Short description of background work in progress. Takes the place of the
+   * last-updated time while set, since during a recovery that time is stale
+   * anyway: the feed is in the middle of being completed.
+   */
+  activityLabel: {
+    type: String,
+    default: ''
+  },
+  /** How far along, 0 to 1, or null when there is no honest answer. */
+  activityProgress: {
+    type: Number,
+    default: null
+  },
+  canStopActivity: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -53,10 +96,14 @@ const refreshFeedButtonTitle = computed(() => {
   )
 })
 
-const emit = defineEmits(['click'])
+const emit = defineEmits(['click', 'stop-activity'])
 
 function click() {
   emit('click')
+}
+
+function stopActivity() {
+  emit('stop-activity')
 }
 </script>
 

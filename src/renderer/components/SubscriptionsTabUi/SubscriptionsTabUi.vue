@@ -63,13 +63,17 @@
       :disable-refresh="isLoading || !activeProfileHasSubscriptions"
       :last-refresh-timestamp="lastRefreshTimestamp"
       :title="title"
+      :activity-label="activityLabel"
+      :activity-progress="activityProgress"
+      :can-stop-activity="canStopActivity"
       @click="refresh"
+      @stop-activity="stopActivity"
     />
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 
 import FtAutoLoadNextPageWrapper from '../FtAutoLoadNextPageWrapper.vue'
 import FtButton from '../FtButton/FtButton.vue'
@@ -81,10 +85,20 @@ import FtRefreshWidget from '../FtRefreshWidget/FtRefreshWidget.vue'
 
 import store from '../../store/index'
 
+import { useSubscriptionActivity } from '../../composables/useSubscriptionActivity'
+
+import { backfillDetailsForVisibleVideos } from '../../helpers/subscriptionDetailBackfill'
+import { debounce } from '../../helpers/utils'
+
 import { KeyboardShortcuts } from '../../../constants'
 
 const props = defineProps({
   isLoading: {
+    type: Boolean,
+    default: false
+  },
+  /** A remote refresh is running, whether or not the feed is empty meanwhile. */
+  isRefreshing: {
     type: Boolean,
     default: false
   },
@@ -108,6 +122,14 @@ const props = defineProps({
     type: Number,
     default: 100
   },
+  /**
+   * Whether missing video details are worth fetching in the background. Shorts
+   * have no duration by nature and posts are not videos at all.
+   */
+  backfillDetails: {
+    type: Boolean,
+    default: false
+  },
   lastRefreshTimestamp: {
     type: String,
     required: true
@@ -119,6 +141,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['refresh'])
+
+const {
+  label: activityLabel,
+  progress: activityProgress,
+  canStop: canStopActivity,
+  stop: stopActivity
+} = useSubscriptionActivity({ isRefreshing: toRef(props, 'isRefreshing') })
 
 const subscriptionLimit = sessionStorage.getItem('subscriptionLimit')
 
@@ -200,6 +229,18 @@ function increaseLimit() {
   dataLimit.value += props.initialDataLimit
   sessionStorage.setItem('subscriptionLimit', dataLimit.value.toFixed(0))
 }
+
+// This component is the only place that knows which part of the feed is actually
+// on screen, so it is the place that decides what is worth filling in. Debounced
+// because the visible slice changes on every refresh, profile switch and "load
+// more", and often several times in quick succession.
+const queueDetailBackfill = debounce(() => {
+  if (!props.backfillDetails || props.isLoading) { return }
+
+  backfillDetailsForVisibleVideos(activeVideoList.value)
+}, 500)
+
+watch(activeVideoList, queueDetailBackfill)
 
 /**
  * @param {KeyboardEvent} event

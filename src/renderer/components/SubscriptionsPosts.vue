@@ -1,262 +1,106 @@
 <template>
   <SubscriptionsTabUi
     :is-loading="isLoading"
-    :video-list="postList"
+    :is-refreshing="isRefreshing"
+    :video-list="entryList"
     :error-channels="errorChannels"
     :attempted-fetch="attemptedFetch"
     :is-community="true"
     :initial-data-limit="20"
-    :last-refresh-timestamp="lastPostsRefreshTimestamp"
+    :last-refresh-timestamp="lastRefreshTimestamp"
     :title="t('Global.Posts')"
-    @refresh="loadPostsForSubscriptionsFromRemote"
+    @refresh="refresh"
   />
 </template>
 
 <script setup>
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
 import store from '../store/index'
 
-import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../helpers/utils'
+import { useSubscriptionFeed } from '../composables/useSubscriptionFeed'
+
 import { getLocalChannelCommunity } from '../helpers/api/local'
 import { invidiousGetCommunityPosts } from '../helpers/api/invidious'
+import {
+  reportFetchError,
+  FETCH_FAILED,
+  FETCH_OK,
+  FETCH_UNAVAILABLE
+} from '../helpers/subscriptionFetchStatus'
 
 const { t } = useI18n()
 
-const isLoading = ref(true)
-const postList = shallowRef([])
-const errorChannels = ref([])
-const attemptedFetch = ref(false)
-/** @type {import('vue').Ref<number | null>} */
-const lastRemoteRefreshSuccessTimestamp = ref(null)
-
-let alreadyLoadedRemotely = false
-
-/** @type {import('vue').ComputedRef<'local' | 'invidious'>} */
-const backendPreference = computed(() => store.getters.getBackendPreference)
-
-/** @type {import('vue').ComputedRef<'local' | 'invidious'>} */
+/** @type {import('vue').ComputedRef<boolean>} */
 const backendFallback = computed(() => store.getters.getBackendFallback)
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const subscriptionCacheReady = computed(() => store.getters.getSubscriptionCacheReady)
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const fetchSubscriptionsAutomatically = computed(() => store.getters.getFetchSubscriptionsAutomatically)
-
-const activeSubscriptionList = computed(() => store.getters.getActiveProfile.subscriptions)
-
-const cacheEntriesForAllActiveProfileChannels = computed(() => {
-  const postsCache = store.getters.getPostsCache
-  const entries = []
-
-  activeSubscriptionList.value.forEach((channel) => {
-    const cacheEntry = postsCache[channel.id]
-
-    if (cacheEntry != null) {
-      entries.push(cacheEntry)
-    }
-  })
-
-  return entries
-})
-
-const postCacheForAllActiveProfileChannelsPresent = computed(() => {
-  if (
-    cacheEntriesForAllActiveProfileChannels.value.length === 0 ||
-    cacheEntriesForAllActiveProfileChannels.value.length < activeSubscriptionList.value.length
-  ) {
-    return false
-  }
-
-  return cacheEntriesForAllActiveProfileChannels.value.every((cacheEntry) => {
-    return cacheEntry.posts != null
-  })
-})
-
-const lastPostsRefreshTimestamp = computed(() => {
-  // Cache is not ready when data is just loaded from remote
-  if (lastRemoteRefreshSuccessTimestamp.value) {
-    return getRelativeTimeFromDate(lastRemoteRefreshSuccessTimestamp.value, true)
-  }
-
-  if (
-    !postCacheForAllActiveProfileChannelsPresent.value ||
-    cacheEntriesForAllActiveProfileChannels.value.length === 0
-  ) {
-    return ''
-  }
-
-  let minTimestamp = null
-  cacheEntriesForAllActiveProfileChannels.value.forEach((cacheEntry) => {
-    if (!minTimestamp || cacheEntry.timestamp.getTime() < minTimestamp.getTime()) {
-      minTimestamp = cacheEntry.timestamp
-    }
-  })
-
-  return getRelativeTimeFromDate(minTimestamp.getTime(), true)
-})
-
-watch(activeSubscriptionList, () => {
-  lastRemoteRefreshSuccessTimestamp.value = null
-  isLoading.value = true
-  loadPostsFromCacheSometimes()
-}, { deep: true })
-
-if (!subscriptionCacheReady.value) {
-  watch(subscriptionCacheReady, () => {
-    if (!alreadyLoadedRemotely) {
-      loadPostsFromCacheSometimes()
-    }
-  })
-}
-
-onMounted(() => {
-  loadPostsFromRemoteFirstPerWindowSometimes()
-})
-
-function loadPostsFromRemoteFirstPerWindowSometimes() {
-  if (
-    !fetchSubscriptionsAutomatically.value ||
-    // Only auto fetch once per window
-    store.getters.getSubscriptionForPostsFirstAutoFetchRun
-  ) {
-    loadPostsFromCacheSometimes()
-    return
-  }
-
-  alreadyLoadedRemotely = true
-  loadPostsForSubscriptionsFromRemote()
-  store.commit('setSubscriptionForPostsFirstAutoFetchRun')
-}
-
-function loadPostsFromCacheSometimes() {
-  // Can only load reliably when cache ready
-  if (!subscriptionCacheReady.value) { return }
-
-  // This method is called on view visible
-  if (postCacheForAllActiveProfileChannelsPresent.value) {
-    loadPostsFromCacheForAllActiveProfileChannels()
-    return
-  }
-
-  if (fetchSubscriptionsAutomatically.value) {
-    // `isLoading.value = false` is called inside `loadPostsForSubscriptionsFromRemote` when needed
-    loadPostsForSubscriptionsFromRemote()
-    return
-  }
-
-  // Auto fetch disabled, not enough cache for profile = show nothing
-  postList.value = []
-  attemptedFetch.value = false
-  isLoading.value = false
-}
 
 /** @type {import('vue').ComputedRef<string[]>} */
 const forbiddenTitles = computed(() => {
   return JSON.parse(store.getters.getForbiddenTitles.toLowerCase())
 })
 
-function loadPostsFromCacheForAllActiveProfileChannels() {
-  const postList_ = cacheEntriesForAllActiveProfileChannels.value.flatMap((cacheEntry) => {
-    return cacheEntry.posts
-  })
+const {
+  isLoading,
+  isRefreshing,
+  entryList,
+  errorChannels,
+  attemptedFetch,
+  lastRefreshTimestamp,
+  refresh
+} = useSubscriptionFeed({
+  feed: 'posts',
+  cacheGetter: 'getPostsCache',
+  updateAction: 'updateSubscriptionPostsCacheByChannel',
+  entriesKey: 'posts',
+  autoFetchGetter: 'getSubscriptionForPostsFirstAutoFetchRun',
+  autoFetchMutation: 'setSubscriptionForPostsFirstAutoFetchRun',
+  // Community posts are not published as RSS at all
+  rssMode: 'never',
+  fetchChannel: async (channel) => {
+    const result = (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious')
+      ? await getChannelPostsInvidious(channel)
+      : await getChannelPostsLocal(channel)
 
-  postList_.sort((a, b) => {
-    return b.publishedTime - a.publishedTime
-  })
-
-  postList.value = postList_.filter(post => !forbiddenTitles.value.some(text => post.author.toLowerCase().includes(text)))
-  isLoading.value = false
-}
-
-async function loadPostsForSubscriptionsFromRemote() {
-  if (activeSubscriptionList.value.length === 0) {
-    isLoading.value = false
-    postList.value = []
-    return
-  }
-
-  const channelsToLoadFromRemote = activeSubscriptionList.value
-  let channelCount = 0
-  isLoading.value = true
-
-  store.commit('setShowProgressBar', true)
-  store.commit('setProgressBarPercentage', 0)
-  attemptedFetch.value = true
-
-  errorChannels.value = []
-  const subscriptionUpdates = []
-  const postListFromRemote = []
-
-  const processChannel = async (channel) => {
-    let posts
-    if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-      posts = await getChannelPostsInvidious(channel)
-    } else {
-      posts = await getChannelPostsLocal(channel)
+    return {
+      ...result,
+      ...channelDetailsFromPosts(channel, result.entries)
     }
-
-    channelCount++
-    const percentageComplete = (channelCount / channelsToLoadFromRemote.length) * 100
-    store.commit('setProgressBarPercentage', percentageComplete)
-
-    store.dispatch('updateSubscriptionPostsCacheByChannel', {
-      channelId: channel.id,
-      posts
-    })
-
-    if (posts.length > 0) {
-      const post = posts.find(post => post.authorId === channel.id)
-
-      if (post) {
-        const name = post.author
-        let thumbnailUrl = post.authorThumbnails?.[0]?.url
-
-        if (name || thumbnailUrl) {
-          if (thumbnailUrl?.startsWith('//')) {
-            thumbnailUrl = 'https:' + thumbnailUrl
-          }
-
-          subscriptionUpdates.push({
-            channelId: channel.id,
-            channelName: name,
-            channelThumbnailUrl: thumbnailUrl
-          })
-        }
-      }
-    }
-
-    posts = posts.filter(post => !forbiddenTitles.value.some(text => post.author.toLowerCase().includes(text)))
+  },
+  // The cache deliberately keeps posts the filter would hide, so that turning
+  // the setting off shows them again without a refetch.
+  postProcess: (posts) => {
     return posts
+      .filter(post => !forbiddenTitles.value.some(text => post.author.toLowerCase().includes(text)))
+      .sort((a, b) => b.publishedTime - a.publishedTime)
+  }
+})
+
+/**
+ * Posts carry their author's name and avatar, so unlike the other feeds there
+ * is nothing separate to read them from.
+ * @param {{ id: string }} channel
+ * @param {any[] | null} posts
+ */
+function channelDetailsFromPosts(channel, posts) {
+  if (posts == null || posts.length === 0) { return {} }
+
+  const post = posts.find(post => post.authorId === channel.id)
+
+  if (post == null) { return {} }
+
+  let thumbnailUrl = post.authorThumbnails?.[0]?.url
+
+  if (thumbnailUrl?.startsWith('//')) {
+    thumbnailUrl = 'https:' + thumbnailUrl
   }
 
-  const CHUNK_SIZE = 80
-  const CHUNK_DELAY_MS = 2000
-
-  for (let i = 0; i < channelsToLoadFromRemote.length; i += CHUNK_SIZE) {
-    if (i > 0) {
-      await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
-    }
-
-    const chunk = channelsToLoadFromRemote.slice(i, i + CHUNK_SIZE)
-    const chunkResults = await Promise.all(chunk.map(processChannel))
-    postListFromRemote.push(...chunkResults.flat())
+  return {
+    name: post.author,
+    thumbnailUrl
   }
-
-  postListFromRemote.sort((a, b) => {
-    return b.publishedTime - a.publishedTime
-  })
-
-  postList.value = postListFromRemote
-  isLoading.value = false
-  store.commit('setShowProgressBar', false)
-  lastRemoteRefreshSuccessTimestamp.value = Date.now()
-
-  store.dispatch('batchUpdateSubscriptionDetails', subscriptionUpdates)
 }
 
 async function getChannelPostsLocal(channel) {
@@ -264,24 +108,30 @@ async function getChannelPostsLocal(channel) {
     const entries = await getLocalChannelCommunity(channel.id)
 
     if (entries === null) {
+      // ChannelError, so the channel is gone rather than the request having failed
       errorChannels.value.push(channel)
-      return []
+
+      return {
+        status: FETCH_UNAVAILABLE,
+        entries: []
+      }
     }
 
-    return entries
+    return {
+      status: FETCH_OK,
+      entries
+    }
   } catch (err) {
-    console.error(err)
-    const errorMessage = t('Local API Error (Click to copy)')
-    showToast(`${errorMessage}: ${err}`, 10000, () => {
-      copyToClipboard(err)
-    })
+    reportFetchError('posts', { channel, error: err, api: 'local' })
 
-    if (backendPreference.value === 'local' && backendFallback.value) {
-      showToast(t('Falling back to Invidious API'))
+    if (store.getters.getBackendPreference === 'local' && backendFallback.value) {
       return await getChannelPostsInvidious(channel)
     }
 
-    return []
+    return {
+      status: FETCH_FAILED,
+      entries: null
+    }
   }
 }
 
@@ -289,19 +139,20 @@ async function getChannelPostsInvidious(channel) {
   try {
     const result = await invidiousGetCommunityPosts(channel.id)
 
-    return result.posts
+    return {
+      status: FETCH_OK,
+      entries: result.posts
+    }
   } catch (err) {
-    console.error(err)
-    const errorMessage = t('Invidious API Error (Click to copy)')
-    showToast(`${errorMessage}: ${err}`, 10000, () => {
-      copyToClipboard(err)
-    })
+    reportFetchError('posts', { channel, error: err, api: 'invidious' })
 
-    if (process.env.SUPPORTS_LOCAL_API && backendPreference.value === 'invidious' && backendFallback.value) {
-      showToast(t('Falling back to Local API'))
+    if (process.env.SUPPORTS_LOCAL_API && store.getters.getBackendPreference === 'invidious' && backendFallback.value) {
       return await getChannelPostsLocal(channel)
     } else {
-      return []
+      return {
+        status: FETCH_FAILED,
+        entries: null
+      }
     }
   }
 }

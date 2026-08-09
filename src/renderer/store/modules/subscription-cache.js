@@ -2,6 +2,11 @@ import {
   DBSubscriptionCacheHandlers,
 } from '../../../datastores/handlers/index'
 
+import {
+  carryOverKnownVideoDetails,
+  mergeChannelPageVideoDetails
+} from '../../../subscriptionVideoDetails'
+
 const state = {
   videoCache: {},
   liveCache: {},
@@ -78,10 +83,30 @@ const actions = {
     }
   },
 
-  async updateSubscriptionVideosCacheByChannel({ commit }, { channelId, videos, timestamp = new Date() }) {
+  async updateSubscriptionVideosCacheByChannel({ commit, state }, { channelId, videos, timestamp = new Date() }) {
     try {
-      await DBSubscriptionCacheHandlers.updateVideosByChannelId(channelId, videos, timestamp)
-      commit('updateVideoCacheByChannel', { channelId, entries: videos, timestamp })
+      // A refresh replaces a channel's videos outright, and RSS entries have no
+      // duration, so without this every refresh discards what the back-fill
+      // went and fetched and the whole feed has to be fetched again. Done here
+      // rather than in the datastore so that the write stays a single write.
+      const entries = carryOverKnownVideoDetails(state.videoCache[channelId]?.videos, videos)
+
+      await DBSubscriptionCacheHandlers.updateVideosByChannelId(channelId, entries, timestamp)
+      commit('updateVideoCacheByChannel', { channelId, entries, timestamp })
+    } catch (errMessage) {
+      console.error(errMessage)
+    }
+  },
+
+  /**
+   * Fill in details the RSS feeds do not carry, most importantly the duration,
+   * from a channel's own videos page. Does not change the cache timestamp: the
+   * feed is no fresher than it was, it is merely more complete.
+   */
+  async updateSubscriptionVideosCacheWithChannelPageVideos({ commit }, { channelId, videos }) {
+    try {
+      await DBSubscriptionCacheHandlers.updateVideosWithChannelPageVideosByChannelId(channelId, videos)
+      commit('updateVideoCacheWithChannelPageVideos', { channelId, entries: videos })
     } catch (errMessage) {
       console.error(errMessage)
     }
@@ -156,6 +181,13 @@ const mutations = {
     if (entries != null) { newObject.videos = entries }
     newObject.timestamp = timestamp
     state.shortsCache[channelId] = newObject
+  },
+  updateVideoCacheWithChannelPageVideos(state, { channelId, entries }) {
+    const cachedObject = state.videoCache[channelId]
+
+    if (cachedObject != null && Array.isArray(cachedObject.videos)) {
+      mergeChannelPageVideoDetails(cachedObject.videos, entries)
+    }
   },
   updateShortsCacheWithChannelPageShorts(state, { channelId, entries }) {
     const cachedObject = state.shortsCache[channelId]

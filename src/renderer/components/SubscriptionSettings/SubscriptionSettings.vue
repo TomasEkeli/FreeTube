@@ -19,6 +19,20 @@
           @change="updateUseRssFeeds"
         />
         <FtToggleSwitch
+          :label="$t('Settings.Subscription Settings.Fill In Missing Video Details')"
+          :default-value="subscriptionBackfillDetails"
+          :tooltip="$t('Tooltips.Subscription Settings.Fill In Missing Video Details')"
+          compact
+          @change="updateSubscriptionBackfillDetails"
+        />
+        <FtToggleSwitch
+          :label="$t('Settings.Subscription Settings.Recover Failed Refreshes')"
+          :default-value="subscriptionAutoRecovery"
+          :tooltip="$t('Tooltips.Subscription Settings.Recover Failed Refreshes')"
+          compact
+          @change="updateSubscriptionAutoRecovery"
+        />
+        <FtToggleSwitch
           :label="$t('Settings.Subscription Settings.Confirm Before Unsubscribing')"
           :default-value="unsubscriptionPopupStatus"
           compact
@@ -75,6 +89,26 @@ const useRssFeeds = computed(() => store.getters.getUseRssFeeds)
  */
 function updateUseRssFeeds(value) {
   store.dispatch('updateUseRssFeeds', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const subscriptionBackfillDetails = computed(() => store.getters.getSubscriptionBackfillDetails)
+
+/**
+ * @param {boolean} value
+ */
+function updateSubscriptionBackfillDetails(value) {
+  store.dispatch('updateSubscriptionBackfillDetails', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const subscriptionAutoRecovery = computed(() => store.getters.getSubscriptionAutoRecovery)
+
+/**
+ * @param {boolean} value
+ */
+function updateSubscriptionAutoRecovery(value) {
+  store.dispatch('updateSubscriptionAutoRecovery', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

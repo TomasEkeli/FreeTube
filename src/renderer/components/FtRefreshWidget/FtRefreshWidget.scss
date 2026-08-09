@@ -25,6 +25,69 @@
   font-size: 16px;
 }
 
+/*
+  Pushed hard against the leading edge so the buttons stay together at the
+  trailing one. Space-between would not do: with the stop button present there
+  are three children, and the middle one lands somewhere near the centre rather
+  than beside the control it belongs with.
+*/
+.activityLabel {
+  margin-block: 0;
+  margin-inline-end: auto;
+  text-align: start;
+  font-size: 16px;
+  color: var(--tertiary-text-color);
+}
+
+/*
+  A thin bar along the bottom edge of the strip, the same idiom as the app's
+  global progress bar. Deliberately without a figure beside it: how far along it
+  is worth knowing, the channel counts behind it are not.
+*/
+.activityProgressTrack {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  block-size: 2px;
+  background-color: var(--secondary-card-bg-color);
+  overflow: hidden;
+}
+
+.activityProgressFill {
+  block-size: 100%;
+  inline-size: 0;
+  background-color: var(--primary-color);
+  transition: inline-size 300ms ease-out;
+}
+
+/* Working, but with no honest way to say how far along */
+.activityProgressFill.indeterminate {
+  inline-size: 33%;
+  animation: activity-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes activity-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activityProgressFill.indeterminate {
+    animation: none;
+    inline-size: 100%;
+    opacity: 0.4;
+  }
+
+  .activityProgressFill {
+    transition: none;
+  }
+}
+
 @media only screen and (width <= 680px) {
   .floatingRefreshSection,
   .floatingRefreshSection.sideNavOpen,

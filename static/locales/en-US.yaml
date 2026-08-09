@@ -125,6 +125,16 @@ Subscriptions:
     profile has a large number of subscriptions.  Forcing RSS to avoid rate limiting
   'Your Subscription list is currently empty. Start adding subscriptions to see them here.': Your Subscription list is currently empty. If you want to import your subscriptions you can go to Data Settings and select Import Subscriptions or you can search for a channel and subscribe to them.
   Disabled Automatic Fetching: You have disabled automatic subscription fetching. Refresh subscriptions to see them here.
+  # Shown in place of the last-updated time while working in the background.
+  # Kept to a few words on purpose: the progress bar underneath carries how far
+  # along it is, and the channel counts behind it are diagnostics.
+  Refreshing: Fetching the latest videos
+  Recovering Channels: Recovering channels that were missed
+  Filling In Details: Feeds have no video details, fetching them
+  Stop Recovering: Stop recovering
+  # Shown once at the end of a refresh, in place of one toast per failed channel
+  Fetch Errors: '{failed} of {total} channels could not be fetched. Click to copy the details.'
+  Fetch Errors Rate Limited: '{failed} of {total} channels could not be fetched, {rateLimited} of them because of rate limiting. Click to copy the details.'
   Empty Channels: Your subscribed channels currently does not have any videos.
   Empty Posts: Your subscribed channels currently do not have any posts.
   Load More Videos: Load More Videos
@@ -541,6 +551,8 @@ Settings:
     Subscription Settings: Subscription
     Fetch Feeds from RSS: Fetch Feeds from RSS
     Fetch Automatically: Fetch Feed Automatically
+    Fill In Missing Video Details: Fill In Missing Video Details
+    Recover Failed Refreshes: Recover Failed Refreshes
     'Limit the number of videos displayed for each channel': 'Limit the number of videos displayed for each channel'
     To: To
     Confirm Before Unsubscribing: Confirm Before Unsubscribing
@@ -1111,6 +1123,15 @@ Tooltips:
       but doesn't provide certain information like video duration, live status or posts
     Fetch Automatically: When enabled, FreeTube will automatically fetch
       your subscription feed on startup and when a new window is opened.
+    Fill In Missing Video Details: When your feed comes from RSS it has no video
+      durations. With this enabled, FreeTube quietly fetches the missing details
+      for the part of the feed you are looking at, one channel at a time, and
+      fills them in as they arrive. Results are kept, so each channel is only
+      fetched once.
+    Recover Failed Refreshes: 'When a refresh cannot reach some of your channels,
+      FreeTube goes back for them in the background: first a profile at a time,
+      then one channel at a time, asking for less at once with each attempt. The
+      feed stays usable throughout and fills in as they arrive.'
   Experimental Settings:
     Replace HTTP Cache: Disables Electron's disk based HTTP cache and enables a custom in-memory image cache. Will lead to increased RAM usage.
   SponsorBlock Settings:
