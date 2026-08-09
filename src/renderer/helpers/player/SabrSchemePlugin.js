@@ -31,12 +31,18 @@ const ShakaError = shaka.util.Error
 const ATTESTATION_RETRY_LIMIT = 3
 
 /**
- * How many credential refreshes to attempt before the buffer is allowed to
- * end the attempt. A session walled before it buffered anything has no buffer
- * to lose, and a fresh token often is trusted straight away, so the first few
- * refreshes are always worth trying.
+ * How many credential refreshes to always try before anything heavier.
+ *
+ * One, because a fresh token is cheap and often enough, and because every
+ * refresh after it spends about ten seconds of the runway that the escalation
+ * needs to land in. This was three, on the reasoning that a session walled
+ * before it buffered anything has nothing to lose by trying again, which had
+ * it backwards: nothing left to play means the viewer is already stopped, and
+ * that is when reaching the remedy that works matters most. Three refreshes
+ * put the earliest possible rebuild thirty seconds after the wall, by which
+ * time no threshold could have saved the playback.
  */
-const ATTESTATION_REFRESH_FLOOR = 3
+const ATTESTATION_REFRESH_FLOOR = 1
 
 /**
  * How much watching time must remain for another refresh to be worth more than
