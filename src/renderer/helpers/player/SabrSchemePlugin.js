@@ -48,14 +48,20 @@ const ATTESTATION_REFRESH_FLOOR = 1
  * How much watching time must remain for another refresh to be worth more than
  * rebuilding the session.
  *
- * This has to be longer than the remedy it triggers, or the remedy cannot
- * finish before the video stalls and the escalation is pointless. Rebuilding
- * takes six to seven seconds, measured across eight live rebuilds, and a
- * refresh cycle takes about seven, so the last refresh has to be given up on
- * with enough left for both. Fifteen seconds covers a rebuild with room to
- * spare, at the cost of abandoning refreshes that might have worked.
+ * Three measured numbers set this, and missing any of them puts the video on
+ * screen with nothing to play:
+ *
+ * - rebuilding takes seven to eight seconds
+ * - the decision can only be made when the server refuses a request, which is
+ *   about every ten seconds
+ * - so a runway seen to be `n` seconds long is really `n` minus ten by the
+ *   time anything can be done about it
+ *
+ * Seven plus ten leaves nothing spare, so twenty five. Fifteen was tried and
+ * was not enough: a runway measured at 17.8s passed the test, and the next
+ * look at it, one interval later, found 7.2s and an eight second remedy.
  */
-const ATTESTATION_LOW_BUFFER_SECONDS = 15
+const ATTESTATION_LOW_BUFFER_SECONDS = 25
 
 /**
  * Hard stop on refreshes regardless of buffer. A paused player never drains
