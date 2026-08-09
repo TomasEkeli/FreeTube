@@ -6,6 +6,7 @@
     :error-channels="errorChannels"
     :last-refresh-timestamp="lastRefreshTimestamp"
     :attempted-fetch="attemptedFetch"
+    :backfill-feed="'live'"
     :title="t('Global.Live')"
     @refresh="refresh"
   />
@@ -68,7 +69,8 @@ const {
       ? getChannelLiveLocalRSS(channel, failedAttempts)
       : getChannelLiveLocal(channel, failedAttempts)
   },
-  postProcess: updateVideoListAfterProcessing
+  postProcess: updateVideoListAfterProcessing,
+  followsDetailBackfill: true
 })
 
 async function getChannelLiveLocal(channel, failedAttempts = 0) {

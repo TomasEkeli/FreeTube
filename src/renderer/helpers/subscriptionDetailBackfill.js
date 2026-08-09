@@ -2,8 +2,8 @@ import { ref } from 'vue'
 
 import store from '../store/index'
 
-import { getLocalChannelVideos } from './api/local'
-import { getInvidiousChannelVideos } from './api/invidious'
+import { getLocalChannelLiveStreams, getLocalChannelVideos } from './api/local'
+import { getInvidiousChannelLive, getInvidiousChannelVideos } from './api/invidious'
 import {
   enqueueSubscriptionJobs,
   cancelSubscriptionLane,
@@ -16,35 +16,62 @@ import { durationIsMissing } from '../../subscriptionVideoDetails'
  * at.
  *
  * RSS carries no duration, so a feed built from it shows no duration badge. The
- * only source of duration is the channel page, which is the very thing being
- * avoided when falling back to RSS, so this is done as slowly as possible and
- * only for what is on screen: one channel at a time, on the shared worker, in
- * feed order from the top.
+ * only source is the channel's own page, which is the very thing being avoided
+ * when falling back to RSS, so this asks as little as it can: only the channels
+ * contributing to what is on screen, in feed order from the top, one at a time
+ * on the shared worker.
  *
- * One channel request covers every video that channel contributes to the feed,
- * which is why this works per channel rather than per video. The result is
- * written through to the cache, so a channel is filled in once and stays filled
- * in across restarts.
+ * One channel request covers every entry that channel contributes, which is why
+ * this works per channel rather than per video. The result is written through to
+ * the cache and carried across refreshes, so a channel is asked once and stays
+ * filled in.
  *
- * If the channel page is blocked too then nothing happens, and nothing is lost:
- * the feed keeps the RSS data it already had. That is the whole bargain of doing
- * this in the background.
+ * If the channel page is blocked too then nothing happens and nothing is lost:
+ * the feed keeps the RSS data it already had. That is the bargain of doing this
+ * in the background.
+ *
+ * Live streams want this more than videos do. Their RSS entries have no live
+ * flag either, so a stream happening right now is indistinguishable from an
+ * ordinary video until somebody asks the channel. Shorts are excluded because
+ * no duration exists for them anywhere: the parsers write an empty one whatever
+ * the source.
  */
 
 /**
- * Channels tried and failed this session. Retrying them would mean a request per
- * scroll for a channel that has already said no.
- * @type {Set<string>}
+ * @typedef {object} BackfillFeed
+ * @property {(channelId: string) => Promise<any[] | null>} fetchLocal
+ * @property {(channelId: string) => Promise<any[] | null>} fetchInvidious
+ * @property {string} updateAction
  */
-const failedThisSession = new Set()
 
-/** Channels already filled in, so a re-offered feed costs nothing. */
-const completedThisSession = new Set()
+/** @type {Record<string, BackfillFeed>} */
+const FEEDS = {
+  videos: {
+    fetchLocal: async channelId => (await getLocalChannelVideos(channelId))?.videos ?? null,
+    fetchInvidious: async channelId => (await getInvidiousChannelVideos(channelId))?.videos ?? null,
+    updateAction: 'updateSubscriptionVideosCacheWithChannelPageVideos'
+  },
+  live: {
+    fetchLocal: async channelId => (await getLocalChannelLiveStreams(channelId))?.videos ?? null,
+    fetchInvidious: async channelId => (await getInvidiousChannelLive(channelId))?.videos ?? null,
+    updateAction: 'updateSubscriptionLiveCacheWithChannelPageVideos'
+  }
+}
+
+/**
+ * Channels tried and given up on, and channels already done, per feed. Kept
+ * apart because a channel filled in for videos says nothing about its streams.
+ * @type {Record<string, { failed: Set<string>, completed: Set<string> }>}
+ */
+const seen = {
+  videos: { failed: new Set(), completed: new Set() },
+  live: { failed: new Set(), completed: new Set() }
+}
 
 /**
  * Bumped whenever a merge actually changed something.
  *
- * The merge writes into the video objects the feed is already holding, but the
+ * The merge writes into the entry objects the feed is already holding, but the
  * feed holds them in a shallowRef, so mutating them tells Vue nothing. Without a
  * signal the durations land in the store and on disk and never appear on
  * screen, which is exactly what happened the first time this was tried against a
@@ -58,26 +85,29 @@ export const detailBackfillRevision = ref(0)
  * Work out which channels are worth asking about, in the order they first appear
  * in what is being looked at.
  *
- * @param {any[]} visibleVideos the slice of the feed actually rendered
+ * @param {any[]} visibleEntries the slice of the feed actually rendered
+ * @param {string} feed
  * @returns {{ channelId: string, channelName?: string }[]}
  */
-export function channelsNeedingDetails(visibleVideos) {
+export function channelsNeedingDetails(visibleEntries, feed = 'videos') {
+  const { failed, completed } = seen[feed]
+
   /** @type {Map<string, string | undefined>} */
   const needed = new Map()
 
-  for (const video of visibleVideos) {
-    const channelId = video?.authorId
+  for (const entry of visibleEntries) {
+    const channelId = entry?.authorId
 
     if (channelId == null) { continue }
     if (needed.has(channelId)) { continue }
-    if (failedThisSession.has(channelId) || completedThisSession.has(channelId)) { continue }
+    if (failed.has(channelId) || completed.has(channelId)) { continue }
 
-    // Live streams and premieres legitimately have no duration, so their absence
-    // is not something to go and fetch.
-    if (video.liveNow || video.isUpcoming) { continue }
+    // Something already known to be live or upcoming has no duration to find,
+    // and its status is the thing we would have been asking for
+    if (entry.liveNow || entry.isUpcoming) { continue }
 
-    if (durationIsMissing(video.lengthSeconds)) {
-      needed.set(channelId, video.author)
+    if (durationIsMissing(entry.lengthSeconds)) {
+      needed.set(channelId, entry.author)
     }
   }
 
@@ -85,61 +115,50 @@ export function channelsNeedingDetails(visibleVideos) {
 }
 
 /**
- * @param {string} channelId
- * @returns {Promise<any[] | null>}
- */
-async function fetchChannelVideos(channelId) {
-  if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
-    const result = await getInvidiousChannelVideos(channelId)
-
-    return result?.videos ?? null
-  }
-
-  const result = await getLocalChannelVideos(channelId)
-
-  // null means the channel is gone, which is not worth retrying
-  return result?.videos ?? null
-}
-
-/**
- * Offer the visible part of the feed for filling in. Safe to call whenever the
+ * Offer the visible part of a feed for filling in. Safe to call whenever the
  * visible slice changes: the worker drops channels it already has queued.
  *
- * @param {any[]} visibleVideos
+ * @param {any[]} visibleEntries
+ * @param {string} feed
  * @returns {number} how many channels were newly queued
  */
-export function backfillDetailsForVisibleVideos(visibleVideos) {
+export function backfillDetailsForVisibleVideos(visibleEntries, feed = 'videos') {
   if (!store.getters.getSubscriptionBackfillDetails) { return 0 }
 
-  const channels = channelsNeedingDetails(visibleVideos)
+  const descriptor = FEEDS[feed]
+
+  if (descriptor == null) { return 0 }
+
+  const channels = channelsNeedingDetails(visibleEntries, feed)
 
   if (channels.length === 0) { return 0 }
 
+  const { failed, completed } = seen[feed]
+
   return enqueueSubscriptionJobs(LANE_ENRICHMENT, channels.map(({ channelId, channelName }) => ({
-    key: `videos-${channelId}`,
+    key: `${feed}-${channelId}`,
     label: channelName ?? channelId,
     run: async () => {
-      let videos
+      let entries
 
       try {
-        videos = await fetchChannelVideos(channelId)
+        entries = (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious')
+          ? await descriptor.fetchInvidious(channelId)
+          : await descriptor.fetchLocal(channelId)
       } catch (error) {
         console.error(error)
-        failedThisSession.add(channelId)
+        failed.add(channelId)
         return
       }
 
-      if (videos == null || videos.length === 0) {
-        failedThisSession.add(channelId)
+      if (entries == null || entries.length === 0) {
+        failed.add(channelId)
         return
       }
 
-      completedThisSession.add(channelId)
+      completed.add(channelId)
 
-      await store.dispatch('updateSubscriptionVideosCacheWithChannelPageVideos', {
-        channelId,
-        videos
-      })
+      await store.dispatch(descriptor.updateAction, { channelId, videos: entries })
 
       detailBackfillRevision.value++
     }
@@ -157,6 +176,8 @@ export function cancelDetailBackfill() {
 
 /** Test seam. */
 export function resetDetailBackfillForTests() {
-  failedThisSession.clear()
-  completedThisSession.clear()
+  for (const sets of Object.values(seen)) {
+    sets.failed.clear()
+    sets.completed.clear()
+  }
 }

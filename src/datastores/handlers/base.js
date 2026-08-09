@@ -344,6 +344,23 @@ class SubscriptionCache {
     }
   }
 
+  static async updateLiveStreamsWithChannelPageVideosByChannelId(channelId, entries) {
+    const doc = await db.subscriptionCache.findOneAsync({ _id: channelId }, { liveStreams: 1 })
+
+    if (!Array.isArray(doc?.liveStreams)) {
+      return
+    }
+
+    // As with videos, the timestamp is left alone: this fills in detail that was
+    // missing rather than making the feed any fresher
+    if (mergeChannelPageVideoDetails(doc.liveStreams, entries)) {
+      await db.subscriptionCache.updateAsync(
+        { _id: channelId },
+        { $set: { liveStreams: doc.liveStreams } }
+      )
+    }
+  }
+
   static async updateShortsWithChannelPageShortsByChannelId(channelId, entries) {
     const doc = await db.subscriptionCache.findOneAsync({ _id: channelId }, { shorts: 1 })
 
