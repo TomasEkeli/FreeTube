@@ -23,6 +23,11 @@ import store from '../store/index'
 import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../helpers/utils'
 import { getLocalChannelCommunity } from '../helpers/api/local'
 import { invidiousGetCommunityPosts } from '../helpers/api/invidious'
+import {
+  processInChunks,
+  SUBSCRIPTION_CHUNK_DELAY_MS,
+  SUBSCRIPTION_SCRAPER_CHUNK_SIZE
+} from '../helpers/subscriptions'
 import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
 
 const { t } = useI18n()
@@ -250,18 +255,13 @@ async function loadPostsForSubscriptionsFromRemote() {
     return posts
   }
 
-  const CHUNK_SIZE = 80
-  const CHUNK_DELAY_MS = 2000
+  const results = await processInChunks(channelsToLoadFromRemote, processChannel, {
+    // posts have no RSS path, this is always the scraper
+    chunkSize: SUBSCRIPTION_SCRAPER_CHUNK_SIZE,
+    delayMs: SUBSCRIPTION_CHUNK_DELAY_MS
+  })
 
-  for (let i = 0; i < channelsToLoadFromRemote.length; i += CHUNK_SIZE) {
-    if (i > 0) {
-      await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
-    }
-
-    const chunk = channelsToLoadFromRemote.slice(i, i + CHUNK_SIZE)
-    const chunkResults = await Promise.all(chunk.map(processChannel))
-    postListFromRemote.push(...chunkResults.flat())
-  }
+  postListFromRemote.push(...results.flat())
 
   endSubscriptionTrace('posts')
 

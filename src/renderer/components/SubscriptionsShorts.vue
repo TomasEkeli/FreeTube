@@ -18,7 +18,13 @@ import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
 import store from '../store/index'
 
-import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
+import {
+  parseYouTubeRSSFeed,
+  processInChunks,
+  updateVideoListAfterProcessing,
+  SUBSCRIPTION_CHUNK_DELAY_MS,
+  SUBSCRIPTION_RSS_CHUNK_SIZE
+} from '../helpers/subscriptions'
 import {
   copyToClipboard,
   getChannelPlaylistId,
@@ -194,7 +200,7 @@ async function loadVideosForSubscriptionsFromRemote() {
     backend: backendPreference.value
   })
 
-  const videoListFromRemote = (await Promise.all(channelsToLoadFromRemote.map(async (channel) => {
+  const processChannel = async (channel) => {
     let videos, name
 
     const traceDone = traceChannelFetch('shorts', channel.id)
@@ -231,7 +237,15 @@ async function loadVideosForSubscriptionsFromRemote() {
     }
 
     return videos ?? []
-  }))).flat()
+  }
+
+  const results = await processInChunks(channelsToLoadFromRemote, processChannel, {
+    // shorts are RSS only
+    chunkSize: SUBSCRIPTION_RSS_CHUNK_SIZE,
+    delayMs: SUBSCRIPTION_CHUNK_DELAY_MS
+  })
+
+  const videoListFromRemote = results.flat()
 
   endSubscriptionTrace('shorts')
 

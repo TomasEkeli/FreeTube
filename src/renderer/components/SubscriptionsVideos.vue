@@ -26,7 +26,14 @@ import {
 } from '../helpers/utils'
 import { getInvidiousChannelVideos, invidiousFetch } from '../helpers/api/invidious'
 import { getLocalChannelVideos } from '../helpers/api/local'
-import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
+import {
+  parseYouTubeRSSFeed,
+  processInChunks,
+  updateVideoListAfterProcessing,
+  SUBSCRIPTION_CHUNK_DELAY_MS,
+  SUBSCRIPTION_RSS_CHUNK_SIZE,
+  SUBSCRIPTION_SCRAPER_CHUNK_SIZE
+} from '../helpers/subscriptions'
 import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
 
 const { t } = useI18n()
@@ -250,23 +257,12 @@ async function loadVideosForSubscriptionsFromRemote() {
     return videos ?? []
   }
 
-  if (useRss) {
-    const results = await Promise.all(channelsToLoadFromRemote.map(processChannel))
-    videoListFromRemote.push(...results.flat())
-  } else {
-    const CHUNK_SIZE = 80
-    const CHUNK_DELAY_MS = 2000
+  const results = await processInChunks(channelsToLoadFromRemote, processChannel, {
+    chunkSize: useRss ? SUBSCRIPTION_RSS_CHUNK_SIZE : SUBSCRIPTION_SCRAPER_CHUNK_SIZE,
+    delayMs: SUBSCRIPTION_CHUNK_DELAY_MS
+  })
 
-    for (let i = 0; i < channelsToLoadFromRemote.length; i += CHUNK_SIZE) {
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY_MS))
-      }
-
-      const chunk = channelsToLoadFromRemote.slice(i, i + CHUNK_SIZE)
-      const chunkResults = await Promise.all(chunk.map(processChannel))
-      videoListFromRemote.push(...chunkResults.flat())
-    }
-  }
+  videoListFromRemote.push(...results.flat())
 
   endSubscriptionTrace('videos')
 
