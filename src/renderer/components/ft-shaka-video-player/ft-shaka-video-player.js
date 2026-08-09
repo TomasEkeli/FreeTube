@@ -3129,6 +3129,20 @@ export default defineComponent({
       hasLoaded.value = true
       emit('loaded')
 
+      // TEMPORARY, for verifying the loudness normalization. The volume bar has
+      // already applied its decision by this point, as its own `loaded` listener
+      // is registered before this one.
+      console.warn(
+        '[ft volume] loudnessDb=%o normalizeLoudness=%o normalizationGain=%o base=%o elementVolume=%o gain=%o loadMode=%o',
+        props.loudnessDb,
+        normalizeLoudness.value,
+        normalizationGain.value,
+        baseVolume,
+        video.value.volume,
+        volumeState.gain,
+        player.getLoadMode()
+      )
+
       // ideally we would set this in the `streaming` event handler, but for HLS this is only set to true after the loaded event fires.
       isLive.value = player.isLive()
       // getAudioTracks() returns an empty array when no variant is active, so we can't do this in the `streaming` event
