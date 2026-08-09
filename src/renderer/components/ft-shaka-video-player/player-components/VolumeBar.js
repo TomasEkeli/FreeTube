@@ -238,10 +238,14 @@ export class VolumeBar extends shaka.ui.RangeElement {
    * @private
    */
   updateBadge_() {
-    const effectivePercent = this.effectivePercent_
-    const differs = Math.round(effectivePercent) !== Math.round(this.state_.basePercent)
+    // What is actually coming out, rather than what was asked for, so that a
+    // boost that was refused doesn't get announced as though it had happened
+    const actualPercent = this.video.volume * this.state_.gain * 100
 
-    this.badge_.textContent = differs ? `${Math.round(effectivePercent)}%` : ''
+    const differs = !this.video.muted &&
+      Math.round(actualPercent) !== Math.round(this.state_.basePercent)
+
+    this.badge_.textContent = differs ? `${Math.round(actualPercent)}%` : ''
     this.badge_.classList.toggle('ft-visible', differs)
   }
 

@@ -87,17 +87,23 @@ export class AudioGainStage {
    * @param {number} gain 1 means "no amplification"
    */
   setGain(gain) {
-    this.gain_ = gain
-
     if (this.gainNode_ === null) {
       // Everything up to 1 is the video element's own job, so as long as that is
       // all that has ever been asked for, the graph doesn't need to exist at all.
       if (gain <= 1) {
+        this.gain_ = gain
         return
       }
 
-      this.build_()
+      if (!this.build_()) {
+        // Nothing was amplified, so don't claim otherwise. The next request
+        // tries again, which is usually after the user has interacted.
+        this.gain_ = 1
+        return
+      }
     }
+
+    this.gain_ = gain
 
     const now = this.context_.currentTime
     const gainParam = this.gainNode_.gain
@@ -110,11 +116,23 @@ export class AudioGainStage {
   }
 
   /**
-   * Builds the audio graph. Only ever called once.
+   * Builds the audio graph. Only ever called once, unless it fails.
+   * @returns {boolean} whether the graph is now in place
    * @private
    */
   build_() {
     const context = new AudioContext()
+
+    // An `AudioContext` that isn't running silences the element that feeds it,
+    // and it can only be started by a user gesture. Since routing an element
+    // through Web Audio can't be undone, that has to be settled before the
+    // element is connected: playing at normal volume is a far better outcome
+    // than playing silently.
+    if (context.state !== 'running') {
+      context.close()
+
+      return false
+    }
 
     this.context_ = context
     this.source_ = context.createMediaElementSource(this.element_)
@@ -135,6 +153,8 @@ export class AudioGainStage {
 
     this.element_.addEventListener('play', this.resume_)
     context.addEventListener('statechange', this.resume_)
+
+    return true
   }
 
   release() {
