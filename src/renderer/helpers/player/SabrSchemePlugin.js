@@ -45,23 +45,21 @@ const ATTESTATION_RETRY_LIMIT = 3
 const ATTESTATION_REFRESH_FLOOR = 1
 
 /**
- * How much watching time must remain for another refresh to be worth more than
- * rebuilding the session.
+ * How little watching time must remain before rebuilding the session beats
+ * refreshing the credentials again.
  *
- * Three measured numbers set this, and missing any of them puts the video on
- * screen with nothing to play:
+ * Small, and deliberately so. Rebuilding unloads the player, which throws the
+ * buffer away rather than playing through it, so the gap it costs is its own
+ * duration however much was buffered. Twenty five seconds was tried on the
+ * assumption that the buffer would cover the rebuild; it cannot, and a rebuild
+ * with 18.4s in hand stalled exactly as one with none would.
  *
- * - rebuilding takes seven to eight seconds
- * - the decision can only be made when the server refuses a request, which is
- *   about every ten seconds
- * - so a runway seen to be `n` seconds long is really `n` minus ten by the
- *   time anything can be done about it
- *
- * Seven plus ten leaves nothing spare, so twenty five. Fifteen was tried and
- * was not enough: a runway measured at 17.8s passed the test, and the next
- * look at it, one interval later, found 7.2s and an eight second remedy.
+ * Since the gap is the same whenever it is taken, the buffer is worth nothing
+ * except the refreshes it pays for, and those are the only remedy the viewer
+ * never sees. So spend it all on them, and rebuild only once it is nearly gone
+ * and there is nothing left to lose by discarding it.
  */
-const ATTESTATION_LOW_BUFFER_SECONDS = 25
+const ATTESTATION_LOW_BUFFER_SECONDS = 8
 
 /**
  * Hard stop on refreshes regardless of buffer. A paused player never drains
