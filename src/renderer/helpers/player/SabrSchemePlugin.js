@@ -913,7 +913,13 @@ async function doRequest(
         )
       }
 
-      console.warn(`${RECOVERY_LOG} giving up: ${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads did not get a trusted token`)
+      // Audio and video both arrive here, and both have to fail, but the
+      // episode only ends once
+      if (attestationState.recovering) {
+        attestationState.recovering = false
+
+        console.warn(`${RECOVERY_LOG} giving up: ${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads did not get a trusted token`)
+      }
 
       throw new ShakaError(
         ShakaError.Severity.CRITICAL,

@@ -1607,7 +1607,7 @@ export default defineComponent({
 
         console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
       } catch (error) {
-        console.error('[SABR recovery] session reload failed, falling back to a page reload', error)
+        console.error(`[SABR recovery] session reload failed (${error?.message ?? error}), falling back to a page reload`)
 
         sabrAbortController?.abort()
         emit('player-reload-requested')
