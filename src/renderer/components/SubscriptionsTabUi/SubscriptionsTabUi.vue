@@ -1,5 +1,6 @@
 <template>
   <div>
+    <SubscriptionActivity />
     <FtLoader
       v-if="isLoading"
     />
@@ -78,6 +79,7 @@ import FtElementList from '../FtElementList/FtElementList.vue'
 import FtFlexBox from '../ft-flex-box/ft-flex-box.vue'
 import FtLoader from '../FtLoader/FtLoader.vue'
 import FtRefreshWidget from '../FtRefreshWidget/FtRefreshWidget.vue'
+import SubscriptionActivity from '../SubscriptionActivity/SubscriptionActivity.vue'
 
 import store from '../../store/index'
 

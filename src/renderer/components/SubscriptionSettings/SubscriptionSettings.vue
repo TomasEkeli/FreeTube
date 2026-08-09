@@ -26,6 +26,13 @@
           @change="updateSubscriptionBackfillDetails"
         />
         <FtToggleSwitch
+          :label="$t('Settings.Subscription Settings.Recover Failed Refreshes')"
+          :default-value="subscriptionAutoRecovery"
+          :tooltip="$t('Tooltips.Subscription Settings.Recover Failed Refreshes')"
+          compact
+          @change="updateSubscriptionAutoRecovery"
+        />
+        <FtToggleSwitch
           :label="$t('Settings.Subscription Settings.Confirm Before Unsubscribing')"
           :default-value="unsubscriptionPopupStatus"
           compact
@@ -92,6 +99,16 @@ const subscriptionBackfillDetails = computed(() => store.getters.getSubscription
  */
 function updateSubscriptionBackfillDetails(value) {
   store.dispatch('updateSubscriptionBackfillDetails', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const subscriptionAutoRecovery = computed(() => store.getters.getSubscriptionAutoRecovery)
+
+/**
+ * @param {boolean} value
+ */
+function updateSubscriptionAutoRecovery(value) {
+  store.dispatch('updateSubscriptionAutoRecovery', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

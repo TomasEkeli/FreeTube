@@ -125,6 +125,11 @@ Subscriptions:
     profile has a large number of subscriptions.  Forcing RSS to avoid rate limiting
   'Your Subscription list is currently empty. Start adding subscriptions to see them here.': Your Subscription list is currently empty. If you want to import your subscriptions you can go to Data Settings and select Import Subscriptions or you can search for a channel and subscribe to them.
   Disabled Automatic Fetching: You have disabled automatic subscription fetching. Refresh subscriptions to see them here.
+  # Quiet status shown on the subscriptions page while it works in the background
+  Recovering Channels: 'Fetching {remaining} channel(s) the refresh missed, by profile. {recovered} recovered so far.'
+  Recovering Channels One At A Time: 'Fetching the last {remaining} channel(s) one at a time. {recovered} recovered so far.'
+  Filling In Details: 'Filling in video details for {remaining} channel(s).'
+  Stop Recovering: Stop
   # Shown once at the end of a refresh, in place of one toast per failed channel
   Fetch Errors: '{failed} of {total} channels could not be fetched. Click to copy the details.'
   Fetch Errors Rate Limited: '{failed} of {total} channels could not be fetched, {rateLimited} of them because of rate limiting. Click to copy the details.'
@@ -545,6 +550,7 @@ Settings:
     Fetch Feeds from RSS: Fetch Feeds from RSS
     Fetch Automatically: Fetch Feed Automatically
     Fill In Missing Video Details: Fill In Missing Video Details
+    Recover Failed Refreshes: Recover Failed Refreshes
     'Limit the number of videos displayed for each channel': 'Limit the number of videos displayed for each channel'
     To: To
     Confirm Before Unsubscribing: Confirm Before Unsubscribing
@@ -1120,6 +1126,10 @@ Tooltips:
       for the part of the feed you are looking at, one channel at a time, and
       fills them in as they arrive. Results are kept, so each channel is only
       fetched once.
+    Recover Failed Refreshes: 'When a refresh cannot reach some of your channels,
+      FreeTube goes back for them in the background: first a profile at a time,
+      then one channel at a time, asking for less at once with each attempt. The
+      feed stays usable throughout and fills in as they arrive.'
   Experimental Settings:
     Replace HTTP Cache: Disables Electron's disk based HTTP cache and enables a custom in-memory image cache. Will lead to increased RAM usage.
   SponsorBlock Settings:
