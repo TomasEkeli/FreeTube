@@ -118,6 +118,25 @@
       </p>
     </div>
     <div
+      v-if="showRecoveryMessage"
+      class="offlineWrapper"
+    >
+      <font-awesome-icon
+        :icon="['fas', 'sync']"
+        class="offlineIcon recoverySpinner"
+        aria-hidden="true"
+      />
+      <p class="offlineMessage">
+        <span>
+          {{ $t('Video.Player.Reconnecting to YouTube') }}
+        </span>
+        <br>
+        <span class="offlineMessageSubtitle">
+          {{ $t('Video.Player.YouTube has not accepted this session yet') }}
+        </span>
+      </p>
+    </div>
+    <div
       v-if="sponsorBlockShowSkippedToast && skippedSponsorBlockSegments.length > 0"
       class="skippedSegmentsWrapper"
     >

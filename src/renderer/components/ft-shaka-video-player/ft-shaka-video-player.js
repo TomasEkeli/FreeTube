@@ -32,7 +32,7 @@ import {
 } from '../../helpers/utils'
 import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
-import { setupSabrScheme } from '../../helpers/player/SabrSchemePlugin'
+import { isAttestationRecovering, setupSabrScheme } from '../../helpers/player/SabrSchemePlugin'
 
 /** @typedef {import('../../helpers/sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
 
@@ -1440,6 +1440,17 @@ export default defineComponent({
     let sabrAbortController
 
     /**
+     * True from the first credential refresh until the video plays again or
+     * the ladder gives up. Read from the plugin as well as subscribed to,
+     * because a rebuilt session starts in the middle of an episode that began
+     * before it existed.
+     */
+    const isRecoveringFromWall = ref(false)
+
+    /** True while the session is being rebuilt, when there is no media at all */
+    const isRebuildingSabrSession = ref(false)
+
+    /**
      * Starts a SABR session and wires up its recovery events. Called again
      * from `hardReloadSabrSession`, which rebuilds the session from scratch,
      * so nothing here may assume it only ever runs once.
@@ -1448,8 +1459,23 @@ export default defineComponent({
     function initSabrScheme(sabrData) {
       sabrStream = /** @__NOINLINE__ */ setupSabrScheme(sabrData, () => player, () => sabrManifest, playerWidth, playerHeight)
       sabrAbortController = new AbortController()
+
+      isRecoveringFromWall.value = isAttestationRecovering()
+
+      sabrStream.onRecoveryStarted(() => {
+        isRecoveringFromWall.value = true
+      })
+      sabrStream.onRecoveryEnded(() => {
+        isRecoveringFromWall.value = false
+      })
+
       // Since there can be 2 requests at the same time (video + audio), we debounce the listener to only show the message once
       sabrStream.onBackoffRequested(debounce(({ backoffMs }) => {
+        // Every fresh session opens with a routine backoff, so during recovery
+        // this fires over and over to count down something the viewer can do
+        // nothing about, next to a message that actually explains the wait
+        if (isRecoveringFromWall.value) { return }
+
         showToast(
           ({ remainingMs }) => {
             // `+value` converts string back to float
@@ -1521,9 +1547,6 @@ export default defineComponent({
       }
     }
 
-    /** True while a session reload is under way, so a second is not started */
-    let sabrHardReloadInProgress = false
-
     /**
      * Rebuilds the SABR session from scratch, keeping the watch page: fresh
      * credentials, a fresh scheme handler with an empty init data cache, and a
@@ -1536,8 +1559,8 @@ export default defineComponent({
      * is never worse than before this existed.
      */
     async function hardReloadSabrSession() {
-      if (sabrHardReloadInProgress || !sabrStream) return
-      sabrHardReloadInProgress = true
+      if (isRebuildingSabrSession.value || !sabrStream) return
+      isRebuildingSabrSession.value = true
 
       // The session that asked for this is already finished, so nothing it
       // fails at on the way out is worth reporting as a playback error
@@ -1628,7 +1651,7 @@ export default defineComponent({
         sabrAbortController?.abort()
         emit('player-reload-requested')
       } finally {
-        sabrHardReloadInProgress = false
+        isRebuildingSabrSession.value = false
       }
     }
 
@@ -3094,6 +3117,19 @@ export default defineComponent({
       return isOffline.value && isBuffering.value
     })
 
+    // Same rule as the offline message, for the same reason: recovery from a
+    // refused session is usually over before the buffer runs out, and saying
+    // so while the viewer is still watching happily would be crying wolf. Once
+    // there is nothing left to play they can see something is wrong, and an
+    // ordinary buffering spinner promises a moment when this can take a minute
+    // and can end in an error. Being offline is the more actionable of the
+    // two, so it wins if somehow both are true.
+    const showRecoveryMessage = computed(() => {
+      return isRecoveringFromWall.value &&
+        (isBuffering.value || isRebuildingSabrSession.value) &&
+        !showOfflineMessage.value
+    })
+
     // #endregion offline message
 
     // #region setup
@@ -3772,6 +3808,7 @@ export default defineComponent({
       skippedSponsorBlockSegments,
 
       showOfflineMessage,
+      showRecoveryMessage,
 
       handlePlay,
       handlePause,

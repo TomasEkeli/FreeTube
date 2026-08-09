@@ -216,6 +216,8 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {(cb: () => void) => void} onReloadOnce
  * @property {(cb: () => void) => void} onRefreshNeeded
  * @property {(cb: () => void) => void} onHardReloadNeededOnce
+ * @property {(cb: () => void) => void} onRecoveryStarted
+ * @property {(cb: () => void) => void} onRecoveryEnded
  * @property {(newSabrData: import('../../views/Watch/Watch').SabrData) => void} refresh
  * @property {(error: Error) => void} abandonRefresh
  * @property {() => string[]} getFormatIds
@@ -1411,6 +1413,20 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
      */
     onHardReloadNeededOnce(callback) {
       eventEmitter.once('hard-reload-needed', callback)
+    },
+    /**
+     * Fires when the video first stops being served and recovery begins.
+     * @param {() => void} callback
+     */
+    onRecoveryStarted(callback) {
+      eventEmitter.on('recovery-started', callback)
+    },
+    /**
+     * Fires when recovery finishes, whether it worked or was given up on.
+     * @param {() => void} callback
+     */
+    onRecoveryEnded(callback) {
+      eventEmitter.on('recovery-ended', callback)
     },
     /**
      * Swaps in fresh credentials without tearing down the player. Protocol
