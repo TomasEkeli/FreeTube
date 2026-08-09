@@ -76,6 +76,12 @@ const ATTESTATION_PAGE_RELOAD_LIMIT = 1
 const ATTESTATION_RECOVERY_SEGMENTS = 10
 
 /**
+ * One prefix for the whole recovery ladder, so a single search of the log
+ * says what happened and which rung fixed it.
+ */
+const RECOVERY_LOG = '[SABR recovery]'
+
+/**
  * Survives player teardown, so that recovery attempts triggered by a
  * distrusted PO token can be counted across the session reloads and page
  * reloads that destroy everything else. Scoped to a single video.
@@ -87,6 +93,8 @@ const attestationState = {
   hardReloads: 0,
   pageReloads: 0,
   mediaResponsesSinceReload: 0,
+  /** Whether an episode of this is under way, so its end can be reported */
+  recovering: false,
 }
 
 /**
@@ -101,6 +109,7 @@ export function resetAttestationBudget(videoId) {
   attestationState.hardReloads = 0
   attestationState.pageReloads = 0
   attestationState.mediaResponsesSinceReload = 0
+  attestationState.recovering = false
 }
 
 /**
@@ -377,6 +386,15 @@ function requestPlayerReload(currentState) {
  * worked. Enough of it restores the reload budgets.
  */
 function noteMediaServed() {
+  if (attestationState.recovering) {
+    attestationState.recovering = false
+
+    console.warn(
+      `${RECOVERY_LOG} playing again after ${attestationState.refreshes} refreshes, ` +
+      `${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads`
+    )
+  }
+
   attestationState.refreshes = 0
   attestationState.mediaResponsesSinceReload += 1
 
@@ -825,9 +843,15 @@ async function doRequest(
       // underneath a running session does not. Why is not established: a
       // reload both takes longer and starts a genuinely new session, and we
       // cannot yet tell which of the two is the cure.
+      const reason = bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS
+        ? `buffer down to ${bufferAhead.toFixed(1)}s`
+        : `${attestationState.refreshes} refreshes, the limit`
+
       if (attestationState.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
         attestationState.hardReloads += 1
         attestationState.mediaResponsesSinceReload = 0
+
+        console.warn(`${RECOVERY_LOG} ${reason}, rebuilding the session (reload ${attestationState.hardReloads} of ${ATTESTATION_HARD_RELOAD_LIMIT})`)
 
         endSessionForRecovery(currentState, 'hard-reload-needed')
 
@@ -838,6 +862,8 @@ async function doRequest(
         attestationState.pageReloads += 1
         attestationState.mediaResponsesSinceReload = 0
 
+        console.warn(`${RECOVERY_LOG} ${reason}, session reloads spent, reloading the page`)
+
         requestPlayerReload(currentState)
 
         throw createRecoverableNetworkError(
@@ -847,6 +873,8 @@ async function doRequest(
           operationInputs.requestType,
         )
       }
+
+      console.warn(`${RECOVERY_LOG} giving up: ${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads did not get a trusted token`)
 
       throw new ShakaError(
         ShakaError.Severity.CRITICAL,
@@ -865,6 +893,10 @@ async function doRequest(
     if (!currentState.sabrStreamState.refreshInFlight) {
       currentState.sabrStreamState.refreshInFlight = true
       attestationState.refreshes += 1
+      attestationState.recovering = true
+
+      console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${attestationState.refreshes}, ${bufferAhead.toFixed(1)}s of buffer left)`)
+
       currentState.beginRefresh()
       currentState.eventEmitter.emit('refresh-needed')
     }

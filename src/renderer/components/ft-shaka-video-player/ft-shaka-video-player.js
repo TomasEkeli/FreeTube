@@ -1596,6 +1596,8 @@ export default defineComponent({
         if (wasPaused) {
           video_.pause()
         }
+
+        console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
       } catch (error) {
         console.error('[SABR recovery] session reload failed, falling back to a page reload', error)
 
