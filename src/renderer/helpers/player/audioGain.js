@@ -129,10 +129,16 @@ export class AudioGainStage {
     // element is connected: playing at normal volume is a far better outcome
     // than playing silently.
     if (context.state !== 'running') {
+      // TEMPORARY, see the volume decision log in ft-shaka-video-player.js
+      console.warn('[ft volume] gain stage refused, context state was %o', context.state)
+
       context.close()
 
       return false
     }
+
+    // TEMPORARY, see the volume decision log in ft-shaka-video-player.js
+    console.warn('[ft volume] gain stage built')
 
     this.context_ = context
     this.source_ = context.createMediaElementSource(this.element_)
@@ -158,6 +164,9 @@ export class AudioGainStage {
   }
 
   release() {
+    // TEMPORARY, see the volume decision log in ft-shaka-video-player.js
+    console.warn('[ft volume] gain stage releasing, graph existed: %o', this.context_ !== null)
+
     if (this.context_ === null) {
       return
     }
