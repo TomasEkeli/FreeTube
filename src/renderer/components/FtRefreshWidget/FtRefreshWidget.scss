@@ -15,7 +15,6 @@
   @include utils.fixed-top-bar;
 }
 
-.floatingRefreshSection:has(.activityLabel),
 .floatingRefreshSection:has(.lastRefreshTimestamp + .refreshButton) {
   justify-content: space-between;
 }
@@ -26,8 +25,15 @@
   font-size: 16px;
 }
 
+/*
+  Pushed hard against the leading edge so the buttons stay together at the
+  trailing one. Space-between would not do: with the stop button present there
+  are three children, and the middle one lands somewhere near the centre rather
+  than beside the control it belongs with.
+*/
 .activityLabel {
   margin-block: 0;
+  margin-inline-end: auto;
   text-align: start;
   font-size: 16px;
   color: var(--tertiary-text-color);
