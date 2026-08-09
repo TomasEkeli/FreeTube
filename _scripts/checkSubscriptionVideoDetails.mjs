@@ -9,7 +9,11 @@
  * Run with `pnpm run check-subscription-video-details`.
  */
 
-import { durationIsMissing, mergeChannelPageVideoDetails } from '../src/subscriptionVideoDetails.js'
+import {
+  carryOverKnownVideoDetails,
+  durationIsMissing,
+  mergeChannelPageVideoDetails
+} from '../src/subscriptionVideoDetails.js'
 
 let failures = 0
 
@@ -162,6 +166,46 @@ function scrapedVideo(overrides = {}) {
 
   check('a second identical merge changes nothing', changedAgain === false)
   check('a second merge does not churn the key', cached[0].lastUpdatedAt === firstStamp)
+}
+
+// A refresh must not discard what the back-fill already learned, or every
+// refresh sends the whole feed off to be fetched again
+{
+  const enriched = [rssVideo({ lengthSeconds: 754, isRSS: undefined, lastUpdatedAt: 1234 })]
+  const refreshed = [rssVideo({ title: 'edited since', viewCount: 99999 })]
+
+  carryOverKnownVideoDetails(enriched, refreshed)
+
+  check('a known duration survives a refresh', refreshed[0].lengthSeconds === 754)
+  check('isRSS is cleared again on the new copy', refreshed[0].isRSS === undefined)
+  check('the key is not churned for an invisible change', refreshed[0].lastUpdatedAt === 1234)
+  check('the refreshed title still wins', refreshed[0].title === 'edited since')
+  check('the refreshed view count still wins', refreshed[0].viewCount === 99999)
+}
+
+// Flags learned from the channel page survive too
+{
+  const enriched = [rssVideo({ lengthSeconds: '', liveNow: true, isRSS: undefined })]
+  const refreshed = [rssVideo()]
+
+  carryOverKnownVideoDetails(enriched, refreshed)
+
+  check('a live flag survives a refresh', refreshed[0].liveNow === true)
+  check('a still-unknown duration stays unknown', durationIsMissing(refreshed[0].lengthSeconds))
+  check('isRSS is kept while the duration is unknown', refreshed[0].isRSS === true)
+}
+
+// Videos that were not there before, and degenerate inputs
+{
+  const carry = carryOverKnownVideoDetails
+  const brandNew = [rssVideo({ videoId: 'fresh' })]
+
+  carry([rssVideo({ lengthSeconds: 754 })], brandNew)
+
+  check('a video not seen before is left alone', durationIsMissing(brandNew[0].lengthSeconds))
+  check('no previous videos is a no-op', carry(null, [rssVideo()])[0].lengthSeconds === '0:00')
+  check('null incoming passes through', carry([rssVideo()], null) === null)
+  check('empty incoming passes through', carry([rssVideo()], []).length === 0)
 }
 
 if (failures > 0) {

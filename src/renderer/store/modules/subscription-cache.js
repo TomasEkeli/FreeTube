@@ -2,7 +2,10 @@ import {
   DBSubscriptionCacheHandlers,
 } from '../../../datastores/handlers/index'
 
-import { mergeChannelPageVideoDetails } from '../../../subscriptionVideoDetails'
+import {
+  carryOverKnownVideoDetails,
+  mergeChannelPageVideoDetails
+} from '../../../subscriptionVideoDetails'
 
 const state = {
   videoCache: {},
@@ -80,10 +83,16 @@ const actions = {
     }
   },
 
-  async updateSubscriptionVideosCacheByChannel({ commit }, { channelId, videos, timestamp = new Date() }) {
+  async updateSubscriptionVideosCacheByChannel({ commit, state }, { channelId, videos, timestamp = new Date() }) {
     try {
-      await DBSubscriptionCacheHandlers.updateVideosByChannelId(channelId, videos, timestamp)
-      commit('updateVideoCacheByChannel', { channelId, entries: videos, timestamp })
+      // A refresh replaces a channel's videos outright, and RSS entries have no
+      // duration, so without this every refresh discards what the back-fill
+      // went and fetched and the whole feed has to be fetched again. Done here
+      // rather than in the datastore so that the write stays a single write.
+      const entries = carryOverKnownVideoDetails(state.videoCache[channelId]?.videos, videos)
+
+      await DBSubscriptionCacheHandlers.updateVideosByChannelId(channelId, entries, timestamp)
+      commit('updateVideoCacheByChannel', { channelId, entries, timestamp })
     } catch (errMessage) {
       console.error(errMessage)
     }

@@ -41,6 +41,63 @@ export function durationIsMissing(lengthSeconds) {
 }
 
 /**
+ * Carry details already learned about a video into a newly fetched copy of it.
+ *
+ * A refresh replaces a channel's videos outright, and an RSS entry has no
+ * duration, so a refresh threw away everything the back-fill had gone and
+ * fetched. The videos were then found to be missing their durations again and
+ * fetched again, every single refresh, for videos that had not changed at all.
+ *
+ * The incoming copy stays authoritative for everything it actually knows: the
+ * title, the publish time, the view count. Only what it cannot know is carried
+ * over.
+ *
+ * @param {any[] | null | undefined} previousVideos
+ * @param {any[] | null} incomingVideos mutated in place
+ * @returns {any[] | null} the incoming videos, for convenience
+ */
+export function carryOverKnownVideoDetails(previousVideos, incomingVideos) {
+  if (!Array.isArray(incomingVideos) || incomingVideos.length === 0) { return incomingVideos }
+  if (!Array.isArray(previousVideos) || previousVideos.length === 0) { return incomingVideos }
+
+  const byVideoId = new Map()
+
+  for (const video of previousVideos) {
+    if (video?.videoId != null) {
+      byVideoId.set(video.videoId, video)
+    }
+  }
+
+  for (const incoming of incomingVideos) {
+    const previous = byVideoId.get(incoming.videoId)
+
+    if (previous == null) { continue }
+
+    if (durationIsMissing(incoming.lengthSeconds) && !durationIsMissing(previous.lengthSeconds)) {
+      incoming.lengthSeconds = previous.lengthSeconds
+    }
+
+    for (const field of DETAIL_FIELDS) {
+      if (incoming[field] == null && previous[field]) {
+        incoming[field] = previous[field]
+      }
+    }
+
+    if (incoming.isRSS && !durationIsMissing(incoming.lengthSeconds)) {
+      delete incoming.isRSS
+    }
+
+    // Kept so the item is not given a new key and rebuilt for a change that
+    // nobody can see
+    if (previous.lastUpdatedAt != null) {
+      incoming.lastUpdatedAt = previous.lastUpdatedAt
+    }
+  }
+
+  return incomingVideos
+}
+
+/**
  * @param {any[]} cachedVideos mutated in place
  * @param {any[]} channelVideos
  * @returns {boolean} whether anything changed, so callers can skip a pointless write
