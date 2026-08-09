@@ -39,12 +39,17 @@ const ATTESTATION_RETRY_LIMIT = 3
 const ATTESTATION_REFRESH_FLOOR = 3
 
 /**
- * How much playable buffer must remain for another refresh to be worth more
- * than a reload. Above this, recovery is invisible and patience costs the
- * viewer nothing; below it, playback is about to stall anyway, so the more
- * disruptive and more effective remedy becomes the better trade.
+ * How much watching time must remain for another refresh to be worth more than
+ * rebuilding the session.
+ *
+ * This has to be longer than the remedy it triggers, or the remedy cannot
+ * finish before the video stalls and the escalation is pointless. Rebuilding
+ * takes six to seven seconds, measured across eight live rebuilds, and a
+ * refresh cycle takes about seven, so the last refresh has to be given up on
+ * with enough left for both. Fifteen seconds covers a rebuild with room to
+ * spare, at the cost of abandoning refreshes that might have worked.
  */
-const ATTESTATION_LOW_BUFFER_SECONDS = 6
+const ATTESTATION_LOW_BUFFER_SECONDS = 15
 
 /**
  * Hard stop on refreshes regardless of buffer. A paused player never drains
@@ -102,6 +107,16 @@ const attestationState = {
    * usually in the same response as the media that ends the episode.
    */
   refreshesThisEpisode: 0,
+}
+
+/**
+ * Whether the video is currently being recovered. Survives the session being
+ * rebuilt, which is how a new session knows it has walked into an episode that
+ * was already under way.
+ * @returns {boolean}
+ */
+export function isAttestationRecovering() {
+  return attestationState.recovering
 }
 
 /**
@@ -347,22 +362,29 @@ function createRecoverableNetworkError(code, ...args) {
 }
 
 /**
- * Seconds of uninterrupted buffer ahead of the playhead. This is how long
- * recovery can take before the viewer notices anything, so it is what decides
- * how patient the in place refresh can afford to be.
+ * How long the viewer can keep watching without another byte arriving, in real
+ * seconds rather than media seconds. This is the runway recovery has to land
+ * in, so it is what decides how patient the in place refresh can afford to be.
+ *
+ * The distinction matters: buffer is measured in media time, but it is spent
+ * at the playback rate, so ten seconds of it lasts a little over three at
+ * triple speed. Treating the two as the same made every escalation late, and
+ * latest exactly for the viewers who had sped the video up.
  * @param {?shaka.Player} player
  * @returns {number}
  */
-function bufferedSecondsAhead(player) {
-  const currentTime = player?.getMediaElement()?.currentTime
+function secondsOfPlaybackLeft(player) {
+  const media = player?.getMediaElement()
 
-  if (typeof currentTime !== 'number') return 0
+  if (typeof media?.currentTime !== 'number') return 0
+
+  const currentTime = media.currentTime
 
   // `total` is the intersection across the active streams, which is exactly
   // what playback can continue on
   for (const { start, end } of player.getBufferedInfo().total) {
     if (start <= currentTime && currentTime < end) {
-      return end - currentTime
+      return (end - currentTime) / Math.max(media.playbackRate || 1, 0.1)
     }
   }
 
@@ -398,10 +420,12 @@ function requestPlayerReload(currentState) {
 /**
  * Records that the server served media, which is the only proof that recovery
  * worked. Enough of it restores the reload budgets.
+ * @param {CurrentState} currentState
  */
-function noteMediaServed() {
+function noteMediaServed(currentState) {
   if (attestationState.recovering) {
     attestationState.recovering = false
+    currentState.eventEmitter.emit('recovery-ended')
 
     console.warn(
       `${RECOVERY_LOG} playing again after ${attestationState.refreshesThisEpisode} refreshes, ` +
@@ -848,7 +872,7 @@ async function doRequest(
   if (responseDataChunks.length > 0 && segmentComplete) {
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
 
-    noteMediaServed()
+    noteMediaServed(currentState)
 
     if (operationInputs.isInit) {
       currentState.initDataCache.set(operationInputs.formatIdString, data)
@@ -865,14 +889,14 @@ async function doRequest(
       originalRequest: operationInputs.request,
     }
   } else if (attestationBlocked) {
-    const bufferAhead = bufferedSecondsAhead(currentState.getPlayer())
+    const playbackLeft = secondsOfPlaybackLeft(currentState.getPlayer())
 
     // Refreshing costs the viewer nothing for as long as the buffer covers
     // playback, so there is no reason to stop while it does. Once the buffer
     // is nearly gone the video is about to stall whatever we do, which is the
     // moment a more disruptive remedy stops being a downgrade.
     const outOfPatience = attestationState.refreshes >= ATTESTATION_REFRESH_FLOOR &&
-      (bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS || attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
+      (playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS || attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
 
     if (outOfPatience) {
       // Audio and video reach this together, so the first one to escalate
@@ -882,8 +906,8 @@ async function doRequest(
         throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
       }
 
-      const reason = bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS
-        ? `buffer down to ${bufferAhead.toFixed(1)}s`
+      const reason = playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
+        ? `${playbackLeft.toFixed(1)}s of watching left`
         : `${attestationState.refreshes} refreshes, the limit`
 
       // Rebuilding the session is what a viewer does by hand when they reopen
@@ -922,6 +946,7 @@ async function doRequest(
       // episode only ends once
       if (attestationState.recovering) {
         attestationState.recovering = false
+        currentState.eventEmitter.emit('recovery-ended')
 
         console.warn(`${RECOVERY_LOG} giving up: ${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads did not get a trusted token`)
       }
@@ -944,9 +969,13 @@ async function doRequest(
       currentState.sabrStreamState.refreshInFlight = true
       attestationState.refreshes += 1
       attestationState.refreshesThisEpisode += 1
-      attestationState.recovering = true
 
-      console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${attestationState.refreshes}, ${bufferAhead.toFixed(1)}s of buffer left)`)
+      if (!attestationState.recovering) {
+        attestationState.recovering = true
+        currentState.eventEmitter.emit('recovery-started')
+      }
+
+      console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${attestationState.refreshes}, ${playbackLeft.toFixed(1)}s of watching left)`)
 
       currentState.beginRefresh()
       currentState.eventEmitter.emit('refresh-needed')
