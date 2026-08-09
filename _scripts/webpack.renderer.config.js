@@ -13,10 +13,14 @@ const {
   SHAKA_LOCALES_TO_BE_BUNDLED
 } = require('./getShakaLocales')
 const { sigFrameTemplateParameters } = require('./sigFrameConfig')
+const { getBuildStamp } = require('./getBuildStamp')
 
 const isDevMode = process.env.NODE_ENV === 'development'
 
 const { version: swiperVersion } = JSON.parse(readFileSync(path.join(__dirname, '../node_modules/swiper/package.json')))
+
+const { version: appVersion } = JSON.parse(readFileSync(path.join(__dirname, '../package.json')))
+const buildStamp = getBuildStamp(appVersion)
 
 const processLocalesPlugin = new ProcessLocalesPlugin({
   compress: !isDevMode,
@@ -153,7 +157,9 @@ const config = {
       // The renderer has no runtime process.env, so opt-in subscription
       // tracing has to be baked in at build time. Set on the launch command.
       'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? ''),
-      'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? '')
+      'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? ''),
+      // Which build this is. Baked in because it can only be known here.
+      'process.env.BUILD_STAMP': JSON.stringify(buildStamp)
     }),
     new HtmlWebpackPlugin({
       filename: 'index.html',

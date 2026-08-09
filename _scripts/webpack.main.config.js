@@ -2,6 +2,7 @@ const path = require('path')
 const webpack = require('webpack')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const JsonMinimizerPlugin = require('json-minimizer-webpack-plugin')
+const { getBuildStamp } = require('./getBuildStamp')
 
 const isDevMode = process.env.NODE_ENV === 'development'
 
@@ -54,7 +55,9 @@ const config = {
   plugins: [
     new webpack.DefinePlugin({
       'process.platform': `'${process.platform}'`,
-      'process.env.IS_ELECTRON_MAIN': true
+      'process.env.IS_ELECTRON_MAIN': true,
+      // So that --version can say which build it is, not just which version
+      'process.env.BUILD_STAMP': JSON.stringify(getBuildStamp(require('../package.json').version))
     })
   ],
   output: {

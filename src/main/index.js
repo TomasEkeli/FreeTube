@@ -34,7 +34,11 @@ import { isFreeTubeUrl } from './utils'
 const brotliDecompressAsync = promisify(brotliDecompress)
 
 if (process.argv.includes('--version')) {
-  console.log(`v${packageDetails.version} Beta`) // eslint-disable-line no-console
+  // The build stamp says which build this is, since every build of a version
+  // otherwise looks the same. Empty when it could not be determined.
+  const buildStamp = process.env.BUILD_STAMP ? ` ${process.env.BUILD_STAMP}` : ''
+
+  console.log(`v${packageDetails.version} Beta${buildStamp}`) // eslint-disable-line no-console
   app.exit()
 } else if (process.argv.includes('--help') || process.argv.includes('-h')) {
   printHelp()

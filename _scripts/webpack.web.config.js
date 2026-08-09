@@ -14,6 +14,8 @@ const {
   SHAKA_LOCALES_TO_BE_BUNDLED
 } = require('./getShakaLocales')
 
+const { getBuildStamp } = require('./getBuildStamp')
+
 const isDevMode = process.env.NODE_ENV === 'development'
 
 const { version: swiperVersion } = JSON.parse(fs.readFileSync(path.join(__dirname, '../node_modules/swiper/package.json')))
@@ -143,7 +145,8 @@ const config = {
       __INTLIFY_PROD_DEVTOOLS__: 'false',
       'process.env.SWIPER_VERSION': `'${swiperVersion}'`,
       'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? ''),
-      'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? '')
+      'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? ''),
+      'process.env.BUILD_STAMP': JSON.stringify(getBuildStamp(require('../package.json').version))
     }),
     new webpack.ProvidePlugin({
       process: 'process/browser.js'

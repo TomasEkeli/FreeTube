@@ -13,6 +13,12 @@
         <div class="version">
           {{ versionNumber }} {{ $t("About.Beta") }}
         </div>
+        <div
+          v-if="buildStamp"
+          class="buildStamp"
+        >
+          {{ buildStamp }}
+        </div>
       </section>
       <section class="about-chunks">
         <figure
@@ -52,6 +58,14 @@ import packageDetails from '../../../../package.json'
 const { t } = useI18n()
 
 const versionNumber = `v${packageDetails.version}`
+
+/**
+ * Which build this is, as opposed to which version. Every build of a version is
+ * otherwise indistinguishable, so there is no way to tell whether the one you
+ * are running contains a given change. Baked in at build time; empty when it
+ * could not be worked out, in which case nothing is shown.
+ */
+const buildStamp = process.env.BUILD_STAMP
 
 const chunks = computed(() => [
   {
