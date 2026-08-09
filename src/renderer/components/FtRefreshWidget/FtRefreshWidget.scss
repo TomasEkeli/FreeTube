@@ -15,6 +15,7 @@
   @include utils.fixed-top-bar;
 }
 
+.floatingRefreshSection:has(.activityLabel),
 .floatingRefreshSection:has(.lastRefreshTimestamp + .refreshButton) {
   justify-content: space-between;
 }
@@ -23,6 +24,62 @@
   margin-block: 0;
   text-align: center;
   font-size: 16px;
+}
+
+.activityLabel {
+  margin-block: 0;
+  text-align: start;
+  font-size: 16px;
+  color: var(--tertiary-text-color);
+}
+
+/*
+  A thin bar along the bottom edge of the strip, the same idiom as the app's
+  global progress bar. Deliberately without a figure beside it: how far along it
+  is worth knowing, the channel counts behind it are not.
+*/
+.activityProgressTrack {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  block-size: 2px;
+  background-color: var(--secondary-card-bg-color);
+  overflow: hidden;
+}
+
+.activityProgressFill {
+  block-size: 100%;
+  inline-size: 0;
+  background-color: var(--primary-color);
+  transition: inline-size 300ms ease-out;
+}
+
+/* Working, but with no honest way to say how far along */
+.activityProgressFill.indeterminate {
+  inline-size: 33%;
+  animation: activity-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes activity-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activityProgressFill.indeterminate {
+    animation: none;
+    inline-size: 100%;
+    opacity: 0.4;
+  }
+
+  .activityProgressFill {
+    transition: none;
+  }
 }
 
 @media only screen and (width <= 680px) {

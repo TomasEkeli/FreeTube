@@ -125,11 +125,12 @@ Subscriptions:
     profile has a large number of subscriptions.  Forcing RSS to avoid rate limiting
   'Your Subscription list is currently empty. Start adding subscriptions to see them here.': Your Subscription list is currently empty. If you want to import your subscriptions you can go to Data Settings and select Import Subscriptions or you can search for a channel and subscribe to them.
   Disabled Automatic Fetching: You have disabled automatic subscription fetching. Refresh subscriptions to see them here.
-  # Quiet status shown on the subscriptions page while it works in the background
-  Recovering Channels: 'Fetching {remaining} channel(s) the refresh missed, by profile. {recovered} recovered so far.'
-  Recovering Channels One At A Time: 'Fetching the last {remaining} channel(s) one at a time. {recovered} recovered so far.'
-  Filling In Details: 'Filling in video details for {remaining} channel(s).'
-  Stop Recovering: Stop
+  # Shown in place of the last-updated time while working in the background.
+  # Kept to a few words on purpose: the progress bar underneath carries how far
+  # along it is, and the channel counts behind it are diagnostics.
+  Recovering Channels: Recovering channels that were missed
+  Filling In Details: Filling in video details
+  Stop Recovering: Stop recovering
   # Shown once at the end of a refresh, in place of one toast per failed channel
   Fetch Errors: '{failed} of {total} channels could not be fetched. Click to copy the details.'
   Fetch Errors Rate Limited: '{failed} of {total} channels could not be fetched, {rateLimited} of them because of rate limiting. Click to copy the details.'

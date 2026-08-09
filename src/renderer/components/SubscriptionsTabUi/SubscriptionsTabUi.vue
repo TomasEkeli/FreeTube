@@ -1,6 +1,5 @@
 <template>
   <div>
-    <SubscriptionActivity />
     <FtLoader
       v-if="isLoading"
     />
@@ -64,7 +63,11 @@
       :disable-refresh="isLoading || !activeProfileHasSubscriptions"
       :last-refresh-timestamp="lastRefreshTimestamp"
       :title="title"
+      :activity-label="activityLabel"
+      :activity-progress="activityProgress"
+      :can-stop-activity="canStopActivity"
       @click="refresh"
+      @stop-activity="stopActivity"
     />
   </div>
 </template>
@@ -79,9 +82,10 @@ import FtElementList from '../FtElementList/FtElementList.vue'
 import FtFlexBox from '../ft-flex-box/ft-flex-box.vue'
 import FtLoader from '../FtLoader/FtLoader.vue'
 import FtRefreshWidget from '../FtRefreshWidget/FtRefreshWidget.vue'
-import SubscriptionActivity from '../SubscriptionActivity/SubscriptionActivity.vue'
 
 import store from '../../store/index'
+
+import { useSubscriptionActivity } from '../../composables/useSubscriptionActivity'
 
 import { backfillDetailsForVisibleVideos } from '../../helpers/subscriptionDetailBackfill'
 import { debounce } from '../../helpers/utils'
@@ -132,6 +136,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['refresh'])
+
+const {
+  label: activityLabel,
+  progress: activityProgress,
+  canStop: canStopActivity,
+  stop: stopActivity
+} = useSubscriptionActivity()
 
 const subscriptionLimit = sessionStorage.getItem('subscriptionLimit')
 
