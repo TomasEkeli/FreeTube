@@ -39,7 +39,7 @@ const ATTESTATION_REFRESH_LIMIT = 5
 /**
  * Survives player teardown, so that recovery attempts triggered by a
  * distrusted PO token can be counted even across a full reload. Scoped to a
- * single video: a new video starts with a full budget.
+ * single video.
  */
 const attestationState = {
   /** @type {?string} */
@@ -866,10 +866,13 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     return sessionGeneration
   }
 
-  if (attestationState.videoId !== sabrData.videoId) {
-    attestationState.videoId = sabrData.videoId
-    attestationState.refreshes = 0
-  }
+  // A new session gets a full refresh budget, whatever produced it: a new
+  // video, the user reopening a walled one, or a recovery reload. Carrying a
+  // spent budget into a fresh session made every attempt after the first give
+  // up on its first block, which is why reopening a walled video only
+  // sometimes helped.
+  attestationState.videoId = sabrData.videoId
+  attestationState.refreshes = 0
 
   /** @type {SabrStreamState} */
   const sabrStreamState = {
