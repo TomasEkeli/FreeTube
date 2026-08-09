@@ -2,6 +2,8 @@ import {
   DBSubscriptionCacheHandlers,
 } from '../../../datastores/handlers/index'
 
+import { mergeChannelPageVideoDetails } from '../../../subscriptionVideoDetails'
+
 const state = {
   videoCache: {},
   liveCache: {},
@@ -87,6 +89,20 @@ const actions = {
     }
   },
 
+  /**
+   * Fill in details the RSS feeds do not carry, most importantly the duration,
+   * from a channel's own videos page. Does not change the cache timestamp: the
+   * feed is no fresher than it was, it is merely more complete.
+   */
+  async updateSubscriptionVideosCacheWithChannelPageVideos({ commit }, { channelId, videos }) {
+    try {
+      await DBSubscriptionCacheHandlers.updateVideosWithChannelPageVideosByChannelId(channelId, videos)
+      commit('updateVideoCacheWithChannelPageVideos', { channelId, entries: videos })
+    } catch (errMessage) {
+      console.error(errMessage)
+    }
+  },
+
   async updateSubscriptionShortsCacheByChannel({ commit }, { channelId, videos, timestamp = new Date() }) {
     try {
       await DBSubscriptionCacheHandlers.updateShortsByChannelId(channelId, videos, timestamp)
@@ -156,6 +172,13 @@ const mutations = {
     if (entries != null) { newObject.videos = entries }
     newObject.timestamp = timestamp
     state.shortsCache[channelId] = newObject
+  },
+  updateVideoCacheWithChannelPageVideos(state, { channelId, entries }) {
+    const cachedObject = state.videoCache[channelId]
+
+    if (cachedObject != null && Array.isArray(cachedObject.videos)) {
+      mergeChannelPageVideoDetails(cachedObject.videos, entries)
+    }
   },
   updateShortsCacheWithChannelPageShorts(state, { channelId, entries }) {
     const cachedObject = state.shortsCache[channelId]

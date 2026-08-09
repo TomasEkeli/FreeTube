@@ -5,6 +5,7 @@
     :error-channels="errorChannels"
     :last-refresh-timestamp="lastRefreshTimestamp"
     :attempted-fetch="attemptedFetch"
+    :backfill-details="true"
     :title="t('Global.Videos')"
     @refresh="refresh"
   />

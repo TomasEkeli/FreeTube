@@ -312,6 +312,9 @@ const state = {
   screenshotFilenamePattern: '%Y%M%D-%H%N%S',
   settingsSectionSortEnabled: false,
   fetchSubscriptionsAutomatically: true,
+  // Fill in the details RSS feeds leave out, notably the video duration, in the
+  // background for the part of the subscription feed on screen
+  subscriptionBackfillDetails: true,
   settingsPassword: '',
   useDeArrowTitles: false,
   useDeArrowThumbnails: false,
@@ -665,6 +668,10 @@ const customActions = {
 
           case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_SHORTS_BY_CHANNEL:
             commit('updateShortsCacheByChannel', data)
+            break
+
+          case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_VIDEOS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL:
+            commit('updateVideoCacheWithChannelPageVideos', data)
             break
 
           case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_SHORTS_WITH_CHANNEL_PAGE_SHORTS_BY_CHANNEL:

@@ -48,6 +48,7 @@
     "pack:botGuardScript": "webpack --config _scripts/webpack.botGuardScript.config.js",
     "checkforbadtemplates": "node _scripts/findMissingTemplates.mjs",
     "check-subscription-worker": "node _scripts/checkSubscriptionWorker.mjs",
+    "check-subscription-video-details": "node _scripts/checkSubscriptionVideoDetails.mjs",
     "ci": "pnpm install --frozen-lockfile"
   },
   "dependencies": {

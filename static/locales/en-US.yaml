@@ -544,6 +544,7 @@ Settings:
     Subscription Settings: Subscription
     Fetch Feeds from RSS: Fetch Feeds from RSS
     Fetch Automatically: Fetch Feed Automatically
+    Fill In Missing Video Details: Fill In Missing Video Details
     'Limit the number of videos displayed for each channel': 'Limit the number of videos displayed for each channel'
     To: To
     Confirm Before Unsubscribing: Confirm Before Unsubscribing
@@ -1114,6 +1115,11 @@ Tooltips:
       but doesn't provide certain information like video duration, live status or posts
     Fetch Automatically: When enabled, FreeTube will automatically fetch
       your subscription feed on startup and when a new window is opened.
+    Fill In Missing Video Details: When your feed comes from RSS it has no video
+      durations. With this enabled, FreeTube quietly fetches the missing details
+      for the part of the feed you are looking at, one channel at a time, and
+      fills them in as they arrive. Results are kept, so each channel is only
+      fetched once.
   Experimental Settings:
     Replace HTTP Cache: Disables Electron's disk based HTTP cache and enables a custom in-memory image cache. Will lead to increased RAM usage.
   SponsorBlock Settings:
