@@ -17,6 +17,7 @@ import {
 import shaka from 'shaka-player'
 
 import { deepCopy } from '../utils'
+import { noteCredentialsInstalled, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
@@ -164,6 +165,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {() => ?PendingRefresh} getPendingRefresh
  * @property {() => void} beginRefresh
  * @property {() => shaka.Player} getPlayer
+ * @property {number} sessionStartedAt
  */
 /**
  * @typedef PendingRefresh
@@ -584,6 +586,9 @@ async function doRequest(
   let protectionStatus = 0
   let receivedMediaPart = false
 
+  /** Only ever true when FT_SABR_WALL is set, see sabrWallInjection */
+  const wallInjected = sabrWallInjectionEnabled && shouldInjectWall(currentState.sessionStartedAt)
+
   if (currentState.sabrStreamState.playerReloadRequested) {
     // Multiple requests might be issued at the same time, other requests should abort themselves once reload requested
     throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
@@ -639,6 +644,18 @@ async function doRequest(
       }
 
       const remainingData = new UmpReader(chunkedDataBuffer).read((part) => {
+        // A simulated wall throws the media away and lets everything else
+        // through, which is what the session sees when the server really
+        // refuses to serve an untrusted token. Dropping MEDIA_END also keeps
+        // the request retryable, since that is the part that finishes it.
+        if (wallInjected && (
+          part.type === UMPPartId.MEDIA ||
+          part.type === UMPPartId.MEDIA_END ||
+          part.type === UMPPartId.MEDIA_HEADER
+        )) {
+          return
+        }
+
         switch (part.type) {
           case UMPPartId.STREAM_PROTECTION_STATUS: {
             const streamProtectionStatus = decodePart(part, StreamProtectionStatus)
@@ -803,6 +820,13 @@ async function doRequest(
     throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
   } else if (currentState.abortStatus.timedOut) {
     throw createRecoverableNetworkError(ShakaError.Code.TIMEOUT, operationInputs.uri, operationInputs.requestType)
+  }
+
+  if (wallInjected) {
+    // Answer as a walled session does, whatever the server actually said
+    protectionStatus = 2
+    shouldRetry = true
+    shouldRetryDueToNextRequestPolicy = true
   }
 
   // The server answered without media because it does not trust the PO token
@@ -1061,8 +1085,15 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     return sessionGeneration
   }
 
+  const sessionStartedAt = Date.now()
+
   if (attestationState.videoId !== sabrData.videoId) {
     resetAttestationBudget(sabrData.videoId)
+    resetWallInjection()
+  } else {
+    // Same video, so this session was built to recover the last one, and its
+    // credentials are fresh ones the simulated wall should count
+    noteCredentialsInstalled()
   }
 
   // A new session gets a full refresh budget, whatever produced it: a new
@@ -1271,6 +1302,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
       getPendingRefresh: () => pendingRefresh,
       beginRefresh,
       getPlayer,
+      sessionStartedAt,
     }
 
     const pendingRequest = doRequest(opInputs, currentState)
@@ -1335,6 +1367,8 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
      * @param {import('../../views/Watch/Watch').SabrData} newSabrData
      */
     refresh(newSabrData) {
+      noteCredentialsInstalled()
+
       credentials.poToken = base64ToU8(newSabrData.poToken)
       credentials.videoPlaybackUstreamerConfig = base64ToU8(newSabrData.ustreamerConfig)
       credentials.clientInfo = deepCopy(newSabrData.clientInfo)
