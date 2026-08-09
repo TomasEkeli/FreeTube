@@ -1566,6 +1566,12 @@ export default defineComponent({
         const wasPaused = video_.paused
         const playbackPosition = video_.currentTime
 
+        // Pause for the swap rather than letting the element try to play
+        // through it, so the state afterwards is decided rather than raced
+        if (!wasPaused) {
+          video_.pause()
+        }
+
         const useAutoQuality = player.getConfiguration().abr.enabled
         const activeVariant = player.getVariantTracks().find(track => track.active)
 
@@ -1603,6 +1609,16 @@ export default defineComponent({
 
         if (wasPaused) {
           video_.pause()
+        } else {
+          // Reloading a media element does not resume it, and a viewer who was
+          // watching did not ask to be stopped. A refused resume leaves them
+          // with a loaded video and a play button, which is not worth throwing
+          // the page away over.
+          try {
+            await video_.play()
+          } catch (error) {
+            console.warn(`[SABR recovery] session rebuilt but playback did not resume (${error?.message ?? error})`)
+          }
         }
 
         console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
