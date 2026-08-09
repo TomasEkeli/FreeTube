@@ -128,8 +128,9 @@ Subscriptions:
   # Shown in place of the last-updated time while working in the background.
   # Kept to a few words on purpose: the progress bar underneath carries how far
   # along it is, and the channel counts behind it are diagnostics.
+  Refreshing: Fetching the latest videos
   Recovering Channels: Recovering channels that were missed
-  Filling In Details: Filling in video details
+  Filling In Details: Feeds have no video details, fetching them
   Stop Recovering: Stop recovering
   # Shown once at the end of a refresh, in place of one toast per failed channel
   Fetch Errors: '{failed} of {total} channels could not be fetched. Click to copy the details.'
