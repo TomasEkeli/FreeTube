@@ -72,6 +72,12 @@ async function restartElectron() {
       path.join(__dirname, '../dist/main.js'),
       // Without this, console output from the main and renderer processes goes nowhere
       '--enable-logging',
+      // Containers give /dev/shm the Docker default of 64MB, which Chromium
+      // will exhaust: the renderer then dies with "No space left on device"
+      // from a shared-memory backed service, on a host with hundreds of
+      // gigabytes free. This puts that memory in /tmp instead. Harmless
+      // outside a container, where /dev/shm is large enough anyway.
+      '--disable-dev-shm-usage',
       remoteDebugging ? '--inspect=9222' : '',
       remoteDebugging ? '--remote-debugging-port=9223' : ''
     ],
