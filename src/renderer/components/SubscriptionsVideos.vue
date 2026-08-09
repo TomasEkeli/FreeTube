@@ -56,12 +56,16 @@ const {
   autoFetchGetter: 'getSubscriptionForVideosFirstAutoFetchRun',
   autoFetchMutation: 'setSubscriptionForVideosFirstAutoFetchRun',
   rssMode: 'setting',
-  fetchChannel: (channel, { useRss }) => {
+  fetchChannel: (channel, { useRss, failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
-      return useRss ? getChannelVideosInvidiousRSS(channel) : getChannelVideosInvidiousScraper(channel)
+      return useRss
+        ? getChannelVideosInvidiousRSS(channel, failedAttempts)
+        : getChannelVideosInvidiousScraper(channel, failedAttempts)
     }
 
-    return useRss ? getChannelVideosLocalRSS(channel) : getChannelVideosLocalScraper(channel)
+    return useRss
+      ? getChannelVideosLocalRSS(channel, failedAttempts)
+      : getChannelVideosLocalScraper(channel, failedAttempts)
   },
   postProcess: updateVideoListAfterProcessing,
   followsDetailBackfill: true

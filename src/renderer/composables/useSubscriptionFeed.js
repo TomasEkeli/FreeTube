@@ -19,10 +19,16 @@ import {
   endFetchErrorCollection,
   isRetryableFetchStatus,
   reportRateLimited,
+  showFetchErrorSummary,
   FETCH_RATE_LIMITED
 } from '../helpers/subscriptionFetchStatus'
 import { detailBackfillRevision } from '../helpers/subscriptionDetailBackfill'
 import { injectedFetchFailure } from '../helpers/subscriptionFailureInjection'
+import {
+  cancelSubscriptionRecovery,
+  recoverUnresolvedChannels,
+  NO_RETRY_ATTEMPTS
+} from '../helpers/subscriptionRecovery'
 
 /**
  * The parts of a subscription feed that are the same for videos, live streams,
@@ -210,6 +216,9 @@ export function useSubscriptionFeed(descriptor) {
       return
     }
 
+    // A refresh supersedes any recovery still working through the last one
+    cancelSubscriptionRecovery()
+
     const channelsToLoadFromRemote = activeSubscriptionList.value
     let channelCount = 0
     isLoading.value = true
@@ -250,7 +259,7 @@ export function useSubscriptionFeed(descriptor) {
         })
       }
 
-      const { status, entries, name, thumbnailUrl } = result
+      const { status, entries } = result
 
       // Counted here rather than where the 403 is read, so that the tally
       // follows from the outcome itself. Anything that produces a rate limited
@@ -267,22 +276,7 @@ export function useSubscriptionFeed(descriptor) {
       channelCount++
       store.commit('setProgressBarPercentage', (channelCount / channelsToLoadFromRemote.length) * 100)
 
-      // null means the fetch failed, so leave whatever we already had alone.
-      // An empty array is a real answer and is worth caching.
-      if (entries != null) {
-        store.dispatch(updateAction, {
-          channelId: channel.id,
-          [entriesKey]: entries
-        })
-      }
-
-      if (name || thumbnailUrl) {
-        subscriptionUpdates.push({
-          channelId: channel.id,
-          channelName: name,
-          channelThumbnailUrl: thumbnailUrl
-        })
-      }
+      cacheChannelResult(channel, result, subscriptionUpdates)
 
       return entries ?? []
     }
@@ -293,7 +287,8 @@ export function useSubscriptionFeed(descriptor) {
     })
 
     endSubscriptionTrace(feed)
-    endFetchErrorCollection(feed, unresolvedChannels.value)
+
+    const collector = endFetchErrorCollection(feed)
 
     entryList.value = postProcess(results.flat())
     isLoading.value = false
@@ -301,6 +296,94 @@ export function useSubscriptionFeed(descriptor) {
     lastRemoteRefreshSuccessTimestamp.value = Date.now()
 
     store.dispatch('batchUpdateSubscriptionDetails', subscriptionUpdates)
+
+    if (!startRecoveryIfNeeded(useRss, collector)) {
+      // Nothing more is going to be attempted, so now it is worth saying
+      showFetchErrorSummary(feed, collector, unresolvedChannels.value)
+    }
+  }
+
+  /**
+   * Write one channel's result to the cache and note any change to its name or
+   * avatar. Shared by the refresh and by the recovery, so that a channel
+   * recovered later is stored exactly as one fetched first time would have been.
+   *
+   * @param {object} channel
+   * @param {{ entries: any[] | null, name?: string, thumbnailUrl?: string }} result
+   * @param {object[]} subscriptionUpdates collected, to be dispatched in one go
+   */
+  function cacheChannelResult(channel, { entries, name, thumbnailUrl }, subscriptionUpdates) {
+    // null means the fetch failed, so leave whatever we already had alone.
+    // An empty array is a real answer and is worth caching.
+    if (entries != null) {
+      store.dispatch(updateAction, {
+        channelId: channel.id,
+        [entriesKey]: entries
+      })
+    }
+
+    if (name || thumbnailUrl) {
+      subscriptionUpdates.push({
+        channelId: channel.id,
+        channelName: name,
+        channelThumbnailUrl: thumbnailUrl
+      })
+    }
+  }
+
+  /**
+   * Go after the channels the refresh could not reach, in the background.
+   *
+   * Deliberately does not touch the loading state: the feed shows what the
+   * refresh did manage and grows as the rest arrives, which is the difference
+   * between this and simply refreshing again.
+   *
+   * @param {boolean} useRss
+   * @param {object | undefined} collector the failures the refresh collected,
+   *   held back so they can be reported only if recovery cannot resolve them
+   * @returns {boolean} whether recovery took responsibility for them
+   */
+  function startRecoveryIfNeeded(useRss, collector) {
+    if (!store.getters.getSubscriptionAutoRecovery) { return false }
+    if (unresolvedChannels.value.length === 0) { return false }
+
+    const subscriptionUpdates = []
+
+    recoverUnresolvedChannels({
+      feed,
+      channels: unresolvedChannels.value.slice(),
+      // Injected failures apply here too, or a simulated outage would clear the
+      // moment recovery started and the later steps would never be reached.
+      // Retries suppressed: sending more requests because requests are being
+      // refused is exactly the wrong response to being refused.
+      fetchChannel: channel => injectedFetchFailure() ??
+        fetchChannel(channel, { useRss, failedAttempts: NO_RETRY_ATTEMPTS }),
+      onRecovered: (results) => {
+        const recoveredEntries = []
+
+        for (const { channel, result } of results) {
+          cacheChannelResult(channel, result, subscriptionUpdates)
+          recoveredEntries.push(...(result.entries ?? []))
+
+          const stillUnresolved = unresolvedChannels.value.filter(unresolved => unresolved.id !== channel.id)
+          unresolvedChannels.value = stillUnresolved
+        }
+
+        if (recoveredEntries.length > 0) {
+          entryList.value = postProcess(entryList.value.concat(recoveredEntries))
+        }
+
+        if (subscriptionUpdates.length > 0) {
+          store.dispatch('batchUpdateSubscriptionDetails', subscriptionUpdates.splice(0))
+        }
+      }
+    }).then(() => {
+      // Now that nothing further will be attempted, whatever is still missing
+      // is worth mentioning. A recovery that got everything back says nothing.
+      showFetchErrorSummary(feed, collector, unresolvedChannels.value)
+    })
+
+    return true
   }
 
   function loadFromRemoteFirstPerWindowSometimes() {
@@ -319,6 +402,10 @@ export function useSubscriptionFeed(descriptor) {
   }
 
   watch(activeSubscriptionList, () => {
+    // Switching profile means the channels being recovered are for a feed
+    // nobody is looking at any more
+    cancelSubscriptionRecovery()
+
     lastRemoteRefreshSuccessTimestamp.value = null
     isLoading.value = true
     loadFromCacheSometimes()

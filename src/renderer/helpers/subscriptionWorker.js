@@ -121,6 +121,33 @@ export function enqueueSubscriptionJobs(lane, jobs) {
 }
 
 /**
+ * Queue one job and resolve once it has run, so a caller can sequence work
+ * across the queue without holding it open. A job dropped as a duplicate
+ * resolves immediately: the work is already accounted for either way, and a
+ * caller waiting forever on a job that will never run would be worse.
+ *
+ * @param {string} lane
+ * @param {WorkerJob} job
+ * @returns {Promise<void>}
+ */
+export function enqueueSubscriptionJob(lane, job) {
+  return new Promise((resolve) => {
+    const added = enqueueSubscriptionJobs(lane, [{
+      ...job,
+      run: async () => {
+        try {
+          await job.run()
+        } finally {
+          resolve()
+        }
+      }
+    }])
+
+    if (added === 0) { resolve() }
+  })
+}
+
+/**
  * Drop everything queued for a lane. The job already in flight is allowed to
  * finish, since there is nothing to abort a request with here and its result is
  * still worth having.

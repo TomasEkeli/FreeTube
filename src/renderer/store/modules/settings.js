@@ -315,6 +315,9 @@ const state = {
   // Fill in the details RSS feeds leave out, notably the video duration, in the
   // background for the part of the subscription feed on screen
   subscriptionBackfillDetails: true,
+  // After a refresh that could not reach some channels, go back for them in the
+  // background: by profile, then one at a time
+  subscriptionAutoRecovery: true,
   settingsPassword: '',
   useDeArrowTitles: false,
   useDeArrowThumbnails: false,

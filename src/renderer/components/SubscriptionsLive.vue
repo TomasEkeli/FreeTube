@@ -55,12 +55,16 @@ const {
   autoFetchGetter: 'getSubscriptionForLiveStreamsFirstAutoFetchRun',
   autoFetchMutation: 'setSubscriptionForLiveStreamsFirstAutoFetchRun',
   rssMode: 'setting',
-  fetchChannel: (channel, { useRss }) => {
+  fetchChannel: (channel, { useRss, failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
-      return useRss ? getChannelLiveInvidiousRSS(channel) : getChannelLiveInvidious(channel)
+      return useRss
+        ? getChannelLiveInvidiousRSS(channel, failedAttempts)
+        : getChannelLiveInvidious(channel, failedAttempts)
     }
 
-    return useRss ? getChannelLiveLocalRSS(channel) : getChannelLiveLocal(channel)
+    return useRss
+      ? getChannelLiveLocalRSS(channel, failedAttempts)
+      : getChannelLiveLocal(channel, failedAttempts)
   },
   postProcess: updateVideoListAfterProcessing
 })

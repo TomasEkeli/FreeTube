@@ -131,28 +131,40 @@ export function reportRateLimited(feed) {
 }
 
 /**
- * Close collection and, if any channel was left unresolved, show one summary.
- *
- * The count that matters is channels the refresh could not get, which is not the
- * number of errors: one channel can error at every rung of its retry ladder, and
- * the ladder usually recovers it by falling back to another source. A run that
- * logged forty-two errors but resolved all but eight of them should say eight,
- * and a run whose ladder recovered everything should say nothing at all. So the
- * caller passes in the channels actually left unresolved, being the only party
- * that knows.
+ * Stop collecting and hand back what was collected. Says nothing on its own:
+ * whether anything is worth telling anyone depends on what happens next, which
+ * the caller knows and this does not.
  *
  * @param {string} feed
- * @param {{ id: string, name?: string }[]} [unresolvedChannels]
  * @returns {FetchErrorCollector | undefined}
  */
-export function endFetchErrorCollection(feed, unresolvedChannels = []) {
+export function endFetchErrorCollection(feed) {
   const collector = collectors.get(feed)
-
-  if (collector == null) { return }
 
   collectors.delete(feed)
 
-  if (unresolvedChannels.length === 0) { return collector }
+  return collector
+}
+
+/**
+ * Report channels that could not be fetched, once, when nothing further is
+ * going to be done about them.
+ *
+ * Two things decide whether this is worth saying. The count is channels left
+ * unresolved rather than errors seen, because one channel can error at every
+ * rung of its retry ladder and usually gets recovered by a fallback anyway, so
+ * a run that logged forty two errors and resolved all but eight should say
+ * eight. And it must not be said while the recovery is still working: a refresh
+ * that loses three hundred and eighty channels and quietly gets every one of
+ * them back is a success, and announcing the failure in the middle of it is
+ * alarming about a problem that is already being solved.
+ *
+ * @param {string} feed
+ * @param {FetchErrorCollector | undefined} collector
+ * @param {{ id: string, name?: string }[]} unresolvedChannels
+ */
+export function showFetchErrorSummary(feed, collector, unresolvedChannels) {
+  if (collector == null || unresolvedChannels.length === 0) { return }
 
   const message = collector.rateLimited > 0
     ? i18n.global.t('Subscriptions.Fetch Errors Rate Limited', {
@@ -168,8 +180,6 @@ export function endFetchErrorCollection(feed, unresolvedChannels = []) {
   showToast(message, 10000, () => {
     copyToClipboard(formatErrorReport(feed, collector, unresolvedChannels))
   })
-
-  return collector
 }
 
 /**

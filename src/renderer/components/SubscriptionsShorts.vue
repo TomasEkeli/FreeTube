@@ -56,12 +56,12 @@ const {
   // There is no scraper path for shorts: the channel shorts tab carries no
   // publish dates, so a feed cannot be built from it.
   rssMode: 'always',
-  fetchChannel: (channel) => {
+  fetchChannel: (channel, { failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
-      return getChannelShortsInvidious(channel)
+      return getChannelShortsInvidious(channel, failedAttempts)
     }
 
-    return getChannelShortsLocal(channel)
+    return getChannelShortsLocal(channel, failedAttempts)
   },
   postProcess: updateVideoListAfterProcessing
 })

@@ -145,6 +145,32 @@ export function traceChannelFetch(feed, channelId) {
 }
 
 /**
+ * Report a step of the recovery that follows a failed refresh.
+ *
+ * Without this the recovery is invisible: it changes no loading state by
+ * design, and the only evidence it ran at all was reverse engineered from
+ * timestamps in the database.
+ *
+ * @param {string} feed
+ * @param {string} stage
+ * @param {object} detail
+ * @param {number} [detail.groups]
+ * @param {number} [detail.channels]
+ * @param {number} [detail.recovered]
+ * @param {number} [detail.remaining]
+ * @param {string} [detail.label]
+ */
+export function traceRecovery(feed, stage, detail = {}) {
+  if (!subscriptionTraceEnabled) { return }
+
+  const parts = Object.entries(detail)
+    .filter(([, value]) => value != null)
+    .map(([key, value]) => `${key}=${value}`)
+
+  console.log(`[subs-trace] recovery ${feed} ${stage} ${parts.join(' ')}`.trimEnd())
+}
+
+/**
  * Close the trace for a feed and print the summary.
  * @param {string} feed
  */
