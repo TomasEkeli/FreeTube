@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 import store from '../store/index'
 
 import { getLocalChannelVideos } from './api/local'
@@ -38,6 +40,19 @@ const failedThisSession = new Set()
 
 /** Channels already filled in, so a re-offered feed costs nothing. */
 const completedThisSession = new Set()
+
+/**
+ * Bumped whenever a merge actually changed something.
+ *
+ * The merge writes into the video objects the feed is already holding, but the
+ * feed holds them in a shallowRef, so mutating them tells Vue nothing. Without a
+ * signal the durations land in the store and on disk and never appear on
+ * screen, which is exactly what happened the first time this was tried against a
+ * real subscription list. The feed watches this and rebuilds its array, which
+ * both triggers the shallowRef and lets the changed keys remount the items whose
+ * details arrived.
+ */
+export const detailBackfillRevision = ref(0)
 
 /**
  * Work out which channels are worth asking about, in the order they first appear
@@ -125,6 +140,8 @@ export function backfillDetailsForVisibleVideos(visibleVideos) {
         channelId,
         videos
       })
+
+      detailBackfillRevision.value++
     }
   })))
 }

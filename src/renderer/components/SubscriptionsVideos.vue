@@ -64,7 +64,8 @@ const {
 
     return useRss ? getChannelVideosLocalRSS(channel) : getChannelVideosLocalScraper(channel)
   },
-  postProcess: updateVideoListAfterProcessing
+  postProcess: updateVideoListAfterProcessing,
+  followsDetailBackfill: true
 })
 
 async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {

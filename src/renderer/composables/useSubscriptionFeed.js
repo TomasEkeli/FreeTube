@@ -19,6 +19,7 @@ import {
   endFetchErrorCollection,
   isRetryableFetchStatus
 } from '../helpers/subscriptionFetchStatus'
+import { detailBackfillRevision } from '../helpers/subscriptionDetailBackfill'
 
 /**
  * The parts of a subscription feed that are the same for videos, live streams,
@@ -48,6 +49,8 @@ import {
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
  * @property {(entries: any[]) => any[]} postProcess filter and sort for display
+ * @property {boolean} [followsDetailBackfill] whether this feed's entries can be
+ *   filled in in the background, and so needs rebuilding when they are
  */
 
 /**
@@ -63,7 +66,8 @@ export function useSubscriptionFeed(descriptor) {
     autoFetchMutation,
     rssMode,
     fetchChannel,
-    postProcess
+    postProcess,
+    followsDetailBackfill = false
   } = descriptor
 
   const isLoading = ref(true)
@@ -306,6 +310,20 @@ export function useSubscriptionFeed(descriptor) {
     isLoading.value = true
     loadFromCacheSometimes()
   }, { deep: true })
+
+  if (followsDetailBackfill) {
+    // The back-fill writes straight into the entry objects this list already
+    // holds, and a shallowRef says nothing about that. Rebuilding the array is
+    // what makes the new details appear: it triggers the ref, and the entries
+    // that changed now carry a different key, so those items are rebuilt and
+    // read their props again. Order does not change, because the merge leaves
+    // the publish time alone.
+    watch(detailBackfillRevision, () => {
+      if (entryList.value.length === 0) { return }
+
+      entryList.value = postProcess(entryList.value.slice())
+    })
+  }
 
   if (!subscriptionCacheReady.value) {
     watch(subscriptionCacheReady, () => {
