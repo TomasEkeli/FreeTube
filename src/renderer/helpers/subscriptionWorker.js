@@ -23,8 +23,25 @@ export const LANE_ENRICHMENT = 'enrichment'
 
 const LANES = [LANE_RECOVERY, LANE_ENRICHMENT]
 
-/** Long enough to be a trickle rather than a burst. Tune against FT_SUBS_TRACE. */
-export const WORKER_DELAY_MS = 1500
+/**
+ * The gap after a job, per lane.
+ *
+ * Recovery is deliberately the slower of the two. It only runs because
+ * something has already refused us, so it is the worst possible moment to be
+ * quick, and by the time it is going one channel at a time that is the last
+ * thing left to try.
+ *
+ * The back-fill is asking an API that is answering perfectly well, so it can be
+ * brisker. Even so the gap is not what makes it slow: a channel takes about
+ * four seconds, of which this was one and a half, the rest being two requests
+ * because a fresh Innertube session is created per call. Halving the requests
+ * by reusing a session would do more than shortening this, at the cost of the
+ * anti-tracking property upstream keeps it for.
+ */
+export const LANE_DELAYS_MS = {
+  recovery: 1500,
+  enrichment: 500
+}
 
 /**
  * @typedef {object} WorkerJob
@@ -73,12 +90,17 @@ let cancelledLanes = new Set()
  */
 let generation = 0
 
-/** Overridable so tests do not have to wait in real time. */
-let delayMs = WORKER_DELAY_MS
+/** Overridden so tests do not have to wait in real time. */
+let delayOverrideMs = null
 
 /** @param {number} ms */
 export function setSubscriptionWorkerDelayForTests(ms) {
-  delayMs = ms
+  delayOverrideMs = ms
+}
+
+/** @param {string} lane */
+function delayForLane(lane) {
+  return delayOverrideMs ?? LANE_DELAYS_MS[lane] ?? LANE_DELAYS_MS[LANE_RECOVERY]
 }
 
 function queuedCount() {
@@ -216,10 +238,14 @@ async function drain() {
 
       progress.done++
 
+      const finishedLane = lane
+
       lane = nextLane()
 
       if (lane != null) {
-        await sleep(delayMs)
+        // Paced by the lane that just ran, since that is the one whose requests
+        // are being spaced out
+        await sleep(delayForLane(finishedLane))
         // Cancelling during the gap should take effect immediately
         lane = nextLane()
       }
@@ -257,5 +283,5 @@ export function resetSubscriptionWorkerForTests() {
   progress.done = 0
   progress.queued = 0
   progress.label = null
-  delayMs = WORKER_DELAY_MS
+  delayOverrideMs = null
 }

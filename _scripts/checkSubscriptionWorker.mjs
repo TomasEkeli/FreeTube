@@ -18,6 +18,7 @@ import {
   setSubscriptionWorkerDelayForTests,
   subscriptionWorkerBusy,
   subscriptionWorkerProgress,
+  LANE_DELAYS_MS,
   LANE_ENRICHMENT,
   LANE_RECOVERY
 } from '../src/renderer/helpers/subscriptionWorker.js'
@@ -192,6 +193,38 @@ function check(name, condition) {
   await sleep(300)
 
   check('enqueue during a drain does not start a second runner', peak === 1)
+}
+
+// Recovery is paced more slowly than the back-fill on purpose: it only runs
+// because something already refused us
+{
+  const recovery = LANE_DELAYS_MS[LANE_RECOVERY]
+  const enrichment = LANE_DELAYS_MS[LANE_ENRICHMENT]
+
+  check(`recovery waits longer between jobs than the back-fill (${recovery}ms vs ${enrichment}ms)`, recovery > enrichment)
+}
+
+// And the gap actually observed matches the lane that ran
+{
+  resetSubscriptionWorkerForTests()
+
+  const started = []
+  const jobs = lane => Array.from({ length: 3 }, (_, i) => ({
+    key: `${lane}-timed-${i}`,
+    run: async () => { started.push(Date.now()) }
+  }))
+
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, jobs('e'))
+
+  await sleep(LANE_DELAYS_MS[LANE_ENRICHMENT] * 4)
+
+  const gaps = started.slice(1).map((time, i) => time - started[i])
+  const slowest = Math.max(...gaps)
+
+  check(
+    `back-fill gaps follow its own lane (${gaps.join(', ')}ms)`,
+    started.length === 3 && slowest < LANE_DELAYS_MS[LANE_RECOVERY]
+  )
 }
 
 cancelAllSubscriptionWork()
