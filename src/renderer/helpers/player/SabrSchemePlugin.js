@@ -660,10 +660,13 @@ async function doRequest(
           case UMPPartId.STREAM_PROTECTION_STATUS: {
             const streamProtectionStatus = decodePart(part, StreamProtectionStatus)
             protectionStatus = streamProtectionStatus?.status ?? 0
-            if (protectionStatus === 1) {
-              // The token is trusted, so earlier attestation failures no longer apply
-              attestationState.refreshes = 0
-            }
+
+            // A trusted status used to clear the recovery budget here. It is
+            // not proof of anything on its own: a session can keep answering
+            // "trusted" while serving nothing, and every such answer put the
+            // budget back to zero, so the escalation was never reached and the
+            // video refreshed forever in front of a drained buffer. Media
+            // actually arriving is the only proof, and noteMediaServed has it.
             if (streamProtectionStatus.status === 3) {
               invalidPoToken = true
             }
