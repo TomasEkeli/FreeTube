@@ -1,42 +1,30 @@
 <template>
   <SubscriptionsTabUi
     :is-loading="isLoading"
-    :video-list="videoList"
+    :video-list="entryList"
     :error-channels="errorChannels"
-    :last-refresh-timestamp="lastVideoRefreshTimestamp"
+    :last-refresh-timestamp="lastRefreshTimestamp"
     :attempted-fetch="attemptedFetch"
     :title="t('Global.Videos')"
-    @refresh="loadVideosForSubscriptionsFromRemote"
+    @refresh="refresh"
   />
 </template>
 
 <script setup>
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
 import store from '../store/index'
 
-import {
-  getRelativeTimeFromDate,
-  getChannelPlaylistId
-} from '../helpers/utils'
+import { useSubscriptionFeed } from '../composables/useSubscriptionFeed'
+
+import { getChannelPlaylistId } from '../helpers/utils'
 import { getInvidiousChannelVideos, invidiousFetch } from '../helpers/api/invidious'
 import { getLocalChannelVideos } from '../helpers/api/local'
+import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
 import {
-  parseYouTubeRSSFeed,
-  processInChunks,
-  updateVideoListAfterProcessing,
-  SUBSCRIPTION_CHUNK_DELAY_MS,
-  SUBSCRIPTION_RSS_CHUNK_SIZE,
-  SUBSCRIPTION_SCRAPER_CHUNK_SIZE
-} from '../helpers/subscriptions'
-import { beginSubscriptionTrace, endSubscriptionTrace, traceChannelFetch } from '../helpers/subscriptionTrace'
-import {
-  beginFetchErrorCollection,
-  endFetchErrorCollection,
-  isRetryableFetchStatus,
   reportFetchError,
   reportRateLimited,
   FETCH_FAILED,
@@ -47,254 +35,36 @@ import {
 
 const { t } = useI18n()
 
-const isLoading = ref(true)
-const videoList = shallowRef([])
-const errorChannels = ref([])
-/**
- * Channels whose last fetch failed in a way worth retrying, as opposed to
- * `errorChannels`, which is for channels that are simply gone. Consumed by the
- * tiered recovery that retries them in smaller, slower batches.
- * @type {import('vue').Ref<{ id: string, name?: string }[]>}
- */
-const unresolvedChannels = ref([])
-const attemptedFetch = ref(false)
-/** @type {import('vue').Ref<number | null>} */
-const lastRemoteRefreshSuccessTimestamp = ref(null)
-
-let alreadyLoadedRemotely = false
-
-/** @type {import('vue').ComputedRef<'local' | 'invidious'>} */
-const backendPreference = computed(() => store.getters.getBackendPreference)
-
-/** @type {import('vue').ComputedRef<'local' | 'invidious'>} */
+/** @type {import('vue').ComputedRef<boolean>} */
 const backendFallback = computed(() => store.getters.getBackendFallback)
 
 /** @type {import('vue').ComputedRef<string>} */
 const currentInvidiousInstanceUrl = computed(() => store.getters.getCurrentInvidiousInstanceUrl)
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const subscriptionCacheReady = computed(() => store.getters.getSubscriptionCacheReady)
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const useRssFeeds = computed(() => store.getters.getUseRssFeeds)
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const fetchSubscriptionsAutomatically = computed(() => store.getters.getFetchSubscriptionsAutomatically)
-
-const activeSubscriptionList = computed(() => store.getters.getActiveProfile.subscriptions)
-
-const cacheEntriesForAllActiveProfileChannels = computed(() => {
-  const videoCache = store.getters.getVideoCache
-  const entries = []
-
-  activeSubscriptionList.value.forEach((channel) => {
-    const cacheEntry = videoCache[channel.id]
-
-    if (cacheEntry != null) {
-      entries.push(cacheEntry)
+const {
+  isLoading,
+  entryList,
+  errorChannels,
+  attemptedFetch,
+  lastRefreshTimestamp,
+  refresh
+} = useSubscriptionFeed({
+  feed: 'videos',
+  cacheGetter: 'getVideoCache',
+  updateAction: 'updateSubscriptionVideosCacheByChannel',
+  entriesKey: 'videos',
+  autoFetchGetter: 'getSubscriptionForVideosFirstAutoFetchRun',
+  autoFetchMutation: 'setSubscriptionForVideosFirstAutoFetchRun',
+  rssMode: 'setting',
+  fetchChannel: (channel, { useRss }) => {
+    if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
+      return useRss ? getChannelVideosInvidiousRSS(channel) : getChannelVideosInvidiousScraper(channel)
     }
-  })
 
-  return entries
+    return useRss ? getChannelVideosLocalRSS(channel) : getChannelVideosLocalScraper(channel)
+  },
+  postProcess: updateVideoListAfterProcessing
 })
-
-const videoCacheForAllActiveProfileChannelsPresent = computed(() => {
-  if (
-    cacheEntriesForAllActiveProfileChannels.value.length === 0 ||
-    cacheEntriesForAllActiveProfileChannels.value.length < activeSubscriptionList.value.length
-  ) {
-    return false
-  }
-
-  return cacheEntriesForAllActiveProfileChannels.value.every((cacheEntry) => {
-    return cacheEntry.videos != null
-  })
-})
-
-const lastVideoRefreshTimestamp = computed(() => {
-  // Cache is not ready when data is just loaded from remote
-  if (lastRemoteRefreshSuccessTimestamp.value) {
-    return getRelativeTimeFromDate(lastRemoteRefreshSuccessTimestamp.value, true)
-  }
-
-  if (
-    !videoCacheForAllActiveProfileChannelsPresent.value ||
-     cacheEntriesForAllActiveProfileChannels.value.length === 0
-  ) {
-    return ''
-  }
-
-  let minTimestamp = null
-  cacheEntriesForAllActiveProfileChannels.value.forEach((cacheEntry) => {
-    if (!minTimestamp || cacheEntry.timestamp.getTime() < minTimestamp.getTime()) {
-      minTimestamp = cacheEntry.timestamp
-    }
-  })
-  return getRelativeTimeFromDate(minTimestamp.getTime(), true)
-})
-
-watch(activeSubscriptionList, () => {
-  lastRemoteRefreshSuccessTimestamp.value = null
-  isLoading.value = true
-  loadVideosFromCacheSometimes()
-}, { deep: true })
-
-if (!subscriptionCacheReady.value) {
-  watch(subscriptionCacheReady, () => {
-    if (!alreadyLoadedRemotely) {
-      loadVideosFromCacheSometimes()
-    }
-  })
-}
-
-onMounted(() => {
-  loadVideosFromRemoteFirstPerWindowSometimes()
-})
-
-function loadVideosFromRemoteFirstPerWindowSometimes() {
-  if (
-    !fetchSubscriptionsAutomatically.value ||
-    // Only auto fetch once per window
-    store.getters.getSubscriptionForVideosFirstAutoFetchRun
-  ) {
-    loadVideosFromCacheSometimes()
-    return
-  }
-
-  alreadyLoadedRemotely = true
-  loadVideosForSubscriptionsFromRemote()
-  store.commit('setSubscriptionForVideosFirstAutoFetchRun')
-}
-
-function loadVideosFromCacheSometimes() {
-  // Can only load reliably when cache ready
-  if (!subscriptionCacheReady.value) { return }
-
-  // This method is called on view visible
-  if (videoCacheForAllActiveProfileChannelsPresent.value) {
-    loadVideosFromCacheForAllActiveProfileChannels()
-    return
-  }
-
-  if (fetchSubscriptionsAutomatically.value) {
-    // `isLoading.value = false` is called inside `loadVideosForSubscriptionsFromRemote` when needed
-    loadVideosForSubscriptionsFromRemote()
-    return
-  }
-
-  // Auto fetch disabled, not enough cache for profile = show nothing
-  videoList.value = []
-  attemptedFetch.value = false
-  isLoading.value = false
-}
-
-function loadVideosFromCacheForAllActiveProfileChannels() {
-  const videoList_ = cacheEntriesForAllActiveProfileChannels.value.flatMap((cacheEntry) => {
-    return cacheEntry.videos
-  })
-
-  videoList.value = updateVideoListAfterProcessing(videoList_)
-  isLoading.value = false
-}
-
-async function loadVideosForSubscriptionsFromRemote() {
-  if (activeSubscriptionList.value.length === 0) {
-    isLoading.value = false
-    videoList.value = []
-    return
-  }
-
-  const channelsToLoadFromRemote = activeSubscriptionList.value
-  let channelCount = 0
-  isLoading.value = true
-
-  const useRss = useRssFeeds.value
-
-  store.commit('setShowProgressBar', true)
-  store.commit('setProgressBarPercentage', 0)
-  attemptedFetch.value = true
-
-  errorChannels.value = []
-  unresolvedChannels.value = []
-  const subscriptionUpdates = []
-  const videoListFromRemote = []
-
-  beginSubscriptionTrace('videos', {
-    channelCount: channelsToLoadFromRemote.length,
-    useRss,
-    backend: backendPreference.value
-  })
-  beginFetchErrorCollection('videos', channelsToLoadFromRemote.length)
-
-  const processChannel = async (channel) => {
-    let videos, name, thumbnailUrl, status
-
-    const traceDone = traceChannelFetch('videos', channel.id)
-
-    try {
-      if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
-        if (useRss) {
-          ({ status, videos, name, thumbnailUrl } = await getChannelVideosInvidiousRSS(channel))
-        } else {
-          ({ status, videos, name, thumbnailUrl } = await getChannelVideosInvidiousScraper(channel))
-        }
-      } else {
-        if (useRss) {
-          ({ status, videos, name, thumbnailUrl } = await getChannelVideosLocalRSS(channel))
-        } else {
-          ({ status, videos, name, thumbnailUrl } = await getChannelVideosLocalScraper(channel))
-        }
-      }
-    } finally {
-      traceDone({
-        entries: videos?.length ?? null,
-        outcome: status ?? 'threw'
-      })
-    }
-
-    if (isRetryableFetchStatus(status)) {
-      unresolvedChannels.value.push(channel)
-    }
-
-    channelCount++
-    const percentageComplete = (channelCount / channelsToLoadFromRemote.length) * 100
-    store.commit('setProgressBarPercentage', percentageComplete)
-
-    if (videos != null) {
-      store.dispatch('updateSubscriptionVideosCacheByChannel', {
-        channelId: channel.id,
-        videos: videos
-      })
-    }
-
-    if (name || thumbnailUrl) {
-      subscriptionUpdates.push({
-        channelId: channel.id,
-        channelName: name,
-        channelThumbnailUrl: thumbnailUrl
-      })
-    }
-
-    return videos ?? []
-  }
-
-  const results = await processInChunks(channelsToLoadFromRemote, processChannel, {
-    chunkSize: useRss ? SUBSCRIPTION_RSS_CHUNK_SIZE : SUBSCRIPTION_SCRAPER_CHUNK_SIZE,
-    delayMs: SUBSCRIPTION_CHUNK_DELAY_MS
-  })
-
-  videoListFromRemote.push(...results.flat())
-
-  endSubscriptionTrace('videos')
-  endFetchErrorCollection('videos')
-
-  videoList.value = updateVideoListAfterProcessing(videoListFromRemote)
-  isLoading.value = false
-  store.commit('setShowProgressBar', false)
-  lastRemoteRefreshSuccessTimestamp.value = Date.now()
-
-  store.dispatch('batchUpdateSubscriptionDetails', subscriptionUpdates)
-}
 
 async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
   try {
@@ -305,13 +75,15 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
       errorChannels.value.push(channel)
       return {
         status: FETCH_UNAVAILABLE,
-        videos: []
+        entries: []
       }
     }
 
     return {
       status: FETCH_OK,
-      ...result
+      entries: result.videos,
+      name: result.name,
+      thumbnailUrl: result.thumbnailUrl
     }
   } catch (err) {
     reportFetchError('videos', { channel, error: err, api: 'local' })
@@ -325,7 +97,7 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
         } else {
           return {
             status: FETCH_FAILED,
-            videos: null
+            entries: null
           }
         }
       case 2:
@@ -333,7 +105,7 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
       default:
         return {
           status: FETCH_FAILED,
-          videos: null
+          entries: null
         }
     }
   }
@@ -351,7 +123,7 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
 
       return {
         status: FETCH_RATE_LIMITED,
-        videos: null
+        entries: null
       }
     }
 
@@ -368,14 +140,14 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
 
         return {
           status: FETCH_UNAVAILABLE,
-          videos: []
+          entries: []
         }
       }
 
       // the channel is alive, it just has no videos tab
       return {
         status: FETCH_OK,
-        videos: []
+        entries: []
       }
     }
 
@@ -388,13 +160,14 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
       // and the channel stays retryable for later.
       return {
         status: FETCH_FAILED,
-        videos: null
+        entries: null
       }
     }
 
     return {
       status: FETCH_OK,
-      ...parsed
+      entries: parsed.videos,
+      name: parsed.name
     }
   } catch (error) {
     reportFetchError('videos', { channel, error, api: 'local' })
@@ -408,7 +181,7 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
         } else {
           return {
             status: FETCH_FAILED,
-            videos: null
+            entries: null
           }
         }
       case 2:
@@ -416,7 +189,7 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
       default:
         return {
           status: FETCH_FAILED,
-          videos: null
+          entries: null
         }
     }
   }
@@ -434,8 +207,8 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
 
     return {
       status: FETCH_OK,
-      name,
-      videos: result.videos
+      entries: result.videos,
+      name
     }
   } catch (err) {
     reportFetchError('videos', { channel, error: err, api: 'invidious' })
@@ -449,7 +222,7 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
         } else {
           return {
             status: FETCH_FAILED,
-            videos: null
+            entries: null
           }
         }
       case 2:
@@ -457,7 +230,7 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
       default:
         return {
           status: FETCH_FAILED,
-          videos: null
+          entries: null
         }
     }
   }
@@ -475,7 +248,7 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
 
       return {
         status: FETCH_RATE_LIMITED,
-        videos: null
+        entries: null
       }
     }
 
@@ -492,13 +265,13 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
 
         return {
           status: FETCH_UNAVAILABLE,
-          videos: []
+          entries: []
         }
       }
 
       return {
         status: FETCH_OK,
-        videos: []
+        entries: []
       }
     }
 
@@ -507,13 +280,14 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
     if (parsed.parseFailed) {
       return {
         status: FETCH_FAILED,
-        videos: null
+        entries: null
       }
     }
 
     return {
       status: FETCH_OK,
-      ...parsed
+      entries: parsed.videos,
+      name: parsed.name
     }
   } catch (error) {
     reportFetchError('videos', { channel, error, api: 'invidious' })
@@ -527,7 +301,7 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
         } else {
           return {
             status: FETCH_FAILED,
-            videos: null
+            entries: null
           }
         }
       case 2:
@@ -535,7 +309,7 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
       default:
         return {
           status: FETCH_FAILED,
-          videos: null
+          entries: null
         }
     }
   }
