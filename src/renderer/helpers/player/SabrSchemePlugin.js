@@ -53,14 +53,54 @@ const ATTESTATION_LOW_BUFFER_SECONDS = 6
 const ATTESTATION_REFRESH_CEILING = 12
 
 /**
+ * How many times to rebuild the SABR session from scratch, keeping the page.
+ * This is the automatic version of what a viewer does by reopening a walled
+ * video, which is known to work where repeated refreshes do not.
+ */
+const ATTESTATION_HARD_RELOAD_LIMIT = 2
+
+/**
+ * How many times to fall back to reloading the whole watch page. More
+ * disruptive than a session reload and no more likely to work, so this is a
+ * backstop for the cases a session reload cannot cover, such as the formats
+ * changing underneath us.
+ */
+const ATTESTATION_PAGE_RELOAD_LIMIT = 1
+
+/**
+ * How many media bearing responses count as the video genuinely having
+ * recovered, at which point the reload budgets are restored. Without a
+ * threshold, a video that wallsed and recovered every half minute would mint
+ * itself an unlimited supply of reloads.
+ */
+const ATTESTATION_RECOVERY_SEGMENTS = 10
+
+/**
  * Survives player teardown, so that recovery attempts triggered by a
- * distrusted PO token can be counted even across a full reload. Scoped to a
- * single video.
+ * distrusted PO token can be counted across the session reloads and page
+ * reloads that destroy everything else. Scoped to a single video.
  */
 const attestationState = {
   /** @type {?string} */
   videoId: null,
   refreshes: 0,
+  hardReloads: 0,
+  pageReloads: 0,
+  mediaResponsesSinceReload: 0,
+}
+
+/**
+ * Restores the full recovery budget for a video. Called when the viewer asks
+ * for a retry themselves, which is a clear statement that they want the
+ * attempt made regardless of what the automatic ladder already spent.
+ * @param {string} videoId
+ */
+export function resetAttestationBudget(videoId) {
+  attestationState.videoId = videoId
+  attestationState.refreshes = 0
+  attestationState.hardReloads = 0
+  attestationState.pageReloads = 0
+  attestationState.mediaResponsesSinceReload = 0
 }
 
 /**
@@ -141,6 +181,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {(cb: ({backoffMs: number}) => void) => void} onBackoffRequested
  * @property {(cb: () => void) => void} onReloadOnce
  * @property {(cb: () => void) => void} onRefreshNeeded
+ * @property {(cb: () => void) => void} onHardReloadNeededOnce
  * @property {(newSabrData: import('../../views/Watch/Watch').SabrData) => void} refresh
  * @property {(error: Error) => void} abandonRefresh
  * @property {() => string[]} getFormatIds
@@ -310,15 +351,38 @@ function bufferedSecondsAhead(player) {
 }
 
 /**
- * Asks the watch view to reload the player. Requests already in flight abort
- * themselves once `playerReloadRequested` is set.
+ * Ends this SABR session and asks for the named recovery. Requests already in
+ * flight abort themselves once `playerReloadRequested` is set.
  * @param {CurrentState} currentState
+ * @param {'reload' | 'hard-reload-needed'} event
  */
-function requestPlayerReload(currentState) {
+function endSessionForRecovery(currentState, event) {
   currentState.sabrStreamState.playerReloadRequested = true
   if (!currentState.abortController.signal.aborted) {
     currentState.abortController.abort()
-    currentState.eventEmitter.emit('reload')
+    currentState.eventEmitter.emit(event)
+  }
+}
+
+/**
+ * Asks the watch view to reload the player.
+ * @param {CurrentState} currentState
+ */
+function requestPlayerReload(currentState) {
+  endSessionForRecovery(currentState, 'reload')
+}
+
+/**
+ * Records that the server served media, which is the only proof that recovery
+ * worked. Enough of it restores the reload budgets.
+ */
+function noteMediaServed() {
+  attestationState.refreshes = 0
+  attestationState.mediaResponsesSinceReload += 1
+
+  if (attestationState.mediaResponsesSinceReload >= ATTESTATION_RECOVERY_SEGMENTS) {
+    attestationState.hardReloads = 0
+    attestationState.pageReloads = 0
   }
 }
 
@@ -722,6 +786,8 @@ async function doRequest(
   if (responseDataChunks.length > 0 && segmentComplete) {
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
 
+    noteMediaServed()
+
     if (operationInputs.isInit) {
       currentState.initDataCache.set(operationInputs.formatIdString, data)
     }
@@ -747,6 +813,41 @@ async function doRequest(
       (bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS || attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
 
     if (outOfPatience) {
+      // Audio and video reach this together, so the first one to escalate
+      // ends the session for both. The budgets belong to the video, not to
+      // each stream.
+      if (currentState.sabrStreamState.playerReloadRequested) {
+        throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
+      }
+
+      // Rebuilding the session is what a viewer does by hand when they reopen
+      // a walled video, and it succeeds where refreshing the credentials
+      // underneath a running session does not. Why is not established: a
+      // reload both takes longer and starts a genuinely new session, and we
+      // cannot yet tell which of the two is the cure.
+      if (attestationState.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
+        attestationState.hardReloads += 1
+        attestationState.mediaResponsesSinceReload = 0
+
+        endSessionForRecovery(currentState, 'hard-reload-needed')
+
+        throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
+      }
+
+      if (attestationState.pageReloads < ATTESTATION_PAGE_RELOAD_LIMIT) {
+        attestationState.pageReloads += 1
+        attestationState.mediaResponsesSinceReload = 0
+
+        requestPlayerReload(currentState)
+
+        throw createRecoverableNetworkError(
+          ShakaError.Code.HTTP_ERROR,
+          operationInputs.uri,
+          new Error('Reloading player: SABR attestation recovery'),
+          operationInputs.requestType,
+        )
+      }
+
       throw new ShakaError(
         ShakaError.Severity.CRITICAL,
         ShakaError.Category.NETWORK,
@@ -915,12 +1016,16 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     return sessionGeneration
   }
 
+  if (attestationState.videoId !== sabrData.videoId) {
+    resetAttestationBudget(sabrData.videoId)
+  }
+
   // A new session gets a full refresh budget, whatever produced it: a new
   // video, the user reopening a walled one, or a recovery reload. Carrying a
   // spent budget into a fresh session made every attempt after the first give
   // up on its first block, which is why reopening a walled video only
-  // sometimes helped.
-  attestationState.videoId = sabrData.videoId
+  // sometimes helped. The reload budgets deliberately do not reset here, since
+  // they are what bounds the ladder.
   attestationState.refreshes = 0
 
   /** @type {SabrStreamState} */
@@ -1166,6 +1271,16 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
      */
     onRefreshNeeded(callback) {
       eventEmitter.on('refresh-needed', callback)
+    },
+    /**
+     * Fires when refreshing credentials underneath the running session has
+     * stopped being worth it and the session should be rebuilt from scratch,
+     * keeping the watch page. This session is finished either way: the
+     * consumer either rebuilds it or falls back to reloading the page.
+     * @param {() => void} callback
+     */
+    onHardReloadNeededOnce(callback) {
+      eventEmitter.once('hard-reload-needed', callback)
     },
     /**
      * Swaps in fresh credentials without tearing down the player. Protocol
