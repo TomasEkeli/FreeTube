@@ -1010,6 +1010,19 @@ function runApp() {
           }
     })
 
+    // Without this, a dead renderer only produces Electron's own one line notice,
+    // which says nothing about why it died. The reason distinguishes the cases that
+    // matter: `oom` is the machine running out of memory, `crashed` with exit code
+    // 133 is the SIGTRAP that software rendering produces, and anything else is
+    // worth investigating as a real bug.
+    newWindow.webContents.on('render-process-gone', (_, details) => {
+      console.error(
+        'Renderer process gone: reason %o, exit code %o',
+        details.reason,
+        details.exitCode
+      )
+    })
+
     // region Ensure child windows use same options since electron 14
 
     // https://github.com/electron/electron/blob/14-x-y/docs/api/window-open.md#native-window-example

@@ -50,6 +50,12 @@
       <span>{{ $t('Video.Player.Stats.Volume', { volumePercentage: stats.volume }) }}</span>
       <br>
       <template
+        v-if="normalizationPercentage !== null"
+      >
+        <span>{{ $t('Video.Player.Stats.Content Loudness', { loudnessDb: loudnessDb.toFixed(1), normalizationPercentage }) }}</span>
+        <br>
+      </template>
+      <template
         v-if="format !== 'legacy'"
       >
         <span>{{ $t('Video.Player.Stats.Bandwidth', { bandwidth: stats.bandwidth }) }}</span>

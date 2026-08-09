@@ -234,6 +234,15 @@ const state = {
   landingPage: 'subscriptions',
   listType: 'grid',
   maxVideoPlaybackRate: 3,
+  // The volume slider's ceiling, as a percentage. Anything above 100% is
+  // achieved with a Web Audio gain stage, as the video element itself stops at 100%.
+  // 1000% is +20 dB, which covers the quietest content seen in the wild
+  // (-18.9 dB, needing 883%) without the loudness correction being clamped.
+  // Set this to 100 to disable volume boost entirely.
+  maxVolume: 1000,
+  // Correct each video's volume for how loud it was mastered, using the loudness
+  // YouTube reports. Off by default because it is two-way: loud videos get quieter.
+  normalizeLoudness: false,
   onlyShowLatestFromChannel: false,
   onlyShowLatestFromChannelNumber: 1,
   openDeepLinksInNewWindow: false,
@@ -396,7 +405,11 @@ const sideEffectHandlers = {
   },
 
   defaultVolume: (_, value) => {
-    sessionStorage.setItem('volume', value)
+    // The video element refuses volumes above 1, so a preference above 100% is
+    // split into the part it can do and a gain factor for the rest.
+    // `volume` and `gain` always multiply to the requested volume.
+    sessionStorage.setItem('volume', Math.min(value, 1).toString())
+    sessionStorage.setItem('gain', Math.max(value, 1).toString())
     value === 0 ? sessionStorage.setItem('muted', 'true') : sessionStorage.setItem('muted', 'false')
     sessionStorage.setItem('defaultVolume', value)
   },
@@ -410,6 +423,12 @@ const sideEffectHandlers = {
   maxVideoPlaybackRate: ({ dispatch, state }, value) => {
     if (state.defaultPlayback > value) {
       dispatch('updateDefaultPlayback', value)
+    }
+  },
+
+  maxVolume: ({ dispatch, state }, value) => {
+    if (state.defaultVolume * 100 > value) {
+      dispatch('updateDefaultVolume', value / 100)
     }
   },
 

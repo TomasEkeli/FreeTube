@@ -166,6 +166,12 @@ export default defineComponent({
       playabilityStatus: '',
       totalAdTimeSeconds: 0,
       adEndTimeUnixMs: 0,
+      /**
+       * How much louder this video is than YouTube's reference loudness, in dB.
+       * Only the local API reports it, Invidious never does, so `null` means unknown.
+       * @type {number|null}
+       */
+      loudnessDb: null,
 
       onMountedRun: false,
 
@@ -425,6 +431,7 @@ export default defineComponent({
       this.recommendedVideos = []
       this.playabilityStatus = ''
       this.adEndTimeUnixMs = 0
+      this.loudnessDb = null
       this.errorMessage = null
       this.customErrorIcon = null
       this.videoGenreIsMusic = false
@@ -520,6 +527,11 @@ export default defineComponent({
         }
 
         this.adEndTimeUnixMs = adEndTimeUnixMs
+
+        // Copied out here because `result` is local to this function, so it is gone
+        // by the time the player needs the loudness.
+        // `0` is a legitimate loudness, so this must not be a truthiness check.
+        this.loudnessDb = result.player_config?.audio_config?.loudness_db ?? null
 
         this.isFamilyFriendly = result.basic_info.is_family_safe
 

@@ -455,10 +455,12 @@ Settings:
     Skip by Scrolling Over Video Player: Skip by Scrolling Over Video Player
     Display Play Button In Video Player: Display Play Button In Video Player
     Enter Fullscreen on Display Rotate: Enter Fullscreen on Display Rotate
+    Normalize Loudness: Normalize Loudness
     Next Video Interval: Autoplay Countdown Timer
     Autoplay Interruption Timer: Autoplay Interruption Timer
     Fast-Forward / Rewind Interval: Fast-Forward / Rewind Interval
     Default Volume: Default Volume
+    Max Volume: Max Volume
     Default Playback Rate: Default Playback Rate
     Max Video Playback Rate: Max Video Playback Rate
     Video Playback Rate Interval: Video Playback Rate Interval
@@ -950,6 +952,7 @@ Video:
       Player Dimensions: 'Player Dimensions: {width}x{height}'
       Bitrate: 'Bitrate: {bitrate} kbps'
       Volume: 'Volume: {volumePercentage}%'
+      Content Loudness: 'Content Loudness: {loudnessDb} dB (normalization {normalizationPercentage}%)'
       Bandwidth: 'Bandwidth: {bandwidth} kbps'
       Buffered: 'Buffered: {bufferedPercentage}%'
       Dropped Frames / Total Frames: 'Dropped Frames: {droppedFrames} / Total Frames: {totalFrames}'
@@ -1079,6 +1082,10 @@ Tooltips:
       the playback rate. Press and hold the Control key (Command Key on Mac) and left click the mouse
       to quickly return to the default playback rate (1x unless it has been changed in the settings).
     Skip by Scrolling Over Video Player: Use the scroll wheel to skip through the video, MPV style.
+    Normalize Loudness: Correct each video's volume for how loud it was mastered, so that
+      quiet videos are boosted to match everything else. This works both ways, so videos
+      that were mastered loudly will play quieter than they do now. Only available with
+      the local API, as Invidious does not report how loud a video is.
   External Player Settings:
     External Player: Choosing an external player will display an icon, for opening the
       video (playlist if supported) in the external player, on the thumbnail. Warning, Invidious settings do not affect external players.

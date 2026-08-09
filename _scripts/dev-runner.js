@@ -66,13 +66,17 @@ async function restartElectron() {
   const { pid } = electronProcess || {}
   await killElectron(pid)
 
-  electronProcess = spawn(electron, [
-    path.join(__dirname, '../dist/main.js'),
-    // '--enable-logging', // Enable to show logs from all electron processes
-    remoteDebugging ? '--inspect=9222' : '',
-    remoteDebugging ? '--remote-debugging-port=9223' : ''
-  ],
-    // { stdio: 'inherit' } // required for logs to actually appear in the stdout
+  electronProcess = spawn(
+    electron,
+    [
+      path.join(__dirname, '../dist/main.js'),
+      // Without this, console output from the main and renderer processes goes nowhere
+      '--enable-logging',
+      remoteDebugging ? '--inspect=9222' : '',
+      remoteDebugging ? '--remote-debugging-port=9223' : ''
+    ],
+    // required for logs to actually appear in the stdout
+    { stdio: 'inherit' }
   )
 
   electronProcess.on('exit', (code, _) => {

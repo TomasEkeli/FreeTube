@@ -73,6 +73,13 @@
           :default-value="enterFullscreenOnDisplayRotate"
           @change="updateEnterFullscreenOnDisplayRotate"
         />
+        <FtToggleSwitch
+          :label="t('Settings.Player Settings.Normalize Loudness')"
+          :compact="true"
+          :default-value="normalizeLoudness"
+          :tooltip="t('Tooltips.Player Settings.Normalize Loudness')"
+          @change="updateNormalizeLoudness"
+        />
       </div>
     </div>
     <FtFlexBox>
@@ -143,10 +150,19 @@
         :label="t('Settings.Player Settings.Default Volume')"
         :default-value="defaultVolume"
         :min-value="0"
-        :max-value="100"
+        :max-value="maxVolume"
         :step="1"
         value-extension="%"
         @change="updateDefaultVolume"
+      />
+      <FtSlider
+        :label="t('Settings.Player Settings.Max Volume')"
+        :default-value="maxVolume"
+        :min-value="100"
+        :max-value="3000"
+        :step="50"
+        value-extension="%"
+        @change="updateMaxVolume"
       />
       <FtSlider
         :label="t('Settings.Player Settings.Default Playback Rate')"
@@ -564,6 +580,26 @@ const defaultVolume = computed(() => Math.round(store.getters.getDefaultVolume *
  */
 function updateDefaultVolume(value) {
   store.dispatch('updateDefaultVolume', value / 100)
+}
+
+/** @type {import('vue').ComputedRef<number>} */
+const maxVolume = computed(() => store.getters.getMaxVolume)
+
+/**
+ * @param {number} value
+ */
+function updateMaxVolume(value) {
+  store.dispatch('updateMaxVolume', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const normalizeLoudness = computed(() => store.getters.getNormalizeLoudness)
+
+/**
+ * @param {boolean} value
+ */
+function updateNormalizeLoudness(value) {
+  store.dispatch('updateNormalizeLoudness', value)
 }
 
 /** @type {import('vue').ComputedRef<number>} */
