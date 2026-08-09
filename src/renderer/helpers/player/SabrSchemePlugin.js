@@ -17,7 +17,7 @@ import {
 import shaka from 'shaka-player'
 
 import { deepCopy } from '../utils'
-import { noteCredentialsInstalled, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
+import { noteCredentialsInstalled, noteSessionServing, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
@@ -31,20 +31,35 @@ const ShakaError = shaka.util.Error
 const ATTESTATION_RETRY_LIMIT = 3
 
 /**
- * How many credential refreshes to attempt before the buffer is allowed to
- * end the attempt. A session walled before it buffered anything has no buffer
- * to lose, and a fresh token often is trusted straight away, so the first few
- * refreshes are always worth trying.
+ * How many credential refreshes to always try before anything heavier.
+ *
+ * One, because a fresh token is cheap and often enough, and because every
+ * refresh after it spends about ten seconds of the runway that the escalation
+ * needs to land in. This was three, on the reasoning that a session walled
+ * before it buffered anything has nothing to lose by trying again, which had
+ * it backwards: nothing left to play means the viewer is already stopped, and
+ * that is when reaching the remedy that works matters most. Three refreshes
+ * put the earliest possible rebuild thirty seconds after the wall, by which
+ * time no threshold could have saved the playback.
  */
-const ATTESTATION_REFRESH_FLOOR = 3
+const ATTESTATION_REFRESH_FLOOR = 1
 
 /**
- * How much playable buffer must remain for another refresh to be worth more
- * than a reload. Above this, recovery is invisible and patience costs the
- * viewer nothing; below it, playback is about to stall anyway, so the more
- * disruptive and more effective remedy becomes the better trade.
+ * How little watching time must remain before rebuilding the session beats
+ * refreshing the credentials again.
+ *
+ * Small, and deliberately so. Rebuilding unloads the player, which throws the
+ * buffer away rather than playing through it, so the gap it costs is its own
+ * duration however much was buffered. Twenty five seconds was tried on the
+ * assumption that the buffer would cover the rebuild; it cannot, and a rebuild
+ * with 18.4s in hand stalled exactly as one with none would.
+ *
+ * Since the gap is the same whenever it is taken, the buffer is worth nothing
+ * except the refreshes it pays for, and those are the only remedy the viewer
+ * never sees. So spend it all on them, and rebuild only once it is nearly gone
+ * and there is nothing left to lose by discarding it.
  */
-const ATTESTATION_LOW_BUFFER_SECONDS = 6
+const ATTESTATION_LOW_BUFFER_SECONDS = 8
 
 /**
  * Hard stop on refreshes regardless of buffer. A paused player never drains
@@ -102,6 +117,16 @@ const attestationState = {
    * usually in the same response as the media that ends the episode.
    */
   refreshesThisEpisode: 0,
+}
+
+/**
+ * Whether the video is currently being recovered. Survives the session being
+ * rebuilt, which is how a new session knows it has walked into an episode that
+ * was already under way.
+ * @returns {boolean}
+ */
+export function isAttestationRecovering() {
+  return attestationState.recovering
 }
 
 /**
@@ -185,6 +210,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {boolean} playerReloadRequested
  * @property {number} requestNumber
  * @property {boolean} refreshInFlight
+ * @property {boolean} hasServedMedia
  */
 /**
  * @typedef TimeoutController
@@ -201,6 +227,8 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {(cb: () => void) => void} onReloadOnce
  * @property {(cb: () => void) => void} onRefreshNeeded
  * @property {(cb: () => void) => void} onHardReloadNeededOnce
+ * @property {(cb: () => void) => void} onRecoveryStarted
+ * @property {(cb: () => void) => void} onRecoveryEnded
  * @property {(newSabrData: import('../../views/Watch/Watch').SabrData) => void} refresh
  * @property {(error: Error) => void} abandonRefresh
  * @property {() => string[]} getFormatIds
@@ -347,22 +375,29 @@ function createRecoverableNetworkError(code, ...args) {
 }
 
 /**
- * Seconds of uninterrupted buffer ahead of the playhead. This is how long
- * recovery can take before the viewer notices anything, so it is what decides
- * how patient the in place refresh can afford to be.
+ * How long the viewer can keep watching without another byte arriving, in real
+ * seconds rather than media seconds. This is the runway recovery has to land
+ * in, so it is what decides how patient the in place refresh can afford to be.
+ *
+ * The distinction matters: buffer is measured in media time, but it is spent
+ * at the playback rate, so ten seconds of it lasts a little over three at
+ * triple speed. Treating the two as the same made every escalation late, and
+ * latest exactly for the viewers who had sped the video up.
  * @param {?shaka.Player} player
  * @returns {number}
  */
-function bufferedSecondsAhead(player) {
-  const currentTime = player?.getMediaElement()?.currentTime
+function secondsOfPlaybackLeft(player) {
+  const media = player?.getMediaElement()
 
-  if (typeof currentTime !== 'number') return 0
+  if (typeof media?.currentTime !== 'number') return 0
+
+  const currentTime = media.currentTime
 
   // `total` is the intersection across the active streams, which is exactly
   // what playback can continue on
   for (const { start, end } of player.getBufferedInfo().total) {
     if (start <= currentTime && currentTime < end) {
-      return end - currentTime
+      return (end - currentTime) / Math.max(media.playbackRate || 1, 0.1)
     }
   }
 
@@ -398,10 +433,12 @@ function requestPlayerReload(currentState) {
 /**
  * Records that the server served media, which is the only proof that recovery
  * worked. Enough of it restores the reload budgets.
+ * @param {CurrentState} currentState
  */
-function noteMediaServed() {
+function noteMediaServed(currentState) {
   if (attestationState.recovering) {
     attestationState.recovering = false
+    currentState.eventEmitter.emit('recovery-ended')
 
     console.warn(
       `${RECOVERY_LOG} playing again after ${attestationState.refreshesThisEpisode} refreshes, ` +
@@ -848,7 +885,10 @@ async function doRequest(
   if (responseDataChunks.length > 0 && segmentComplete) {
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
 
-    noteMediaServed()
+    currentState.sabrStreamState.hasServedMedia = true
+
+    noteMediaServed(currentState)
+    noteSessionServing()
 
     if (operationInputs.isInit) {
       currentState.initDataCache.set(operationInputs.formatIdString, data)
@@ -865,14 +905,21 @@ async function doRequest(
       originalRequest: operationInputs.request,
     }
   } else if (attestationBlocked) {
-    const bufferAhead = bufferedSecondsAhead(currentState.getPlayer())
+    const playbackLeft = secondsOfPlaybackLeft(currentState.getPlayer())
+
+    // A session that has not served anything yet has an empty buffer because
+    // it has not started, not because it is about to stop, and reading that as
+    // an imminent stall makes every fresh session escalate on its first block.
+    // Rebuilding one rebuilt a moment ago is the one thing that cannot help.
+    const runwayIsMeaningful = currentState.sabrStreamState.hasServedMedia
 
     // Refreshing costs the viewer nothing for as long as the buffer covers
     // playback, so there is no reason to stop while it does. Once the buffer
     // is nearly gone the video is about to stall whatever we do, which is the
     // moment a more disruptive remedy stops being a downgrade.
     const outOfPatience = attestationState.refreshes >= ATTESTATION_REFRESH_FLOOR &&
-      (bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS || attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
+      ((runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS) ||
+        attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
 
     if (outOfPatience) {
       // Audio and video reach this together, so the first one to escalate
@@ -882,8 +929,8 @@ async function doRequest(
         throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
       }
 
-      const reason = bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS
-        ? `buffer down to ${bufferAhead.toFixed(1)}s`
+      const reason = runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
+        ? `${playbackLeft.toFixed(1)}s of watching left`
         : `${attestationState.refreshes} refreshes, the limit`
 
       // Rebuilding the session is what a viewer does by hand when they reopen
@@ -922,6 +969,7 @@ async function doRequest(
       // episode only ends once
       if (attestationState.recovering) {
         attestationState.recovering = false
+        currentState.eventEmitter.emit('recovery-ended')
 
         console.warn(`${RECOVERY_LOG} giving up: ${attestationState.hardReloads} session reloads and ${attestationState.pageReloads} page reloads did not get a trusted token`)
       }
@@ -944,9 +992,13 @@ async function doRequest(
       currentState.sabrStreamState.refreshInFlight = true
       attestationState.refreshes += 1
       attestationState.refreshesThisEpisode += 1
-      attestationState.recovering = true
 
-      console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${attestationState.refreshes}, ${bufferAhead.toFixed(1)}s of buffer left)`)
+      if (!attestationState.recovering) {
+        attestationState.recovering = true
+        currentState.eventEmitter.emit('recovery-started')
+      }
+
+      console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${attestationState.refreshes}, ${playbackLeft.toFixed(1)}s of watching left)`)
 
       currentState.beginRefresh()
       currentState.eventEmitter.emit('refresh-needed')
@@ -1117,6 +1169,8 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     noteCredentialsInstalled()
   }
 
+  noteSessionStarted()
+
   // A new session gets a full refresh budget, whatever produced it: a new
   // video, the user reopening a walled one, or a recovery reload. Carrying a
   // spent budget into a fresh session made every attempt after the first give
@@ -1134,6 +1188,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     playerReloadRequested: false,
     requestNumber: 0,
     refreshInFlight: false,
+    hasServedMedia: false,
   }
 
   shaka.net.NetworkingEngine.registerScheme('sabr', (uri, request, requestType, _progressUpdated, headersReceived, _config) => {
@@ -1382,6 +1437,20 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
      */
     onHardReloadNeededOnce(callback) {
       eventEmitter.once('hard-reload-needed', callback)
+    },
+    /**
+     * Fires when the video first stops being served and recovery begins.
+     * @param {() => void} callback
+     */
+    onRecoveryStarted(callback) {
+      eventEmitter.on('recovery-started', callback)
+    },
+    /**
+     * Fires when recovery finishes, whether it worked or was given up on.
+     * @param {() => void} callback
+     */
+    onRecoveryEnded(callback) {
+      eventEmitter.on('recovery-ended', callback)
     },
     /**
      * Swaps in fresh credentials without tearing down the player. Protocol
