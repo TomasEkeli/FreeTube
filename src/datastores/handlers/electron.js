@@ -185,6 +185,13 @@ class SubscriptionCache {
     )
   }
 
+  static updateLiveStreamsWithChannelPageVideosByChannelId(channelId, entries) {
+    return window.ftElectron.dbSubscriptionCache(
+      DBActions.SUBSCRIPTION_CACHE.UPDATE_LIVE_STREAMS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL,
+      { channelId, entries }
+    )
+  }
+
   static updateShortsWithChannelPageShortsByChannelId(channelId, entries) {
     return window.ftElectron.dbSubscriptionCache(
       DBActions.SUBSCRIPTION_CACHE.UPDATE_SHORTS_WITH_CHANNEL_PAGE_SHORTS_BY_CHANNEL,

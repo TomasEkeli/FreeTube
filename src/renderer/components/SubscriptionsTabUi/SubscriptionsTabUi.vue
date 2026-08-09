@@ -123,12 +123,13 @@ const props = defineProps({
     default: 100
   },
   /**
-   * Whether missing video details are worth fetching in the background. Shorts
-   * have no duration by nature and posts are not videos at all.
+   * Which feed to fill in missing details for, or empty for feeds where there
+   * is nothing to fill in: shorts have no duration from any source, and posts
+   * are not videos at all.
    */
-  backfillDetails: {
-    type: Boolean,
-    default: false
+  backfillFeed: {
+    type: String,
+    default: ''
   },
   lastRefreshTimestamp: {
     type: String,
@@ -235,9 +236,9 @@ function increaseLimit() {
 // because the visible slice changes on every refresh, profile switch and "load
 // more", and often several times in quick succession.
 const queueDetailBackfill = debounce(() => {
-  if (!props.backfillDetails || props.isLoading) { return }
+  if (!props.backfillFeed || props.isLoading) { return }
 
-  backfillDetailsForVisibleVideos(activeVideoList.value)
+  backfillDetailsForVisibleVideos(activeVideoList.value, props.backfillFeed)
 }, 500)
 
 watch(activeVideoList, queueDetailBackfill)

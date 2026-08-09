@@ -130,10 +130,30 @@ const actions = {
     }
   },
 
-  async updateSubscriptionLiveCacheByChannel({ commit }, { channelId, videos, timestamp = new Date() }) {
+  async updateSubscriptionLiveCacheByChannel({ commit, state }, { channelId, videos, timestamp = new Date() }) {
     try {
-      await DBSubscriptionCacheHandlers.updateLiveStreamsByChannelId(channelId, videos, timestamp)
-      commit('updateLiveCacheByChannel', { channelId, entries: videos, timestamp })
+      // Same reason as videos: a refresh replaces the channel's streams outright
+      // and RSS carries neither a duration nor the live flag, so without this
+      // every refresh throws away what was filled in and it is all fetched again
+      const entries = carryOverKnownVideoDetails(state.liveCache[channelId]?.videos, videos)
+
+      await DBSubscriptionCacheHandlers.updateLiveStreamsByChannelId(channelId, entries, timestamp)
+      commit('updateLiveCacheByChannel', { channelId, entries, timestamp })
+    } catch (errMessage) {
+      console.error(errMessage)
+    }
+  },
+
+  /**
+   * Fill in what the live RSS feeds do not carry: the duration of a stream that
+   * has ended, and the live and upcoming flags. Missing those flags matters more
+   * here than a missing duration does on the videos tab, since a stream that is
+   * live right now otherwise looks like an ordinary video.
+   */
+  async updateSubscriptionLiveCacheWithChannelPageVideos({ commit }, { channelId, videos }) {
+    try {
+      await DBSubscriptionCacheHandlers.updateLiveStreamsWithChannelPageVideosByChannelId(channelId, videos)
+      commit('updateLiveCacheWithChannelPageVideos', { channelId, entries: videos })
     } catch (errMessage) {
       console.error(errMessage)
     }
@@ -184,6 +204,13 @@ const mutations = {
   },
   updateVideoCacheWithChannelPageVideos(state, { channelId, entries }) {
     const cachedObject = state.videoCache[channelId]
+
+    if (cachedObject != null && Array.isArray(cachedObject.videos)) {
+      mergeChannelPageVideoDetails(cachedObject.videos, entries)
+    }
+  },
+  updateLiveCacheWithChannelPageVideos(state, { channelId, entries }) {
+    const cachedObject = state.liveCache[channelId]
 
     if (cachedObject != null && Array.isArray(cachedObject.videos)) {
       mergeChannelPageVideoDetails(cachedObject.videos, entries)

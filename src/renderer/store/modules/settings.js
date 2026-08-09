@@ -677,6 +677,10 @@ const customActions = {
             commit('updateVideoCacheWithChannelPageVideos', data)
             break
 
+          case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_LIVE_STREAMS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL:
+            commit('updateLiveCacheWithChannelPageVideos', data)
+            break
+
           case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_SHORTS_WITH_CHANNEL_PAGE_SHORTS_BY_CHANNEL:
             commit('updateShortsCacheWithChannelPageShorts', data)
             break
