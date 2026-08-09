@@ -44,6 +44,9 @@ export function isRetryableFetchStatus(status) {
 /** @type {Map<string, FetchErrorCollector>} */
 const collectors = new Map()
 
+/** How many individual failures reach the console during one refresh. */
+const MAX_LOGGED_ERRORS_PER_RUN = 5
+
 /**
  * Start collecting fetch errors for a feed instead of showing them one by one.
  *
@@ -70,11 +73,10 @@ export function beginFetchErrorCollection(feed, total) {
  * @param {'local' | 'invidious'} details.api
  */
 export function reportFetchError(feed, { channel, error, api }) {
-  console.error(error)
-
   const collector = collectors.get(feed)
 
   if (collector == null) {
+    console.error(error)
     const message = api === 'invidious'
       ? i18n.global.t('Invidious API Error (Click to copy)')
       : i18n.global.t('Local API Error (Click to copy)')
@@ -84,6 +86,19 @@ export function reportFetchError(feed, { channel, error, api }) {
     })
 
     return
+  }
+
+  // Only the first few go to the console. A mass failure produces one of these
+  // per channel per rung of its retry ladder, so several hundred subscriptions
+  // can mean well over a thousand in the space of a few seconds, each one
+  // serialised and forwarded to the main process when logging is enabled. That
+  // is a lot of work to pile onto a renderer at the exact moment it is already
+  // struggling, and a run that did so ended with the renderer dying. Every
+  // error is still kept, and the summary can copy the lot.
+  if (collector.errors.length < MAX_LOGGED_ERRORS_PER_RUN) {
+    console.error(error)
+  } else if (collector.errors.length === MAX_LOGGED_ERRORS_PER_RUN) {
+    console.error(`[subscriptions] further ${feed} fetch errors suppressed, see the summary`)
   }
 
   collector.errors.push({

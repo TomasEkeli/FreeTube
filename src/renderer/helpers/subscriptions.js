@@ -11,6 +11,12 @@ import store from '../store/index'
  * reports the peak concurrency they actually produce.
  */
 export const SUBSCRIPTION_SCRAPER_CHUNK_SIZE = 80
+
+/**
+ * Measured, not guessed. 50 at a time fetched 611 channels with no failures at
+ * all; 100 at a time failed every request within 300ms of starting and took the
+ * renderer down with it. Raise this only with evidence.
+ */
 export const SUBSCRIPTION_RSS_CHUNK_SIZE = 50
 export const SUBSCRIPTION_CHUNK_DELAY_MS = 2000
 
