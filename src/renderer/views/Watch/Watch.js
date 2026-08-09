@@ -13,6 +13,7 @@ import WatchVideoLiveChat from '../../components/WatchVideoLiveChat/WatchVideoLi
 import WatchVideoPlaylist from '../../components/WatchVideoPlaylist/WatchVideoPlaylist.vue'
 import WatchVideoRecommendations from '../../components/WatchVideoRecommendations/WatchVideoRecommendations.vue'
 import FtAgeRestricted from '../../components/FtAgeRestricted/FtAgeRestricted.vue'
+import FtButton from '../../components/FtButton/FtButton.vue'
 import { calculateColorLuminance } from '../../helpers/colors'
 import {
   buildChaptersVttFile,
@@ -40,7 +41,7 @@ import {
 } from '../../helpers/api/invidious'
 import { sortCaptions } from '../../helpers/player/utils'
 import { buildFormatId, MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
-import { ATTESTATION_GIVE_UP_MESSAGE } from '../../helpers/player/SabrSchemePlugin'
+import { ATTESTATION_GIVE_UP_MESSAGE, resetAttestationBudget } from '../../helpers/player/SabrSchemePlugin'
 import { useI18n } from 'vue-i18n'
 
 /**
@@ -77,7 +78,8 @@ export default defineComponent({
     'watch-video-live-chat': WatchVideoLiveChat,
     'watch-video-playlist': WatchVideoPlaylist,
     'watch-video-recommendations': WatchVideoRecommendations,
-    'ft-age-restricted': FtAgeRestricted
+    'ft-age-restricted': FtAgeRestricted,
+    FtButton
   },
   beforeRouteLeave: async function (to, from, next) {
     this.handleRouteChange()
@@ -180,6 +182,15 @@ export default defineComponent({
       errorMessage: null,
       /** @type {string[]|null} */
       customErrorIcon: null,
+      /** Whether reopening the video is worth offering for this error */
+      errorIsRetryable: false,
+      /**
+       * Where playback had reached when the error hit. Captured then, because
+       * the player is unmounted the moment an error is shown and cannot be
+       * asked afterwards.
+       * @type {number}
+       */
+      errorRetryTimestamp: 0,
       videoGenreIsMusic: false,
       /** @type {Date|null} */
       streamingDataExpiryDate: null,
@@ -434,6 +445,8 @@ export default defineComponent({
       this.loudnessDb = null
       this.errorMessage = null
       this.customErrorIcon = null
+      this.errorIsRetryable = false
+      this.errorRetryTimestamp = 0
       this.videoGenreIsMusic = false
       this.streamingDataExpiryDate = null
       this.updateTitle()
@@ -1571,6 +1584,53 @@ export default defineComponent({
     },
 
     /**
+     * Shows an error the viewer can do something about, and remembers where
+     * playback was so the retry can resume there. The player is unmounted as
+     * soon as `errorMessage` is set, so the position has to be taken now.
+     * @param {string} message
+     * @param {string[]|null} icon
+     */
+    showRetryableError: function (message, icon = null) {
+      this.handleWatchProgressAutoSaveWhenProgressEnabled()
+
+      this.errorRetryTimestamp = this.getTimestamp()
+      this.errorIsRetryable = true
+      this.errorMessage = message
+      this.customErrorIcon = icon
+    },
+
+    /**
+     * Reopens the video from scratch at the position it stopped, which is what
+     * the viewer would otherwise do by navigating away and back. Asking for it
+     * explicitly restores the automatic recovery budget as well: they have
+     * decided this attempt is worth making, whatever the ladder already spent.
+     */
+    async retryVideo() {
+      resetAttestationBudget(this.videoId)
+
+      const timestamp = this.errorRetryTimestamp
+
+      // The error stays on screen until reloadView clears it. Clearing it here
+      // would remount the player against the credentials that just failed, for
+      // the moment it takes to get to the reload.
+
+      if (timestamp > 0) {
+        try {
+          await this.$router.replace({
+            path: this.$route.path,
+            query: { ...this.$route.query, oneTimeTimestamp: timestamp },
+          })
+        } catch (failure) {
+          if (!isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+            throw failure
+          }
+        }
+      }
+
+      await this.reloadView()
+    },
+
+    /**
      * @param {import('shaka-player/dist/shaka-player.ui').default.util.Error} error
      */
     handlePlayerError: function (error) {
@@ -1580,13 +1640,13 @@ export default defineComponent({
 
       if (error.code === Code.HTTP_ERROR) {
         if (error.data[1]?.message === ATTESTATION_GIVE_UP_MESSAGE) {
-          // The SABR recovery budget is spent. The format fallback below
+          // Every automatic recovery is spent. The format fallback below
           // cannot help here (the legacy URLs answer to the same distrusted
           // session), so show an honest error instead of stalling silently.
-          this.handleWatchProgressAutoSaveWhenProgressEnabled()
-
-          this.errorMessage = 'YouTube is not serving this video to the current session (PO token rejected). Please try again later or switch networks.'
-          this.customErrorIcon = ['fas', 'shield']
+          this.showRetryableError(
+            'YouTube is not serving this video to the current session (PO token rejected). Trying again sometimes works, otherwise wait a while or switch networks.',
+            ['fas', 'shield']
+          )
           return
         }
 
@@ -1598,18 +1658,18 @@ export default defineComponent({
       } else if (error.code === Code.BAD_HTTP_STATUS) {
         switch (error.data[1]) {
           case 429:
-            this.handleWatchProgressAutoSaveWhenProgressEnabled()
-
-            this.errorMessage = '[BAD_HTTP_STATUS: 429] Ratelimited'
+            this.showRetryableError('[BAD_HTTP_STATUS: 429] Ratelimited')
             return
           case 403:
-            this.handleWatchProgressAutoSaveWhenProgressEnabled()
-
             if (new Date() > this.streamingDataExpiryDate) {
-              this.errorMessage = '[BAD_HTTP_STATUS: 403] YouTube watch session expired. Please reopen this video.'
-              this.customErrorIcon = ['fas', 'clock']
+              this.showRetryableError(
+                '[BAD_HTTP_STATUS: 403] YouTube watch session expired.',
+                ['fas', 'clock']
+              )
               return
             }
+
+            this.handleWatchProgressAutoSaveWhenProgressEnabled()
 
             if (this.videoGenreIsMusic) {
               this.errorMessage = '[BAD_HTTP_STATUS: 403] Potential causes: IP block, streaming URL deciphering failed or music video geo-block'
@@ -1621,10 +1681,10 @@ export default defineComponent({
       } else if (error.code === Code.VIDEO_ERROR) {
         if (this.activeFormat === 'legacy') {
           if (new Date() > this.streamingDataExpiryDate) {
-            this.handleWatchProgressAutoSaveWhenProgressEnabled()
-
-            this.errorMessage = '[VIDEO_ERROR] YouTube watch session expired. Please reopen this video.'
-            this.customErrorIcon = ['fas', 'clock']
+            this.showRetryableError(
+              '[VIDEO_ERROR] YouTube watch session expired.',
+              ['fas', 'clock']
+            )
             return
           }
         }

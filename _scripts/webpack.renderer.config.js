@@ -158,6 +158,9 @@ const config = {
       // tracing has to be baked in at build time. Set on the launch command.
       'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? ''),
       'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? ''),
+      // Simulates YouTube distrusting our PO token, so the SABR recovery
+      // ladder can be exercised without waiting for the real thing
+      'process.env.FT_SABR_WALL': JSON.stringify(process.env.FT_SABR_WALL ?? ''),
       // Which build this is. Baked in because it can only be known here.
       'process.env.BUILD_STAMP': JSON.stringify(buildStamp)
     }),

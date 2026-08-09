@@ -1439,8 +1439,14 @@ export default defineComponent({
     /** @type {AbortController | undefined} */
     let sabrAbortController
 
-    if (process.env.SUPPORTS_LOCAL_API && props.sabrData) {
-      sabrStream = /** @__NOINLINE__ */ setupSabrScheme(props.sabrData, () => player, () => sabrManifest, playerWidth, playerHeight)
+    /**
+     * Starts a SABR session and wires up its recovery events. Called again
+     * from `hardReloadSabrSession`, which rebuilds the session from scratch,
+     * so nothing here may assume it only ever runs once.
+     * @param {import('../../views/Watch/Watch').SabrData} sabrData
+     */
+    function initSabrScheme(sabrData) {
+      sabrStream = /** @__NOINLINE__ */ setupSabrScheme(sabrData, () => player, () => sabrManifest, playerWidth, playerHeight)
       sabrAbortController = new AbortController()
       // Since there can be 2 requests at the same time (video + audio), we debounce the listener to only show the message once
       sabrStream.onBackoffRequested(debounce(({ backoffMs }) => {
@@ -1462,6 +1468,13 @@ export default defineComponent({
       sabrStream.onRefreshNeeded(() => {
         refreshSabrCredentials()
       })
+      sabrStream.onHardReloadNeededOnce(() => {
+        hardReloadSabrSession()
+      })
+    }
+
+    if (process.env.SUPPORTS_LOCAL_API && props.sabrData) {
+      initSabrScheme(props.sabrData)
     }
 
     /** True while a credential refresh is in flight, so a second is not started */
@@ -1505,6 +1518,164 @@ export default defineComponent({
         sabrStream.refresh(result.sabrData)
       } finally {
         sabrRefreshInProgress = false
+      }
+    }
+
+    /** True while a session reload is under way, so a second is not started */
+    let sabrHardReloadInProgress = false
+
+    /**
+     * Rebuilds the SABR session from scratch, keeping the watch page: fresh
+     * credentials, a fresh scheme handler with an empty init data cache, and a
+     * fresh media source loaded at the position playback had reached. This is
+     * the automatic form of the viewer reopening a walled video, which
+     * recovers where swapping credentials underneath the running session does
+     * not.
+     *
+     * Anything that stops it falls back to the full page reload, so behaviour
+     * is never worse than before this existed.
+     */
+    async function hardReloadSabrSession() {
+      if (sabrHardReloadInProgress || !sabrStream) return
+      sabrHardReloadInProgress = true
+
+      // The session that asked for this is already finished, so nothing it
+      // fails at on the way out is worth reporting as a playback error
+      ignoreErrors = true
+
+      try {
+        const formatIdsBefore = sabrStream.getFormatIds()
+
+        /** @type {{ sabrData: object, formatIds: string[] } | null} */
+        const result = await new Promise((resolve) => {
+          emit('sabr-refresh-requested', { onResult: resolve })
+        })
+
+        if (!result) {
+          throw new Error('no fresh credentials')
+        }
+
+        // The manifest is not rebuilt, so it still describes the old formats.
+        // Loading it against a session that serves different ones would ask
+        // for media that does not exist.
+        if (formatIdsBefore.some(id => !result.formatIds.includes(id))) {
+          throw new Error('formats changed across the reload')
+        }
+
+        const video_ = video.value
+        const wasPaused = video_.paused
+        const playbackPosition = video_.currentTime
+
+        // Pause for the swap rather than letting the element try to play
+        // through it, so the state afterwards is decided rather than raced
+        if (!wasPaused) {
+          video_.pause()
+        }
+
+        const useAutoQuality = player.getConfiguration().abr.enabled
+        const activeVariant = player.getVariantTracks().find(track => track.active)
+
+        // Speed is trick play state, which belongs to the load rather than to
+        // the player, so it does not survive on its own
+        const playbackRate = player.getPlaybackRate()
+
+        const activeCaptionIndex = player.getTextTracks().findIndex(caption => caption.active)
+        restoreCaptionIndex = activeCaptionIndex >= 0 ? activeCaptionIndex : null
+
+        // Unload before cleaning up the session: it cancels the requests still
+        // in flight, so the plugin's parked ones bow out as cancelled instead
+        // of reading the teardown as a failed refresh and asking for a page
+        // reload on top of this one
+        try {
+          await player.unload()
+        } catch { }
+
+        sabrStream.cleanup()
+        sabrAbortController.abort()
+        initSabrScheme(result.sabrData)
+
+        ignoreErrors = false
+
+        player.configure(getPlayerConfig(props.format, useAutoQuality))
+        configureStreamingTimeout()
+
+        await player.load(props.manifestSrc, playbackPosition, props.manifestMimeType)
+
+        restoreTrackSelection(useAutoQuality, activeVariant)
+
+        if (playbackRate !== defaultPlaybackRate.value) {
+          player.trickPlay(playbackRate, false)
+        }
+
+        if (wasPaused) {
+          video_.pause()
+        } else {
+          // Reloading a media element does not resume it, and a viewer who was
+          // watching did not ask to be stopped. A refused resume leaves them
+          // with a loaded video and a play button, which is not worth throwing
+          // the page away over.
+          try {
+            await video_.play()
+          } catch (error) {
+            console.warn(`[SABR recovery] session rebuilt but playback did not resume (${error?.message ?? error})`)
+          }
+        }
+
+        console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
+      } catch (error) {
+        console.error(`[SABR recovery] session reload failed (${error?.message ?? error}), falling back to a page reload`)
+
+        sabrAbortController?.abort()
+        emit('player-reload-requested')
+      } finally {
+        sabrHardReloadInProgress = false
+      }
+    }
+
+    /**
+     * Puts the viewer back on the track they were watching after a reload that
+     * did not change format. Only meaningful when they picked a quality
+     * themselves; automatic quality finds its own way back.
+     * @param {boolean} useAutoQuality
+     * @param {shaka.extern.Track | undefined} previousVariant
+     */
+    function restoreTrackSelection(useAutoQuality, previousVariant) {
+      if (!previousVariant) return
+
+      if (useAutoQuality) {
+        if (!previousVariant.label) return
+
+        for (const track of deduplicateAudioTracks(player.getAudioTracks()).values()) {
+          if (track.label === previousVariant.label) {
+            player.selectAudioTrack(track)
+            break
+          }
+        }
+
+        return
+      }
+
+      if (props.format === 'dash') {
+        const dimension = previousVariant.height > previousVariant.width ? previousVariant.width : previousVariant.height
+
+        setDashQuality(dimension, previousVariant.audioBandwidth, previousVariant.label)
+        return
+      }
+
+      let variants = player.getVariantTracks()
+
+      if (previousVariant.label) {
+        variants = variants.filter(variant => variant.label === previousVariant.label)
+      }
+
+      const chosenVariant = typeof previousVariant.audioBandwidth === 'number'
+        ? findMostSimilarAudioBandwidth(variants, previousVariant.audioBandwidth)
+        : variants.reduce((previous, current) => {
+            return previous === null || current.bandwidth > previous.bandwidth ? current : previous
+          }, null)
+
+      if (chosenVariant) {
+        player.selectVariantTrack(chosenVariant)
       }
     }
 
@@ -3064,26 +3235,23 @@ export default defineComponent({
       initLoadWaitTimeToastAC.abort()
     })
 
+    /**
+     * SABR answers a single request with a whole stream of parts, so it needs
+     * longer than a plain segment fetch. Reapplied on every load, since a
+     * session reload builds its configuration afresh.
+     */
+    function configureStreamingTimeout() {
+      player.configure({
+        streaming: {
+          retryParameters: {
+            timeout: process.env.SUPPORTS_LOCAL_API && sabrStream ? 30 * 1000 * 2 : 30 * 1000,
+          }
+        }
+      })
+    }
+
     async function performFirstLoad() {
-      if (process.env.SUPPORTS_LOCAL_API && sabrStream) {
-        // Longer timeout for receiving larger responses
-        player.configure({
-          streaming: {
-            retryParameters: {
-              timeout: 30 * 1000 * 2,
-            }
-          }
-        })
-      } else {
-        // Reset to default value
-        player.configure({
-          streaming: {
-            retryParameters: {
-              timeout: 30 * 1000,
-            }
-          }
-        })
-      }
+      configureStreamingTimeout()
 
       const initialLoadDelayMs = props.delayLoadUntilUnix - Date.now()
       if (initialLoadDelayMs > 0 && (props.format === 'legacy' || props.manifestMimeType !== MANIFEST_TYPE_SABR)) {
@@ -3454,6 +3622,16 @@ export default defineComponent({
 
       window.removeEventListener('online', onlineHandler)
       window.removeEventListener('offline', offlineHandler)
+
+      // The watch view hides the player when it shows an error, which unmounts
+      // us without going through destroyPlayer. Left alone, the SABR scheme
+      // stays registered globally and anything parked on a refresh waits
+      // forever, both of which outlive the player that owned them.
+      if (process.env.SUPPORTS_LOCAL_API && sabrStream) {
+        sabrStream.cleanup()
+        sabrAbortController?.abort()
+        sabrStream = undefined
+      }
     })
 
     // #endregion tear down
@@ -3514,6 +3692,7 @@ export default defineComponent({
       if (process.env.SUPPORTS_LOCAL_API && sabrStream) {
         sabrStream.cleanup()
         sabrAbortController?.abort()
+        sabrStream = undefined
       }
 
       // shaka-player doesn't clear these itself, which prevents shaka.ui.Overlay from being garbage collected
