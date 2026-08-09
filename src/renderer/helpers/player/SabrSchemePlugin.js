@@ -30,11 +30,27 @@ const ShakaError = shaka.util.Error
 const ATTESTATION_RETRY_LIMIT = 3
 
 /**
- * How many credential refreshes to attempt before giving up on a video. Each
- * refresh mints a fresh PO token, which the server may or may not trust, so
- * retrying is worth something. Looping forever is not.
+ * How many credential refreshes to attempt before the buffer is allowed to
+ * end the attempt. A session walled before it buffered anything has no buffer
+ * to lose, and a fresh token often is trusted straight away, so the first few
+ * refreshes are always worth trying.
  */
-const ATTESTATION_REFRESH_LIMIT = 5
+const ATTESTATION_REFRESH_FLOOR = 3
+
+/**
+ * How much playable buffer must remain for another refresh to be worth more
+ * than a reload. Above this, recovery is invisible and patience costs the
+ * viewer nothing; below it, playback is about to stall anyway, so the more
+ * disruptive and more effective remedy becomes the better trade.
+ */
+const ATTESTATION_LOW_BUFFER_SECONDS = 6
+
+/**
+ * Hard stop on refreshes regardless of buffer. A paused player never drains
+ * its buffer, so without this it would refresh for as long as YouTube kept
+ * saying no.
+ */
+const ATTESTATION_REFRESH_CEILING = 12
 
 /**
  * Survives player teardown, so that recovery attempts triggered by a
@@ -91,6 +107,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {(abrRequest: VideoPlaybackAbrRequest, builtAtGeneration: number) => number} applyCredentials
  * @property {() => ?PendingRefresh} getPendingRefresh
  * @property {() => void} beginRefresh
+ * @property {() => shaka.Player} getPlayer
  */
 /**
  * @typedef PendingRefresh
@@ -267,6 +284,29 @@ function createCacheResponse(uri, request, data) {
  */
 function createRecoverableNetworkError(code, ...args) {
   return new ShakaError(ShakaError.Severity.RECOVERABLE, ShakaError.Category.NETWORK, code, ...args)
+}
+
+/**
+ * Seconds of uninterrupted buffer ahead of the playhead. This is how long
+ * recovery can take before the viewer notices anything, so it is what decides
+ * how patient the in place refresh can afford to be.
+ * @param {?shaka.Player} player
+ * @returns {number}
+ */
+function bufferedSecondsAhead(player) {
+  const currentTime = player?.getMediaElement()?.currentTime
+
+  if (typeof currentTime !== 'number') return 0
+
+  // `total` is the intersection across the active streams, which is exactly
+  // what playback can continue on
+  for (const { start, end } of player.getBufferedInfo().total) {
+    if (start <= currentTime && currentTime < end) {
+      return end - currentTime
+    }
+  }
+
+  return 0
 }
 
 /**
@@ -697,7 +737,16 @@ async function doRequest(
       originalRequest: operationInputs.request,
     }
   } else if (attestationBlocked) {
-    if (attestationState.refreshes >= ATTESTATION_REFRESH_LIMIT) {
+    const bufferAhead = bufferedSecondsAhead(currentState.getPlayer())
+
+    // Refreshing costs the viewer nothing for as long as the buffer covers
+    // playback, so there is no reason to stop while it does. Once the buffer
+    // is nearly gone the video is about to stall whatever we do, which is the
+    // moment a more disruptive remedy stops being a downgrade.
+    const outOfPatience = attestationState.refreshes >= ATTESTATION_REFRESH_FLOOR &&
+      (bufferAhead < ATTESTATION_LOW_BUFFER_SECONDS || attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
+
+    if (outOfPatience) {
       throw new ShakaError(
         ShakaError.Severity.CRITICAL,
         ShakaError.Category.NETWORK,
@@ -1071,6 +1120,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
       applyCredentials,
       getPendingRefresh: () => pendingRefresh,
       beginRefresh,
+      getPlayer,
     }
 
     const pendingRequest = doRequest(opInputs, currentState)
