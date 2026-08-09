@@ -47,6 +47,7 @@
     "pack:web": "webpack --mode=production --config-node-env=production --config _scripts/webpack.web.config.js",
     "pack:botGuardScript": "webpack --config _scripts/webpack.botGuardScript.config.js",
     "checkforbadtemplates": "node _scripts/findMissingTemplates.mjs",
+    "check-subscription-worker": "node _scripts/checkSubscriptionWorker.mjs",
     "ci": "pnpm install --frozen-lockfile"
   },
   "dependencies": {
