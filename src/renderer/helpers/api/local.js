@@ -379,85 +379,230 @@ export async function getLocalSearchContinuation(continuationData) {
 }
 
 /**
- * @param {string} videoId
- * @param {(input, init) => Promise<Response>} fetchFunc
+ * How long a scraped BotGuard challenge is reused for.
+ *
+ * The challenge and `ytcfg` are not video specific: `initialAttestationData.R`
+ * is a BotGuard program, the config is only read for its `EVENT_ID` field, and
+ * the video is bound to the token at the end, by `mintAsWebsafeString` in
+ * src/botGuardScript.js. So one scrape serves many video loads, and many of the
+ * recovery ladder's credential refreshes.
+ *
+ * Reusing it is what keeps the watch page out of most loads, and that is the
+ * point: YouTube rate limits watch page HTML far more readily than Innertube,
+ * and once it does it answers with a redirect to google.com/sorry, which leaves
+ * no challenge to find. The /player and /next responses in the page are video
+ * specific and are never cached, so a load served from this cache retrieves
+ * them from Innertube instead. That costs a request, but not a watch page hit.
+ *
+ * The duration is a guess at how long YouTube honours a challenge and its
+ * eacrToken. Guessing high is safe: a challenge that has gone stale shows up as
+ * a failed mint, which drops the cache.
  */
-async function getWatchHTMLWatchPage(videoId, fetchFunc) {
-  // This returns session/tracking cookies but they get removed in onHeadersReceived in the main process before they are saved by Electron
-  const htmlResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}&bpctr=9999999999&has_verified=1`,
-    {
-      headers: {
-        // We need to be able to parse the localised strings in the /next response data (e.g. view counts and published dates)
-        'Accept-Language': 'en-US'
-      }
-    }
-  )
+const ATTESTATION_CACHE_TTL_MS = 15 * 60 * 1000
 
-  const htmlPage = await htmlResponse.text()
+/** @type {{ ytConfig: object, initialAttestationData: object, storedAt: number } | null} */
+let cachedAttestation = null
 
-  const ytConfigStr = htmlPage.match(/ytcfg\.set\(({.+?})\);/s)?.[1]
-  if (!ytConfigStr) {
-    // required for botguard
-    throw new Error('Could not find ytcfg in the HTML page')
+/**
+ * @returns {{ ytConfig: object, initialAttestationData: object } | null}
+ */
+function readCachedAttestation() {
+  if (!cachedAttestation) {
+    return null
   }
 
-  const ytConfig = JSON.parse(ytConfigStr)
+  if (Date.now() - cachedAttestation.storedAt > ATTESTATION_CACHE_TTL_MS) {
+    cachedAttestation = null
+    return null
+  }
+
+  return cachedAttestation
+}
+
+/**
+ * Drops the cached challenge so the next video load or credential refresh
+ * scrapes a fresh one. Call this when a mint fails: the challenge is the part
+ * most likely to have gone stale, and reusing a rejected one only fails again.
+ */
+function invalidateCachedAttestation() {
+  cachedAttestation = null
+}
+
+/**
+ * Both values are required for BotGuard. Returns null instead of throwing so
+ * the caller can try another page: either can be missing simply because
+ * YouTube served a captcha in place of the page that was asked for.
+ * @param {string} htmlPage
+ * @returns {{ ytConfig: object, initialAttestationData: object } | null}
+ */
+function extractAttestationData(htmlPage) {
+  const ytConfigStr = htmlPage.match(/ytcfg\.set\(({.+?})\);/s)?.[1]
+
+  if (!ytConfigStr) {
+    return null
+  }
+
+  let ytConfig
+
+  try {
+    ytConfig = JSON.parse(ytConfigStr)
+  } catch (e) {
+    console.warn('ytcfg extracted from the HTML page is invalid JSON', e)
+    return null
+  }
 
   const initialAttestationDataMatch = htmlPage.match(/window\.ytAtN\(\s*({[\s\S]*?})\s*\)/)
 
   if (!initialAttestationDataMatch) {
-    // required for botguard
-    throw new Error('Could not find challenge in the HTML page')
+    return null
   }
-
-  let initialAttestationData
 
   try {
-    initialAttestationData = parseLooseJSON(initialAttestationDataMatch[1])
+    return {
+      ytConfig,
+      initialAttestationData: parseLooseJSON(initialAttestationDataMatch[1])
+    }
   } catch (e) {
-    const error = new Error('Failed to parse the initial attestation data', { cause: e })
-    console.error(error, initialAttestationDataMatch[1])
-    throw error
+    console.error(new Error('Failed to parse the initial attestation data', { cause: e }), initialAttestationDataMatch[1])
+    return null
   }
+}
+
+/**
+ * @param {string} url
+ * @returns {Promise<{ url: string, finalUrl: string, html: string }>}
+ */
+async function fetchHtmlPage(url) {
+  // This returns session/tracking cookies but they get removed in onHeadersReceived in the main process before they are saved by Electron
+  const response = await fetch(url, {
+    headers: {
+      // We need to be able to parse the localised strings in the /next response data (e.g. view counts and published dates)
+      'Accept-Language': 'en-US'
+    }
+  })
+
+  return { url, finalUrl: response.url, html: await response.text() }
+}
+
+/**
+ * Names why a page was no use, so the error says the cause instead of the
+ * symptom. A captcha is much the likeliest: YouTube redirects to
+ * google.com/sorry once it decides an IP address is asking for too many watch
+ * pages, and fetch follows that redirect, so what gets parsed is the captcha
+ * page rather than the video's.
+ * @param {{ url: string, finalUrl: string, html: string }} page
+ */
+function describeUnusablePage(page) {
+  if (page.finalUrl.includes('/sorry/') || page.html.includes('google.com/sorry')) {
+    return `${page.url} was answered with a captcha, YouTube is rate limiting this IP address`
+  }
+
+  return `${page.url} contained no challenge, YouTube may have changed the page`
+}
+
+/**
+ * @param {object} ytConfig
+ * @param {string} [htmlPage]
+ * @returns {string | undefined}
+ */
+function extractPlayerId(ytConfig, htmlPage) {
+  return ytConfig.PLAYER_JS_URL?.match(/player\/([^/]+)\//)?.[1] ??
+    htmlPage?.match(/<script[^>]+src="[^">]+player\/([^/]+)\/[^"]+\/base.js"/)?.[1]
+}
+
+/**
+ * Not fatal if it is missing, as we can retrieve it from Innertube ourselves.
+ * @param {string} htmlPage
+ */
+function extractPlayerResponse(htmlPage) {
+  const playerResponseStr = htmlPage.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/)?.[1]
+
+  if (!playerResponseStr) {
+    console.warn('Could not find /player response in the HTML page')
+    return undefined
+  }
+
+  try {
+    return JSON.parse(playerResponseStr)
+  } catch (e) {
+    console.warn('/player response extracted from the HTML page is invalid JSON', e)
+    return undefined
+  }
+}
+
+/**
+ * Not fatal if it is missing, as we can retrieve it from Innertube ourselves.
+ * @param {string} htmlPage
+ */
+function extractNextResponse(htmlPage) {
+  const nextResponseStr = htmlPage.match(/(?:window\s*\[\s*["']ytInitialData["']\s*\]|ytInitialData)\s*=\s*(\{.+?\});/)?.[1]
+
+  if (!nextResponseStr) {
+    console.warn('Could not find /next response in the HTML page')
+    return undefined
+  }
+
+  try {
+    return JSON.parse(nextResponseStr)
+  } catch (e) {
+    console.warn('/next response extracted from the HTML page is invalid JSON', e)
+    return undefined
+  }
+}
+
+/**
+ * @param {string} videoId
+ * @param {(input, init) => Promise<Response>} fetchFunc
+ */
+async function getWatchHTMLWatchPage(videoId, fetchFunc) {
+  let attestation = readCachedAttestation()
 
   /** @type {string | undefined} */
-  let playerId = ytConfig.PLAYER_JS_URL?.match(/player\/([^/]+)\//)?.[1]
-
-  playerId ??= htmlPage.match(/<script[^>]+src="[^">]+player\/([^/]+)\/[^"]+\/base.js"/)?.[1]
-
-  const playerResponseStr = htmlPage.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/)?.[1]
+  let playerId
   let playerResponse
-
-  // not fatal if it is missing as we can retrieve it from Innertube ourselves
-  if (playerResponseStr) {
-    try {
-      playerResponse = JSON.parse(playerResponseStr)
-    } catch (e) {
-      console.warn('/player response extracted from the HTML page is invalid JSON', e)
-    }
-  } else {
-    console.warn('Could not find /player response in the HTML page')
-  }
-
-  const nextResponseStr = htmlPage.match(/(?:window\s*\[\s*["']ytInitialData["']\s*\]|ytInitialData)\s*=\s*(\{.+?\});/)?.[1]
   let nextResponse
 
-  // not fatal if it is missing as we can retrieve it from Innertube ourselves
-  if (nextResponseStr) {
-    try {
-      nextResponse = JSON.parse(nextResponseStr)
-    } catch (e) {
-      console.warn('/next response extracted from the HTML page is invalid JSON', e)
-    }
+  if (attestation) {
+    playerId = extractPlayerId(attestation.ytConfig)
   } else {
-    console.warn('Could not find /next response in the HTML page')
+    const watchPage = await fetchHtmlPage(`https://www.youtube.com/watch?v=${videoId}&bpctr=9999999999&has_verified=1`)
+
+    attestation = extractAttestationData(watchPage.html)
+
+    if (attestation) {
+      playerId = extractPlayerId(attestation.ytConfig, watchPage.html)
+      playerResponse = extractPlayerResponse(watchPage.html)
+      nextResponse = extractNextResponse(watchPage.html)
+    } else {
+      // The homepage carries the same challenge and config, and YouTube rate
+      // limits it far less than the watch page, so it is worth one more request
+      // before giving up on playback. It holds no /player or /next response for
+      // this video, which is not fatal: both get retrieved from Innertube.
+      console.warn(`Could not get the BotGuard challenge from the watch page (${describeUnusablePage(watchPage)}), falling back to the homepage`)
+
+      const homePage = await fetchHtmlPage(`${Constants.URLS.YT_BASE}/`)
+
+      attestation = extractAttestationData(homePage.html)
+
+      if (!attestation) {
+        throw new Error(
+          'Could not get the BotGuard challenge. ' +
+          `Watch page: ${describeUnusablePage(watchPage)}. ` +
+          `Homepage: ${describeUnusablePage(homePage)}`
+        )
+      }
+
+      playerId = extractPlayerId(attestation.ytConfig, homePage.html)
+    }
+
+    cachedAttestation = { ...attestation, storedAt: Date.now() }
   }
 
-  const session = buildSessionFromYtConfig(ytConfig, fetchFunc)
+  const session = buildSessionFromYtConfig(attestation.ytConfig, fetchFunc)
 
   return {
-    ytConfig,
-    initialAttestationData,
+    ytConfig: attestation.ytConfig,
+    initialAttestationData: attestation.initialAttestationData,
     session,
     playerId,
     playerResponse,
@@ -583,6 +728,12 @@ export async function getLocalVideoInfo(id) {
         break
       } catch (error) {
         console.error(`Local API, poToken generation failed (attempt ${attempt} of ${PO_TOKEN_MINT_ATTEMPTS})`, error)
+
+        // A challenge that BotGuard would not complete is the likeliest cause,
+        // and this load is already holding a copy of it, so dropping the cache
+        // cannot rescue the attempts below. It stops the next video load or
+        // credential refresh from starting out with the same bad challenge.
+        invalidateCachedAttestation()
 
         if (attempt < PO_TOKEN_MINT_ATTEMPTS) {
           await new Promise(resolve => setTimeout(resolve, 500 * attempt))
