@@ -1,44 +1,89 @@
 import { reactive, readonly } from 'vue'
 
 /**
- * One serial queue for every background subscription request.
+ * One manager for every subscription request.
  *
- * Recovering a failed refresh and filling in details missing from RSS both want
- * to make a slow trickle of requests, and they must not do it independently:
- * two trickles are one burst, which is the thing being avoided. So there is one
- * worker, one request in flight, and a fixed gap between requests, with
- * recovery served before enrichment.
+ * Refreshing a feed, recovering the channels a refresh could not reach and
+ * filling in the details RSS leaves out are three different jobs that all talk
+ * to the same host, and they must not decide independently how hard to push it:
+ * three polite trickles are one burst, which is the thing being avoided. So
+ * there is one manager, one shared budget, and lanes served in priority order.
  *
- * The queues hold closures, so they stay out of the store; only the progress
- * the interface needs is reactive. It lives at module scope rather than in a
+ * The budget is a sliding window: at most `SUBSCRIPTION_BUDGET` requests may
+ * start in any `SUBSCRIPTION_BUDGET_WINDOW_MS`, and at most that many may be in
+ * flight at once. That is deliberately the same traffic shape as the batching it
+ * replaces — fifty channels, then a two second pause — with the difference that
+ * it composes: three feeds refreshing at once and the back-fill running
+ * underneath them cannot together exceed what one feed used to do alone.
+ *
+ * Lanes each have a width, which is how much of the budget they may occupy at
+ * once, and a minimum gap between their own requests. Refresh may take the whole
+ * budget; recovery stays at one request at a time because it only runs when
+ * something has already refused us; enrichment keeps a narrow width so it fills
+ * the slack a refresh leaves rather than competing with it.
+ *
+ * The queues hold closures, so they stay out of the store; only the progress the
+ * interface needs is reactive. It all lives at module scope rather than in a
  * component so that switching tabs, or navigating away entirely, does not
  * abandon work that takes minutes to finish.
  */
 
-/** Recovering channels a refresh could not reach. Served first. */
+/** Fetching a feed because someone, or the clock, asked for it. Served first. */
+export const LANE_REFRESH = 'refresh'
+
+/** Recovering channels a refresh could not reach. */
 export const LANE_RECOVERY = 'recovery'
 
-/** Filling in details RSS does not carry. Served when nothing is recovering. */
+/** Filling in details RSS does not carry. Served with whatever is left. */
 export const LANE_ENRICHMENT = 'enrichment'
 
-const LANES = [LANE_RECOVERY, LANE_ENRICHMENT]
+/** Priority order. Positional: earlier lanes are offered the budget first. */
+const LANES = [LANE_REFRESH, LANE_RECOVERY, LANE_ENRICHMENT]
+
+/** The window the budget is counted over. */
+export const SUBSCRIPTION_BUDGET_WINDOW_MS = 2000
 
 /**
- * The gap after a job, per lane.
+ * Requests allowed to start per window, and to be in flight at once.
  *
- * Recovery is deliberately the slower of the two. It only runs because
- * something has already refused us, so it is the worst possible moment to be
- * quick, and by the time it is going one channel at a time that is the last
- * thing left to try.
+ * Measured, not guessed: 50 at a time fetched 611 channels with no failures at
+ * all; 100 at a time failed every request within 300ms of starting and took the
+ * renderer down with it. That measurement had a confound — the devcontainer was
+ * out of memory at the time — so `FT_SUBS_BUDGET` overrides this, to re-derive
+ * it now that the confound is gone. Change the default only with evidence.
+ */
+export const SUBSCRIPTION_BUDGET_DEFAULT = 50
+
+/**
+ * How much of the budget each lane may occupy at once.
+ *
+ * Refresh is the thing being waited for, so it may have the lot. Recovery is one
+ * at a time by design. Enrichment is held to a couple so that a refresh running
+ * beside it still gets nearly the whole budget, while a back-fill on its own
+ * still goes at a useful rate.
+ */
+export const LANE_WIDTHS = {
+  refresh: Number.POSITIVE_INFINITY,
+  recovery: 1,
+  enrichment: 2
+}
+
+/**
+ * The minimum gap between two requests of the same lane.
+ *
+ * Recovery is deliberately the slowest. It only runs because something has
+ * already refused us, so it is the worst possible moment to be quick, and by the
+ * time it is going one channel at a time that is the last thing left to try.
  *
  * The back-fill is asking an API that is answering perfectly well, so it can be
- * brisker. Even so the gap is not what makes it slow: a channel takes about
- * four seconds, of which this was one and a half, the rest being two requests
- * because a fresh Innertube session is created per call. Halving the requests
- * by reusing a session would do more than shortening this, at the cost of the
- * anti-tracking property upstream keeps it for.
+ * brisker. Even so the gap is not what makes it slow: a channel takes about four
+ * seconds, of which this is half, the rest being two requests because a fresh
+ * Innertube session is created per call.
+ *
+ * Refresh has no gap of its own: the budget is its pacing.
  */
 export const LANE_DELAYS_MS = {
+  refresh: 0,
   recovery: 1500,
   enrichment: 500
 }
@@ -52,6 +97,7 @@ export const LANE_DELAYS_MS = {
 
 /** @type {Record<string, WorkerJob[]>} */
 const queues = {
+  [LANE_REFRESH]: [],
   [LANE_RECOVERY]: [],
   [LANE_ENRICHMENT]: []
 }
@@ -62,53 +108,137 @@ const queues = {
  * @type {Record<string, Set<string>>}
  */
 const claimed = {
+  [LANE_REFRESH]: new Set(),
   [LANE_RECOVERY]: new Set(),
   [LANE_ENRICHMENT]: new Set()
 }
 
+/** @returns {Record<string, { done: number, queued: number, inFlight: number }>} */
+function emptyLaneCounters() {
+  return {
+    [LANE_REFRESH]: { done: 0, queued: 0, inFlight: 0 },
+    [LANE_RECOVERY]: { done: 0, queued: 0, inFlight: 0 },
+    [LANE_ENRICHMENT]: { done: 0, queued: 0, inFlight: 0 }
+  }
+}
+
 const progress = reactive({
-  /** @type {'idle' | 'recovery' | 'enrichment'} */
+  /** @type {'idle' | 'refresh' | 'recovery' | 'enrichment'} */
   lane: 'idle',
-  /** Jobs finished since the current run began. */
+  /** Jobs finished since the current run began, across all lanes. */
   done: 0,
-  /** Jobs still queued, across both lanes. */
+  /** Jobs still queued, across all lanes. */
   queued: 0,
+  /** Requests in flight, across all lanes. */
+  inFlight: 0,
   /** @type {string | null} */
-  label: null
+  label: null,
+  /** The same three counts, per lane, for callers that care about only one. */
+  lanes: emptyLaneCounters()
 })
 
 /** Progress for the interface to read. Mutated only in here. */
 export const subscriptionWorkerProgress = readonly(progress)
 
-let running = false
+let pumping = false
 let cancelledLanes = new Set()
 
 /**
- * Incremented for every drain. A drain only clears the shared progress if it is
+ * Incremented for every pump. A pump only clears the shared progress if it is
  * still the current one, so a loop that has been abandoned cannot report itself
  * idle over the top of the run that replaced it.
  */
 let generation = 0
 
+/** When each lane last started a request, for the per-lane gap. */
+let lastStartedAt = { [LANE_REFRESH]: 0, [LANE_RECOVERY]: 0, [LANE_ENRICHMENT]: 0 }
+
+/** Start times inside the current budget window, oldest first. */
+let recentStarts = []
+
+/** The highest number of requests in flight at once since it was last read. */
+let peakInFlight = 0
+
+/** Resolves when anything happens that might allow another job to start. */
+let wake = null
+
 /** Overridden so tests do not have to wait in real time. */
 let delayOverrideMs = null
+
+let budgetOverride = null
+let windowOverride = null
 
 /** @param {number} ms */
 export function setSubscriptionWorkerDelayForTests(ms) {
   delayOverrideMs = ms
 }
 
+/**
+ * @param {number} budget
+ * @param {number} [windowMs]
+ */
+export function setSubscriptionBudgetForTests(budget, windowMs) {
+  budgetOverride = budget
+  windowOverride = windowMs ?? null
+}
+
+/**
+ * The budget in force. Read through a function rather than frozen at import so
+ * that the test seam and the environment override both work.
+ */
+export function subscriptionBudget() {
+  if (budgetOverride != null) { return budgetOverride }
+
+  const configured = Number.parseInt(process.env.FT_SUBS_BUDGET ?? '', 10)
+
+  return Number.isFinite(configured) && configured > 0 ? configured : SUBSCRIPTION_BUDGET_DEFAULT
+}
+
+function budgetWindowMs() {
+  return windowOverride ?? SUBSCRIPTION_BUDGET_WINDOW_MS
+}
+
 /** @param {string} lane */
 function delayForLane(lane) {
-  return delayOverrideMs ?? LANE_DELAYS_MS[lane] ?? LANE_DELAYS_MS[LANE_RECOVERY]
+  if (delayOverrideMs != null) {
+    // Refresh is paced by the budget alone, and a test that shortens the lane
+    // gaps is not asking for it to acquire one
+    return LANE_DELAYS_MS[lane] === 0 ? 0 : delayOverrideMs
+  }
+
+  return LANE_DELAYS_MS[lane] ?? LANE_DELAYS_MS[LANE_RECOVERY]
 }
 
-function queuedCount() {
-  return LANES.reduce((total, lane) => total + queues[lane].length, 0)
+/** @param {string} lane */
+function widthForLane(lane) {
+  return Math.min(LANE_WIDTHS[lane] ?? 1, subscriptionBudget())
 }
 
-function syncQueuedCount() {
-  progress.queued = queuedCount()
+function syncCounts() {
+  let queued = 0
+  let inFlight = 0
+  let done = 0
+
+  for (const lane of LANES) {
+    progress.lanes[lane].queued = queues[lane].length
+
+    queued += queues[lane].length
+    inFlight += progress.lanes[lane].inFlight
+    done += progress.lanes[lane].done
+  }
+
+  progress.queued = queued
+  progress.inFlight = inFlight
+  progress.done = done
+}
+
+/** Wake the pump: something happened that might let another job start. */
+function signal() {
+  if (wake != null) {
+    const resolve = wake
+    wake = null
+    resolve()
+  }
 }
 
 /**
@@ -132,11 +262,12 @@ export function enqueueSubscriptionJobs(lane, jobs) {
     added++
   }
 
-  syncQueuedCount()
+  syncCounts()
 
   if (added > 0) {
     // Deliberately not awaited: callers enqueue and carry on
-    drain()
+    pump()
+    signal()
   }
 
   return added
@@ -170,9 +301,9 @@ export function enqueueSubscriptionJob(lane, job) {
 }
 
 /**
- * Drop everything queued for a lane. The job already in flight is allowed to
- * finish, since there is nothing to abort a request with here and its result is
- * still worth having.
+ * Drop everything queued for a lane. Jobs already in flight are allowed to
+ * finish, since there is nothing to abort a request with here and their results
+ * are still worth having.
  *
  * @param {string} lane
  */
@@ -184,7 +315,8 @@ export function cancelSubscriptionLane(lane) {
   }
 
   queues[lane] = []
-  syncQueuedCount()
+  syncCounts()
+  signal()
 }
 
 export function cancelAllSubscriptionWork() {
@@ -193,78 +325,230 @@ export function cancelAllSubscriptionWork() {
   }
 }
 
-/** @returns {string | null} */
-function nextLane() {
-  for (const lane of LANES) {
-    if (queues[lane].length > 0) { return lane }
+function queuedCount() {
+  return LANES.reduce((total, lane) => total + queues[lane].length, 0)
+}
+
+/** @param {number} now */
+function pruneRecentStarts(now) {
+  const cutoff = now - budgetWindowMs()
+
+  while (recentStarts.length > 0 && recentStarts[0] <= cutoff) {
+    recentStarts.shift()
+  }
+}
+
+/**
+ * How much of the budget to hold back from this lane for the lanes below it.
+ *
+ * Without this the refresh lane, which may take the whole budget, would starve
+ * the back-fill for the entire length of a refresh — and running the back-fill
+ * during the refresh, in the slack it leaves, is the point of putting them on
+ * one manager. Only lanes with work waiting reserve anything, and only as much
+ * as they are not already using, so the reservation costs nothing when there is
+ * nothing under way beneath.
+ *
+ * @param {string} lane
+ */
+function reservedForLowerLanes(lane) {
+  let reserved = 0
+  let below = false
+
+  for (const other of LANES) {
+    if (other === lane) {
+      below = true
+      continue
+    }
+
+    if (!below) { continue }
+    if (queues[other].length === 0) { continue }
+
+    reserved += Math.max(0, widthForLane(other) - progress.lanes[other].inFlight)
   }
 
-  return null
+  // Never hold back more than half the budget, so that a small budget cannot
+  // invert the priority order and leave the refresh waiting on the back-fill
+  return Math.min(reserved, Math.floor(subscriptionBudget() / 2))
 }
 
-/** @param {number} ms */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+/**
+ * Whether a job of this lane could start right now, and if not, the earliest
+ * moment it could. `at` is null when only a job finishing would help.
+ *
+ * @param {string} lane
+ * @param {number} now
+ * @returns {{ ok: boolean, at: number | null }}
+ */
+function startability(lane, now) {
+  const budget = subscriptionBudget()
+
+  if (progress.inFlight + reservedForLowerLanes(lane) >= budget) { return { ok: false, at: null } }
+  if (progress.lanes[lane].inFlight >= widthForLane(lane)) { return { ok: false, at: null } }
+
+  if (recentStarts.length >= budget) {
+    return { ok: false, at: recentStarts[0] + budgetWindowMs() }
+  }
+
+  const gap = delayForLane(lane)
+
+  if (gap > 0 && lastStartedAt[lane] > 0 && now - lastStartedAt[lane] < gap) {
+    return { ok: false, at: lastStartedAt[lane] + gap }
+  }
+
+  return { ok: true, at: now }
 }
 
-async function drain() {
-  if (running) { return }
+/**
+ * Start whatever the budget allows, in lane priority order.
+ * @returns {number | null} when to look again, if only time will help
+ */
+function startWhatWeCan() {
+  /** @type {number | null} */
+  let earliest = null
 
-  running = true
+  for (const lane of LANES) {
+    while (queues[lane].length > 0) {
+      const now = Date.now()
+
+      pruneRecentStarts(now)
+
+      const { ok, at } = startability(lane, now)
+
+      if (!ok) {
+        if (at != null && (earliest == null || at < earliest)) { earliest = at }
+        break
+      }
+
+      startJob(lane, now)
+    }
+  }
+
+  return earliest
+}
+
+/**
+ * @param {string} lane
+ * @param {number} now
+ */
+function startJob(lane, now) {
+  const job = queues[lane].shift()
+  const counters = progress.lanes[lane]
+
+  recentStarts.push(now)
+  lastStartedAt[lane] = now
+  counters.inFlight++
+
+  if (job.label != null) {
+    progress.label = job.label
+  }
+
+  progress.lane = lane
+
+  syncCounts()
+
+  if (progress.inFlight > peakInFlight) {
+    peakInFlight = progress.inFlight
+  }
+
+  Promise.resolve()
+    .then(() => job.run())
+    .catch((error) => {
+      // A failing job must not stop the queue: the whole point is to keep
+      // grinding through a list that is partly broken.
+      console.error(error)
+    })
+    .finally(() => {
+      claimed[lane].delete(job.key)
+      counters.inFlight--
+      counters.done++
+      syncCounts()
+      signal()
+    })
+}
+
+/** The lane whose work is worth reporting: the highest priority one with any. */
+function activeLane() {
+  for (const lane of LANES) {
+    if (progress.lanes[lane].inFlight > 0 || queues[lane].length > 0) { return lane }
+  }
+
+  return 'idle'
+}
+
+/** @param {number | null} deadline */
+function waitForSomething(deadline) {
+  return new Promise((resolve) => {
+    wake = resolve
+
+    if (deadline == null) { return }
+
+    const ms = Math.max(0, deadline - Date.now())
+
+    setTimeout(() => {
+      // Only the pump waiting on this timer should be woken by it
+      if (wake === resolve) {
+        wake = null
+        resolve()
+      }
+    }, ms)
+  })
+}
+
+async function pump() {
+  if (pumping) { return }
+
+  pumping = true
 
   const thisGeneration = ++generation
 
-  progress.done = 0
+  for (const lane of LANES) {
+    progress.lanes[lane].done = 0
+  }
 
   try {
-    let lane = nextLane()
+    while (true) {
+      const deadline = startWhatWeCan()
 
-    while (lane != null) {
-      const job = queues[lane].shift()
+      progress.lane = activeLane()
 
-      progress.lane = lane
-      progress.label = job.label ?? null
-      syncQueuedCount()
+      if (progress.inFlight === 0 && queuedCount() === 0) { break }
 
-      try {
-        await job.run()
-      } catch (error) {
-        // A failing job must not stop the queue: the whole point is to keep
-        // grinding through a list that is partly broken.
-        console.error(error)
-      } finally {
-        claimed[lane].delete(job.key)
-      }
+      await waitForSomething(deadline)
 
-      progress.done++
-
-      const finishedLane = lane
-
-      lane = nextLane()
-
-      if (lane != null) {
-        // Paced by the lane that just ran, since that is the one whose requests
-        // are being spaced out
-        await sleep(delayForLane(finishedLane))
-        // Cancelling during the gap should take effect immediately
-        lane = nextLane()
-      }
+      if (thisGeneration !== generation) { return }
     }
   } finally {
     if (thisGeneration === generation) {
-      running = false
+      pumping = false
       cancelledLanes = new Set()
       progress.lane = 'idle'
       progress.label = null
-      progress.done = 0
-      syncQueuedCount()
+
+      for (const lane of LANES) {
+        progress.lanes[lane].done = 0
+      }
+
+      syncCounts()
     }
   }
 }
 
-/** Whether the worker currently has anything to do. */
+/** Whether the manager currently has anything to do. */
 export function subscriptionWorkerBusy() {
-  return running
+  return pumping
+}
+
+/**
+ * The highest number of requests in flight at once since this was last called,
+ * which is the number the budget exists to hold down. Reading it resets it, so
+ * each refresh cycle reports its own peak rather than the largest ever seen.
+ */
+export function takeSubscriptionPeakInFlight() {
+  const peak = peakInFlight
+
+  peakInFlight = 0
+
+  return peak
 }
 
 /** Test seam: forget all state between cases. */
@@ -275,13 +559,19 @@ export function resetSubscriptionWorkerForTests() {
   }
 
   cancelledLanes = new Set()
-  running = false
-  // Abandons any drain still in flight, which the generation guard stops from
+  pumping = false
+  // Abandons any pump still in flight, which the generation guard stops from
   // reporting itself idle later
   generation++
+  wake = null
+  recentStarts = []
+  lastStartedAt = { [LANE_REFRESH]: 0, [LANE_RECOVERY]: 0, [LANE_ENRICHMENT]: 0 }
+  peakInFlight = 0
   progress.lane = 'idle'
-  progress.done = 0
-  progress.queued = 0
   progress.label = null
+  progress.lanes = emptyLaneCounters()
+  syncCounts()
   delayOverrideMs = null
+  budgetOverride = null
+  windowOverride = null
 }

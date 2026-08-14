@@ -1,10 +1,11 @@
 /**
- * Checks the invariants of the serial subscription worker.
+ * Checks the invariants of the subscription request manager.
  *
- * The worker exists to keep background subscription requests to a trickle. Its
- * guarantees are the sort that break quietly: nothing visibly goes wrong when
- * two requests overlap or a cancelled queue keeps grinding, it just stops
- * achieving the thing it was built for. So they are asserted here.
+ * The manager exists to keep every subscription request — refresh, recovery and
+ * back-fill alike — inside one budget. Its guarantees are the sort that break
+ * quietly: nothing visibly goes wrong when the budget is exceeded or a cancelled
+ * queue keeps grinding, it just stops achieving the thing it was built for, and
+ * the evidence arrives days later as a mass failure. So they are asserted here.
  *
  * Run with `pnpm run check-subscription-worker`. There is no test runner in this
  * project, which is why this is a script.
@@ -15,12 +16,17 @@ import {
   cancelSubscriptionLane,
   enqueueSubscriptionJobs,
   resetSubscriptionWorkerForTests,
+  setSubscriptionBudgetForTests,
   setSubscriptionWorkerDelayForTests,
+  subscriptionBudget,
   subscriptionWorkerBusy,
   subscriptionWorkerProgress,
+  takeSubscriptionPeakInFlight,
   LANE_DELAYS_MS,
   LANE_ENRICHMENT,
-  LANE_RECOVERY
+  LANE_RECOVERY,
+  LANE_REFRESH,
+  LANE_WIDTHS
 } from '../src/renderer/helpers/subscriptionWorker.js'
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -36,42 +42,147 @@ function check(name, condition) {
   }
 }
 
-// One request at a time, and recovery ahead of queued enrichment
-{
-  resetSubscriptionWorkerForTests()
-  setSubscriptionWorkerDelayForTests(5)
-
-  let inFlight = 0
-  let peak = 0
+/** A job that occupies a lane for `ms`, recording what overlapped with it. */
+function tracker() {
+  const inFlight = { refresh: 0, recovery: 0, enrichment: 0 }
+  const peak = { refresh: 0, recovery: 0, enrichment: 0, total: 0 }
+  const starts = []
   const order = []
 
-  const job = (lane, n) => ({
-    key: `${lane}-${n}`,
-    label: `${lane} ${n}`,
-    run: async () => {
-      inFlight++
-      peak = Math.max(peak, inFlight)
-      order.push(`${lane}${n}`)
-      await sleep(10)
-      inFlight--
-    }
-  })
+  return {
+    peak,
+    starts,
+    order,
+    job: (lane, name, ms = 10) => ({
+      key: `${lane}-${name}`,
+      label: `${lane} ${name}`,
+      run: async () => {
+        starts.push({ lane, at: Date.now() })
+        order.push(name)
+        inFlight[lane]++
 
-  enqueueSubscriptionJobs(LANE_ENRICHMENT, [job('e', 1), job('e', 2)])
-  enqueueSubscriptionJobs(LANE_RECOVERY, [job('r', 1), job('r', 2)])
+        const total = inFlight.refresh + inFlight.recovery + inFlight.enrichment
 
-  await sleep(300)
+        peak[lane] = Math.max(peak[lane], inFlight[lane])
+        peak.total = Math.max(peak.total, total)
 
-  check('never more than one request in flight', peak === 1)
-  check('all jobs ran', order.length === 4)
-  // The first enqueue starts the drain synchronously, so e1 is already running
-  // before recovery is offered. Priority governs what is queued, not what is in
-  // flight, so both recovery jobs must precede the still-queued e2.
-  check(
-    `recovery preempts queued enrichment (${order.join(',')})`,
-    order.indexOf('r1') < order.indexOf('e2') && order.indexOf('r2') < order.indexOf('e2')
-  )
+        await sleep(ms)
+        inFlight[lane]--
+      }
+    })
+  }
+}
+
+// Lane widths are respected: each lane may only occupy so much of the budget
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(20, 1000)
+
+  const { peak, job } = tracker()
+
+  enqueueSubscriptionJobs(LANE_RECOVERY, Array.from({ length: 5 }, (_, i) => job('recovery', `r${i}`, 20)))
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, Array.from({ length: 6 }, (_, i) => job('enrichment', `e${i}`, 20)))
+
+  await sleep(400)
+
+  check(`recovery stays one at a time (peak ${peak.recovery})`, peak.recovery === LANE_WIDTHS.recovery)
+  check(`enrichment stays within its width (peak ${peak.enrichment})`, peak.enrichment <= LANE_WIDTHS.enrichment)
   check('idle once drained', subscriptionWorkerProgress.lane === 'idle' && !subscriptionWorkerBusy())
+}
+
+// Nothing exceeds the budget, however many lanes are asking
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(6, 1000)
+
+  const { peak, job } = tracker()
+
+  enqueueSubscriptionJobs(LANE_REFRESH, Array.from({ length: 30 }, (_, i) => job('refresh', `f${i}`, 30)))
+  enqueueSubscriptionJobs(LANE_RECOVERY, Array.from({ length: 5 }, (_, i) => job('recovery', `r${i}`, 30)))
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, Array.from({ length: 5 }, (_, i) => job('enrichment', `e${i}`, 30)))
+
+  await sleep(150)
+
+  const observedPeak = peak.total
+
+  cancelAllSubscriptionWork()
+  await sleep(100)
+
+  check(`three lanes at once never exceed the budget (peak ${observedPeak} of 6)`, observedPeak <= 6)
+  check(`and the budget is actually used (peak ${observedPeak})`, observedPeak >= 4)
+}
+
+// The start rate is held down as well as the concurrency: a burst of very short
+// requests must not slip a second budget's worth through inside one window
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(4, 200)
+
+  const { starts, job } = tracker()
+
+  enqueueSubscriptionJobs(LANE_REFRESH, Array.from({ length: 12 }, (_, i) => job('refresh', `f${i}`, 1)))
+
+  await sleep(900)
+
+  const times = starts.map(start => start.at)
+  // Allow a few milliseconds of timer slop; the guarantee is the window, not
+  // the scheduler's precision
+  const violations = times.filter((time, i) => i >= 4 && time - times[i - 4] < 195)
+
+  check(
+    `no more than the budget starts in one window (${times.length} starts, ${violations.length} too close)`,
+    times.length === 12 && violations.length === 0
+  )
+}
+
+// Priority is positional: a lane is offered the budget before the lanes below it
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  // One at a time, so that what runs next is purely a question of priority
+  setSubscriptionBudgetForTests(1, 1)
+
+  const { order, job } = tracker()
+
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, [job('enrichment', 'e1', 10), job('enrichment', 'e2', 10)])
+  enqueueSubscriptionJobs(LANE_RECOVERY, [job('recovery', 'r1', 10), job('recovery', 'r2', 10)])
+  enqueueSubscriptionJobs(LANE_REFRESH, [job('refresh', 'f1', 10), job('refresh', 'f2', 10)])
+
+  await sleep(400)
+
+  // e1 was already running before the other lanes were offered anything:
+  // priority governs what is queued, not what is in flight
+  check(
+    `refresh outruns recovery, and both outrun queued enrichment (${order.join(',')})`,
+    order.length === 6 &&
+    order.indexOf('f1') < order.indexOf('r1') &&
+    order.indexOf('r1') < order.indexOf('e2')
+  )
+}
+
+// The back-fill still gets a share while a refresh is saturating the budget,
+// which is the whole reason they share a manager
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(8, 50)
+
+  const { peak, job } = tracker()
+
+  enqueueSubscriptionJobs(LANE_REFRESH, Array.from({ length: 40 }, (_, i) => job('refresh', `f${i}`, 40)))
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, Array.from({ length: 4 }, (_, i) => job('enrichment', `e${i}`, 40)))
+
+  await sleep(250)
+
+  const enrichmentRan = peak.enrichment
+
+  cancelAllSubscriptionWork()
+  await sleep(100)
+
+  check(`enrichment runs during a refresh (peak ${enrichmentRan})`, enrichmentRan > 0)
 }
 
 // The same channel offered twice is fetched once
@@ -125,7 +236,7 @@ function check(name, condition) {
 
   await sleep(300)
 
-  check(`cancel stops further work (${ranAtCancel} then ${ran} of 8)`, ran <= ranAtCancel + 1 && ran < 8)
+  check(`cancel stops further work (${ranAtCancel} then ${ran} of 8)`, ran <= ranAtCancel + 2 && ran < 8)
   check(
     'cancelled keys can be offered again',
     enqueueSubscriptionJobs(LANE_ENRICHMENT, [{ key: 'c7', run: async () => {} }]) === 1
@@ -145,10 +256,16 @@ function check(name, condition) {
 
   check(`lane reported while running (${subscriptionWorkerProgress.lane})`, subscriptionWorkerProgress.lane === 'recovery')
   check(`label reported (${subscriptionWorkerProgress.label})`, String(subscriptionWorkerProgress.label).startsWith('channel'))
+  check('per-lane counts are exposed', subscriptionWorkerProgress.lanes.recovery.inFlight === 1)
 
   await sleep(300)
 
-  check('counters cleared when idle', subscriptionWorkerProgress.done === 0 && subscriptionWorkerProgress.queued === 0)
+  check(
+    'counters cleared when idle',
+    subscriptionWorkerProgress.done === 0 &&
+    subscriptionWorkerProgress.queued === 0 &&
+    subscriptionWorkerProgress.inFlight === 0
+  )
 }
 
 // Progress is not writable from outside
@@ -168,31 +285,25 @@ function check(name, condition) {
   check('progress is not externally writable', rejected)
 }
 
-// Enqueueing mid-drain joins the running drain instead of starting a second one
+// The peak is reported for the run that produced it, and reading it resets it
 {
   resetSubscriptionWorkerForTests()
-  setSubscriptionWorkerDelayForTests(5)
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(5, 1000)
 
-  let inFlight = 0
-  let peak = 0
+  takeSubscriptionPeakInFlight()
 
-  const job = key => ({
-    key,
-    run: async () => {
-      inFlight++
-      peak = Math.max(peak, inFlight)
-      await sleep(20)
-      inFlight--
-    }
-  })
+  enqueueSubscriptionJobs(
+    LANE_REFRESH,
+    Array.from({ length: 10 }, (_, i) => ({ key: `pk${i}`, run: () => sleep(30) }))
+  )
 
-  enqueueSubscriptionJobs(LANE_ENRICHMENT, [job('x1')])
-  await sleep(5)
-  enqueueSubscriptionJobs(LANE_RECOVERY, [job('y1')])
+  await sleep(400)
 
-  await sleep(300)
+  const peak = takeSubscriptionPeakInFlight()
 
-  check('enqueue during a drain does not start a second runner', peak === 1)
+  check(`peak in flight is reported (${peak})`, peak > 1 && peak <= 5)
+  check('and reading it resets it', takeSubscriptionPeakInFlight() === 0)
 }
 
 // Recovery is paced more slowly than the back-fill on purpose: it only runs
@@ -201,7 +312,8 @@ function check(name, condition) {
   const recovery = LANE_DELAYS_MS[LANE_RECOVERY]
   const enrichment = LANE_DELAYS_MS[LANE_ENRICHMENT]
 
-  check(`recovery waits longer between jobs than the back-fill (${recovery}ms vs ${enrichment}ms)`, recovery > enrichment)
+  check(`recovery waits longer between requests than the back-fill (${recovery}ms vs ${enrichment}ms)`, recovery > enrichment)
+  check(`the refresh is paced by the budget alone (${LANE_DELAYS_MS[LANE_REFRESH]}ms)`, LANE_DELAYS_MS[LANE_REFRESH] === 0)
 }
 
 // And the gap actually observed matches the lane that ran
@@ -214,18 +326,22 @@ function check(name, condition) {
     run: async () => { started.push(Date.now()) }
   }))
 
-  enqueueSubscriptionJobs(LANE_ENRICHMENT, jobs('e'))
+  enqueueSubscriptionJobs(LANE_RECOVERY, jobs('r'))
 
-  await sleep(LANE_DELAYS_MS[LANE_ENRICHMENT] * 4)
+  await sleep(LANE_DELAYS_MS[LANE_RECOVERY] * 3)
 
   const gaps = started.slice(1).map((time, i) => time - started[i])
-  const slowest = Math.max(...gaps)
 
   check(
-    `back-fill gaps follow its own lane (${gaps.join(', ')}ms)`,
-    started.length === 3 && slowest < LANE_DELAYS_MS[LANE_RECOVERY]
+    `recovery keeps its own gap between requests (${gaps.join(', ')}ms)`,
+    started.length === 3 && gaps.every(gap => gap >= LANE_DELAYS_MS[LANE_RECOVERY] - 20)
   )
 }
+
+// The budget default is the measured one unless the environment says otherwise
+resetSubscriptionWorkerForTests()
+
+check(`budget defaults to the measured 50 (${subscriptionBudget()})`, subscriptionBudget() === 50)
 
 cancelAllSubscriptionWork()
 
