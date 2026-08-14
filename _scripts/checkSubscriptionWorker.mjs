@@ -15,6 +15,7 @@ import {
   cancelAllSubscriptionWork,
   cancelSubscriptionLane,
   enqueueSubscriptionJobs,
+  promoteSubscriptionJobs,
   resetSubscriptionWorkerForTests,
   setSubscriptionBudgetForTests,
   setSubscriptionWorkerDelayForTests,
@@ -183,6 +184,25 @@ function tracker() {
   await sleep(100)
 
   check(`enrichment runs during a refresh (peak ${enrichmentRan})`, enrichmentRan > 0)
+}
+
+// What is on screen can be moved to the front of a queue it is already in
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(1, 1)
+
+  const { order, job } = tracker()
+
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, ['a', 'b', 'c', 'd'].map(name => job('enrichment', name, 10)))
+
+  const moved = promoteSubscriptionJobs(LANE_ENRICHMENT, ['enrichment-d', 'enrichment-c'])
+
+  await sleep(300)
+
+  check(`promotion moves queued jobs to the front, in the order asked for (${order.join(',')})`,
+    moved === 2 && order.join(',') === 'a,d,c,b')
+  check('and does not repeat them', order.length === 4)
 }
 
 // The same channel offered twice is fetched once

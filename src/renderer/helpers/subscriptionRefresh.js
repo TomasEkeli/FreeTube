@@ -35,7 +35,10 @@ import {
   recoverUnresolvedChannels,
   NO_RETRY_ATTEMPTS
 } from './subscriptionRecovery'
-import { cancelDetailBackfill } from './subscriptionDetailBackfill'
+import {
+  backfillDetailsForFetchedChannel,
+  cancelDetailBackfill
+} from './subscriptionDetailBackfill'
 
 /**
  * The refresh, for every feed, in one place.
@@ -293,6 +296,13 @@ async function fetchOneChannel(feed, descriptor, channel, context) {
     }
 
     cacheChannelResult(descriptor, channel, result, context.subscriptionUpdates)
+
+    if (descriptor.followsDetailBackfill) {
+      // Offered now rather than when the refresh commits: the entries are in
+      // the cache already, and the enrichment lane has a width of its own, so
+      // this fills in during the RSS pass instead of after it
+      backfillDetailsForFetchedChannel(feed, result.entries)
+    }
   } finally {
     noteChannelDone(feed, context)
   }

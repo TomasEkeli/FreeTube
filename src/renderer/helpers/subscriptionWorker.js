@@ -301,6 +301,34 @@ export function enqueueSubscriptionJob(lane, job) {
 }
 
 /**
+ * Move jobs already queued to the front of their lane, in the order given.
+ *
+ * The back-fill queues a channel as soon as a refresh finds it short of
+ * details, which is long before anyone looks at it, so by the time someone does
+ * the channel they are reading is somewhere in a queue of six hundred. This is
+ * how the part of the feed on screen gets served first without being fetched
+ * twice: it is the same job, moved.
+ *
+ * @param {string} lane
+ * @param {string[]} keys
+ * @returns {number} how many were found and moved
+ */
+export function promoteSubscriptionJobs(lane, keys) {
+  if (keys.length === 0) { return 0 }
+
+  const wanted = new Map(keys.map((key, index) => [key, index]))
+  const promoted = queues[lane].filter(job => wanted.has(job.key))
+
+  if (promoted.length === 0) { return 0 }
+
+  promoted.sort((a, b) => wanted.get(a.key) - wanted.get(b.key))
+
+  queues[lane] = promoted.concat(queues[lane].filter(job => !wanted.has(job.key)))
+
+  return promoted.length
+}
+
+/**
  * Drop everything queued for a lane. Jobs already in flight are allowed to
  * finish, since there is nothing to abort a request with here and their results
  * are still worth having.
