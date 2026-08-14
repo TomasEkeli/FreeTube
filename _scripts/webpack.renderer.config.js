@@ -158,6 +158,10 @@ const config = {
       // tracing has to be baked in at build time. Set on the launch command.
       'process.env.FT_SUBS_TRACE': JSON.stringify(process.env.FT_SUBS_TRACE ?? ''),
       'process.env.FT_SUBS_FAIL': JSON.stringify(process.env.FT_SUBS_FAIL ?? ''),
+      // How many subscription requests may be in flight at once. Overrides the
+      // measured default, so the cap can be re-derived against a real
+      // subscription list without a rebuild of the constant.
+      'process.env.FT_SUBS_BUDGET': JSON.stringify(process.env.FT_SUBS_BUDGET ?? ''),
       // Simulates YouTube distrusting our PO token, so the SABR recovery
       // ladder can be exercised without waiting for the real thing
       'process.env.FT_SABR_WALL': JSON.stringify(process.env.FT_SABR_WALL ?? ''),

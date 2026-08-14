@@ -1,3 +1,5 @@
+import { reactive } from 'vue'
+
 import i18n from '../i18n/index'
 
 import { copyToClipboard, showToast } from './utils'
@@ -32,6 +34,50 @@ export const FETCH_FAILED = 'failed'
 /** @param {string} status */
 export function isRetryableFetchStatus(status) {
   return status === FETCH_RATE_LIMITED || status === FETCH_FAILED
+}
+
+/**
+ * Channels that are gone rather than unreachable, per feed, so the interface can
+ * offer to unsubscribe from them.
+ *
+ * Module scope because the fetches that discover them are module scope: they
+ * used to be closures inside the tab components, pushing into a ref the
+ * composable owned, which meant a channel found to be dead while its tab was
+ * unmounted was reported into nothing.
+ *
+ * @type {Record<string, { id: string }[]>}
+ */
+const unavailableChannelsByFeed = reactive({})
+
+/**
+ * @param {string} feed
+ * @param {{ id: string }} channel
+ */
+export function reportChannelUnavailable(feed, channel) {
+  const existing = unavailableChannelsByFeed[feed]
+
+  if (existing == null) {
+    unavailableChannelsByFeed[feed] = [channel]
+    return
+  }
+
+  // A refresh and the recovery behind it can both reach the same dead channel
+  if (existing.some(known => known.id === channel.id)) { return }
+
+  existing.push(channel)
+}
+
+/**
+ * @param {string} feed
+ * @returns {{ id: string }[]}
+ */
+export function unavailableChannels(feed) {
+  return unavailableChannelsByFeed[feed] ?? []
+}
+
+/** Forget what the last refresh found, at the start of the next one. */
+export function clearUnavailableChannels(feed) {
+  unavailableChannelsByFeed[feed] = []
 }
 
 /**

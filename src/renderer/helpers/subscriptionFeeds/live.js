@@ -1,85 +1,59 @@
-<template>
-  <SubscriptionsTabUi
-    :is-loading="isLoading"
-    :is-refreshing="isRefreshing"
-    :video-list="entryList"
-    :error-channels="errorChannels"
-    :last-refresh-timestamp="lastRefreshTimestamp"
-    :attempted-fetch="attemptedFetch"
-    :backfill-feed="'videos'"
-    :title="t('Global.Videos')"
-    @refresh="refresh"
-  />
-</template>
+import store from '../../store/index'
 
-<script setup>
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-
-import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
-
-import store from '../store/index'
-
-import { useSubscriptionFeed } from '../composables/useSubscriptionFeed'
-
-import { getChannelPlaylistId } from '../helpers/utils'
-import { getInvidiousChannelVideos, invidiousFetch } from '../helpers/api/invidious'
-import { getLocalChannelVideos } from '../helpers/api/local'
-import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
+import { getInvidiousChannelLive, invidiousFetch } from '../api/invidious'
+import { getLocalChannelLiveStreams } from '../api/local'
+import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../subscriptions'
+import { getChannelPlaylistId } from '../utils'
 import {
+  reportChannelUnavailable,
   reportFetchError,
   FETCH_FAILED,
   FETCH_OK,
   FETCH_RATE_LIMITED,
   FETCH_UNAVAILABLE
-} from '../helpers/subscriptionFetchStatus'
+} from '../subscriptionFetchStatus'
 
-const { t } = useI18n()
+/** How the live streams feed is fetched. See `videos.js` for why this is here. */
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const backendFallback = computed(() => store.getters.getBackendFallback)
+const FEED = 'live'
 
-/** @type {import('vue').ComputedRef<string>} */
-const currentInvidiousInstanceUrl = computed(() => store.getters.getCurrentInvidiousInstanceUrl)
+function backendFallback() {
+  return store.getters.getBackendFallback
+}
 
-const {
-  isLoading,
-  isRefreshing,
-  entryList,
-  errorChannels,
-  attemptedFetch,
-  lastRefreshTimestamp,
-  refresh
-} = useSubscriptionFeed({
-  feed: 'videos',
-  cacheGetter: 'getVideoCache',
-  updateAction: 'updateSubscriptionVideosCacheByChannel',
+function invidiousInstanceUrl() {
+  return store.getters.getCurrentInvidiousInstanceUrl
+}
+
+export const liveFeed = {
+  feed: FEED,
+  cacheGetter: 'getLiveCache',
+  updateAction: 'updateSubscriptionLiveCacheByChannel',
   entriesKey: 'videos',
-  autoFetchGetter: 'getSubscriptionForVideosFirstAutoFetchRun',
-  autoFetchMutation: 'setSubscriptionForVideosFirstAutoFetchRun',
   rssMode: 'setting',
+  followsDetailBackfill: true,
+  isEnabled: () => !store.getters.getHideLiveStreams && !store.getters.getHideSubscriptionsLive,
   fetchChannel: (channel, { useRss, failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
       return useRss
-        ? getChannelVideosInvidiousRSS(channel, failedAttempts)
-        : getChannelVideosInvidiousScraper(channel, failedAttempts)
+        ? getChannelLiveInvidiousRSS(channel, failedAttempts)
+        : getChannelLiveInvidious(channel, failedAttempts)
     }
 
     return useRss
-      ? getChannelVideosLocalRSS(channel, failedAttempts)
-      : getChannelVideosLocalScraper(channel, failedAttempts)
+      ? getChannelLiveLocalRSS(channel, failedAttempts)
+      : getChannelLiveLocal(channel, failedAttempts)
   },
-  postProcess: updateVideoListAfterProcessing,
-  followsDetailBackfill: true
-})
+  postProcess: updateVideoListAfterProcessing
+}
 
-async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
+async function getChannelLiveLocal(channel, failedAttempts = 0) {
   try {
-    const result = await getLocalChannelVideos(channel.id)
+    const result = await getLocalChannelLiveStreams(channel.id)
 
     if (result === null) {
       // ChannelError, so the channel is gone rather than the request having failed
-      errorChannels.value.push(channel)
+      reportChannelUnavailable(FEED, channel)
       return {
         status: FETCH_UNAVAILABLE,
         entries: []
@@ -93,14 +67,14 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
       thumbnailUrl: result.thumbnailUrl
     }
   } catch (err) {
-    reportFetchError('videos', { channel, error: err, api: 'local' })
+    reportFetchError(FEED, { channel, error: err, api: 'local' })
 
     switch (failedAttempts) {
       case 0:
-        return await getChannelVideosLocalRSS(channel, failedAttempts + 1)
+        return await getChannelLiveLocalRSS(channel, failedAttempts + 1)
       case 1:
-        if (backendFallback.value) {
-          return await getChannelVideosInvidiousScraper(channel, failedAttempts + 1)
+        if (backendFallback()) {
+          return await getChannelLiveInvidious(channel, failedAttempts + 1)
         } else {
           return {
             status: FETCH_FAILED,
@@ -108,7 +82,7 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
           }
         }
       case 2:
-        return await getChannelVideosLocalRSS(channel, failedAttempts + 1)
+        return await getChannelLiveLocalRSS(channel, failedAttempts + 1)
       default:
         return {
           status: FETCH_FAILED,
@@ -118,8 +92,8 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
   }
 }
 
-async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
-  const playlistId = getChannelPlaylistId(channel.id, 'videos', 'newest')
+async function getChannelLiveLocalRSS(channel, failedAttempts = 0) {
+  const playlistId = getChannelPlaylistId(channel.id, 'live', 'newest')
   const feedUrl = `https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistId}`
 
   try {
@@ -141,7 +115,7 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
       })
 
       if (response2.status === 404) {
-        errorChannels.value.push(channel)
+        reportChannelUnavailable(FEED, channel)
 
         return {
           status: FETCH_UNAVAILABLE,
@@ -149,7 +123,7 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
         }
       }
 
-      // the channel is alive, it just has no videos tab
+      // the channel is alive, it just has no live tab
       return {
         status: FETCH_OK,
         entries: []
@@ -175,14 +149,14 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
       name: parsed.name
     }
   } catch (error) {
-    reportFetchError('videos', { channel, error, api: 'local' })
+    reportFetchError(FEED, { channel, error, api: 'local' })
 
     switch (failedAttempts) {
       case 0:
-        return await getChannelVideosLocalScraper(channel, failedAttempts + 1)
+        return await getChannelLiveLocal(channel, failedAttempts + 1)
       case 1:
-        if (backendFallback.value) {
-          return await getChannelVideosInvidiousRSS(channel, failedAttempts + 1)
+        if (backendFallback()) {
+          return await getChannelLiveInvidiousRSS(channel, failedAttempts + 1)
         } else {
           return {
             status: FETCH_FAILED,
@@ -190,7 +164,7 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
           }
         }
       case 2:
-        return await getChannelVideosLocalScraper(channel, failedAttempts + 1)
+        return await getChannelLiveLocal(channel, failedAttempts + 1)
       default:
         return {
           status: FETCH_FAILED,
@@ -200,9 +174,9 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
   }
 }
 
-async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
+async function getChannelLiveInvidious(channel, failedAttempts = 0) {
   try {
-    const result = await getInvidiousChannelVideos(channel.id)
+    const result = await getInvidiousChannelLive(channel.id)
 
     let name
 
@@ -216,14 +190,14 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
       name
     }
   } catch (err) {
-    reportFetchError('videos', { channel, error: err, api: 'invidious' })
+    reportFetchError(FEED, { channel, error: err, api: 'invidious' })
 
     switch (failedAttempts) {
       case 0:
-        return await getChannelVideosInvidiousRSS(channel, failedAttempts + 1)
+        return await getChannelLiveInvidiousRSS(channel, failedAttempts + 1)
       case 1:
-        if (process.env.SUPPORTS_LOCAL_API && backendFallback.value) {
-          return await getChannelVideosLocalScraper(channel, failedAttempts + 1)
+        if (process.env.SUPPORTS_LOCAL_API && backendFallback()) {
+          return await getChannelLiveLocal(channel, failedAttempts + 1)
         } else {
           return {
             status: FETCH_FAILED,
@@ -231,7 +205,7 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
           }
         }
       case 2:
-        return await getChannelVideosInvidiousRSS(channel, failedAttempts + 1)
+        return await getChannelLiveInvidiousRSS(channel, failedAttempts + 1)
       default:
         return {
           status: FETCH_FAILED,
@@ -241,9 +215,9 @@ async function getChannelVideosInvidiousScraper(channel, failedAttempts = 0) {
   }
 }
 
-async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
-  const playlistId = getChannelPlaylistId(channel.id, 'videos', 'newest')
-  const feedUrl = `${currentInvidiousInstanceUrl.value}/feed/playlist/${playlistId}`
+async function getChannelLiveInvidiousRSS(channel, failedAttempts = 0) {
+  const playlistId = getChannelPlaylistId(channel.id, 'live', 'newest')
+  const feedUrl = `${invidiousInstanceUrl()}/feed/playlist/${playlistId}`
 
   try {
     const response = await invidiousFetch(feedUrl)
@@ -259,12 +233,12 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
       // playlists don't exist if the channel was terminated but also if it doesn't have the tab,
       // so we need to check the channel feed too before deciding it errored, as that only 404s if the channel was terminated
 
-      const response2 = await fetch(`${currentInvidiousInstanceUrl.value}/feed/channel/${channel.id}`, {
+      const response2 = await fetch(`${invidiousInstanceUrl()}/feed/channel/${channel.id}`, {
         method: 'GET'
       })
 
       if (response2.status === 404) {
-        errorChannels.value.push(channel)
+        reportChannelUnavailable(FEED, channel)
 
         return {
           status: FETCH_UNAVAILABLE,
@@ -293,14 +267,14 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
       name: parsed.name
     }
   } catch (error) {
-    reportFetchError('videos', { channel, error, api: 'invidious' })
+    reportFetchError(FEED, { channel, error, api: 'invidious' })
 
     switch (failedAttempts) {
       case 0:
-        return await getChannelVideosInvidiousScraper(channel, failedAttempts + 1)
+        return await getChannelLiveInvidious(channel, failedAttempts + 1)
       case 1:
-        if (process.env.SUPPORTS_LOCAL_API && backendFallback.value) {
-          return await getChannelVideosLocalRSS(channel, failedAttempts + 1)
+        if (process.env.SUPPORTS_LOCAL_API && backendFallback()) {
+          return await getChannelLiveLocalRSS(channel, failedAttempts + 1)
         } else {
           return {
             status: FETCH_FAILED,
@@ -308,7 +282,7 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
           }
         }
       case 2:
-        return await getChannelVideosInvidiousScraper(channel, failedAttempts + 1)
+        return await getChannelLiveInvidious(channel, failedAttempts + 1)
       default:
         return {
           status: FETCH_FAILED,
@@ -317,4 +291,3 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
     }
   }
 }
-</script>

@@ -74,8 +74,12 @@ function percentile(sorted, fraction) {
  * @param {number} meta.channelCount
  * @param {boolean} [meta.useRss]
  * @param {string} [meta.backend]
+ * @param {string} [meta.reason] what asked for this refresh. Worth recording
+ *   because a refresh that starts on its own is indistinguishable in the log
+ *   from one someone asked for, and "why did it fetch that again?" is the
+ *   question this instrumentation keeps being pointed at.
  */
-export function beginSubscriptionTrace(feed, { channelCount, useRss, backend }) {
+export function beginSubscriptionTrace(feed, { channelCount, useRss, backend, reason }) {
   if (!subscriptionTraceEnabled) { return }
 
   sessions.set(feed, {
@@ -91,7 +95,7 @@ export function beginSubscriptionTrace(feed, { channelCount, useRss, backend }) 
   })
 
   console.log(
-    `[subs-trace] begin ${feed} channels=${channelCount} rss=${useRss ?? 'n/a'} backend=${backend ?? 'n/a'}`
+    `[subs-trace] begin ${feed} channels=${channelCount} rss=${useRss ?? 'n/a'} backend=${backend ?? 'n/a'} reason=${reason ?? 'n/a'}`
   )
 }
 
@@ -168,6 +172,45 @@ export function traceRecovery(feed, stage, detail = {}) {
     .map(([key, value]) => `${key}=${value}`)
 
   console.log(`[subs-trace] recovery ${feed} ${stage} ${parts.join(' ')}`.trimEnd())
+}
+
+/**
+ * Report a channel the back-fill has finished with.
+ *
+ * The back-fill says nothing to the user by design: it improves a feed that
+ * already works, and it now grinds through every channel rather than the
+ * visible hundred, so announcing it would mean a crawling bar for the best part
+ * of an hour. That leaves "is it still going?" with no answer at all, which was
+ * asked within an hour of it shipping. This is the answer.
+ *
+ * @param {string} feed
+ * @param {string} channelId
+ * @param {object} detail
+ * @param {string} detail.outcome
+ * @param {number} detail.ms
+ * @param {number} detail.queued how many channels are still waiting
+ */
+export function traceBackfill(feed, channelId, { outcome, ms, queued }) {
+  if (!subscriptionTraceEnabled) { return }
+
+  console.log(`[subs-trace] backfill ${feed} ${channelId} ${outcome} ${ms}ms queued=${queued}`)
+}
+
+/**
+ * Report the end of a whole refresh cycle, once every feed in it has finished.
+ *
+ * The peak is the number the shared budget exists to hold down, and it is only
+ * meaningful across the lot: each feed's own peak says nothing about what the
+ * host saw while three of them were running at once.
+ *
+ * @param {object} detail
+ * @param {number} detail.peakInFlight
+ * @param {number} detail.channels
+ */
+export function traceRefreshCycleEnd({ peakInFlight, channels }) {
+  if (!subscriptionTraceEnabled) { return }
+
+  console.log(`[subs-trace] cycle end channels=${channels} peakInFlight=${peakInFlight}`)
 }
 
 /**

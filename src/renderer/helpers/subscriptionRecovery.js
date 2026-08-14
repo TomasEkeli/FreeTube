@@ -137,6 +137,9 @@ export async function recoverUnresolvedChannels({ feed, channels, fetchChannel, 
       await enqueueSubscriptionJob(LANE_RECOVERY, {
         key: `${feed}-recovery-group-${group.channels.map(channel => channel.id).join()}`,
         label: group.label ?? undefined,
+        // The group is asked for all at once, which is the whole point of it,
+        // so it costs the manager what it really spends
+        weight: group.channels.length,
         run: () => attempt(group.channels)
       })
 

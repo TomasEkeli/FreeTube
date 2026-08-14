@@ -1,26 +1,29 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import store from '../store/index'
-
 import {
   cancelSubscriptionRecovery,
   subscriptionRecoveryProgress
 } from '../helpers/subscriptionRecovery'
-import { subscriptionWorkerProgress } from '../helpers/subscriptionWorker'
+import { subscriptionRefreshProgress } from '../helpers/subscriptionRefresh'
 
 /**
  * What the subscriptions page is doing in the background, reduced to something
  * that fits on one line of the feed's status strip.
  *
- * Both the recovery and the detail back-fill deliberately avoid the loading
- * spinner so the feed stays readable while they work, which leaves them
- * invisible: a feed slowly filling itself in over several minutes with no
- * explanation is indistinguishable from a broken one.
+ * A refresh that runs behind an existing feed, and the recovery behind that, both
+ * deliberately avoid the loading spinner so the feed stays readable while they
+ * work — which leaves them invisible, and a feed quietly reassembling itself is
+ * indistinguishable from a broken one. What is worth saying is that something is
+ * happening and roughly how far along it is.
  *
- * What is worth saying is that something is happening and roughly how far along
- * it is. The counts behind it are diagnostics, and belong in the trace rather
- * than in front of someone who only wants to know whether to keep waiting.
+ * The detail back-fill is deliberately not reported. It is an improvement to a
+ * feed that is already perfectly usable without it, it now runs over every
+ * channel rather than the visible hundred, and it is held to a narrow share of
+ * the budget on purpose. Announcing it would mean a status line and a crawling
+ * bar for the best part of an hour after every refresh, which turns "this is
+ * getting better in the background" into "this is stuck". Whether it is running
+ * is a question for `FT_SUBS_TRACE`, not for the person reading the feed.
  */
 /**
  * @param {object} sources
@@ -31,12 +34,8 @@ export function useSubscriptionActivity({ isRefreshing }) {
   const { t } = useI18n()
 
   const recovery = subscriptionRecoveryProgress
-  const worker = subscriptionWorkerProgress
+  const refreshing = subscriptionRefreshProgress
 
-  /**
-   * Recovery outranks the back-fill on the shared queue, so it is what gets
-   * reported while both are outstanding.
-   */
   const label = computed(() => {
     // Said during a refresh as well as after one, because a refresh that runs
     // behind an existing feed has no spinner to announce it. It also keeps the
@@ -53,39 +52,25 @@ export function useSubscriptionActivity({ isRefreshing }) {
       return t('Subscriptions.Recovering Channels')
     }
 
-    if (worker.lane === 'enrichment') {
-      return t('Subscriptions.Filling In Details')
-    }
-
     return ''
   })
 
   /**
    * How far along, from 0 to 1, or null when there is no honest answer.
    *
-   * The back-fill's queue grows as more of the feed is looked at, so its
-   * denominator moves and the bar can go backwards. That is still better than a
-   * number that pretends otherwise, and a bar that occasionally retreats reads
-   * as work arriving rather than as a fault.
-   *
    * @type {import('vue').ComputedRef<number | null>}
    */
   const progress = computed(() => {
     if (isRefreshing.value) {
-      // The refresh already counts itself for the window's progress bar
-      return store.getters.getProgressBarPercentage / 100
+      // Read from the refresh itself rather than from the window's progress bar,
+      // which is a mirror of this and not a source
+      return refreshing.total > 0 ? refreshing.done / refreshing.total : null
     }
 
     if (recovery.active) {
       const total = recovery.recovered + recovery.remaining
 
       return total > 0 ? recovery.recovered / total : null
-    }
-
-    if (worker.lane === 'enrichment') {
-      const total = worker.done + worker.queued
-
-      return total > 0 ? worker.done / total : null
     }
 
     return null

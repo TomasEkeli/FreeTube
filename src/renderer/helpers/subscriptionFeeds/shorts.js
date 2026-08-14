@@ -1,63 +1,40 @@
-<template>
-  <SubscriptionsTabUi
-    :is-loading="isLoading"
-    :is-refreshing="isRefreshing"
-    :video-list="entryList"
-    :error-channels="errorChannels"
-    :last-refresh-timestamp="lastRefreshTimestamp"
-    :attempted-fetch="attemptedFetch"
-    :title="t('Global.Shorts')"
-    @refresh="refresh"
-  />
-</template>
+import store from '../../store/index'
 
-<script setup>
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-
-import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
-
-import store from '../store/index'
-
-import { useSubscriptionFeed } from '../composables/useSubscriptionFeed'
-
-import { getChannelPlaylistId } from '../helpers/utils'
-import { invidiousFetch } from '../helpers/api/invidious'
-import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../helpers/subscriptions'
+import { invidiousFetch } from '../api/invidious'
+import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../subscriptions'
+import { getChannelPlaylistId } from '../utils'
 import {
+  reportChannelUnavailable,
   reportFetchError,
   FETCH_FAILED,
   FETCH_OK,
   FETCH_RATE_LIMITED,
   FETCH_UNAVAILABLE
-} from '../helpers/subscriptionFetchStatus'
+} from '../subscriptionFetchStatus'
 
-const { t } = useI18n()
+/** How the shorts feed is fetched. See `videos.js` for why this is here. */
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const backendFallback = computed(() => store.getters.getBackendFallback)
+const FEED = 'shorts'
 
-/** @type {import('vue').ComputedRef<string>} */
-const currentInvidiousInstanceUrl = computed(() => store.getters.getCurrentInvidiousInstanceUrl)
+function backendFallback() {
+  return store.getters.getBackendFallback
+}
 
-const {
-  isLoading,
-  isRefreshing,
-  entryList,
-  errorChannels,
-  attemptedFetch,
-  lastRefreshTimestamp,
-  refresh
-} = useSubscriptionFeed({
-  feed: 'shorts',
+function invidiousInstanceUrl() {
+  return store.getters.getCurrentInvidiousInstanceUrl
+}
+
+export const shortsFeed = {
+  feed: FEED,
   cacheGetter: 'getShortsCache',
   updateAction: 'updateSubscriptionShortsCacheByChannel',
   entriesKey: 'videos',
-  autoFetchGetter: 'getSubscriptionForShortsFirstAutoFetchRun',
-  autoFetchMutation: 'setSubscriptionForShortsFirstAutoFetchRun',
   // There is no scraper path for shorts: the channel shorts tab carries no
   // publish dates, so a feed cannot be built from it.
   rssMode: 'always',
+  // Shorts have no duration from any source, so there is nothing to fill in
+  followsDetailBackfill: false,
+  isEnabled: () => !store.getters.getHideSubscriptionsShorts,
   fetchChannel: (channel, { failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
       return getChannelShortsInvidious(channel, failedAttempts)
@@ -66,7 +43,7 @@ const {
     return getChannelShortsLocal(channel, failedAttempts)
   },
   postProcess: updateVideoListAfterProcessing
-})
+}
 
 async function getChannelShortsLocal(channel, failedAttempts = 0) {
   const playlistId = getChannelPlaylistId(channel.id, 'shorts', 'newest')
@@ -91,7 +68,7 @@ async function getChannelShortsLocal(channel, failedAttempts = 0) {
       })
 
       if (response2.status === 404) {
-        errorChannels.value.push(channel)
+        reportChannelUnavailable(FEED, channel)
 
         return {
           status: FETCH_UNAVAILABLE,
@@ -121,11 +98,11 @@ async function getChannelShortsLocal(channel, failedAttempts = 0) {
       name: parsed.name
     }
   } catch (error) {
-    reportFetchError('shorts', { channel, error, api: 'local' })
+    reportFetchError(FEED, { channel, error, api: 'local' })
 
     switch (failedAttempts) {
       case 0:
-        if (backendFallback.value) {
+        if (backendFallback()) {
           return await getChannelShortsInvidious(channel, failedAttempts + 1)
         } else {
           return {
@@ -144,7 +121,7 @@ async function getChannelShortsLocal(channel, failedAttempts = 0) {
 
 async function getChannelShortsInvidious(channel, failedAttempts = 0) {
   const playlistId = getChannelPlaylistId(channel.id, 'shorts', 'newest')
-  const feedUrl = `${currentInvidiousInstanceUrl.value}/feed/playlist/${playlistId}`
+  const feedUrl = `${invidiousInstanceUrl()}/feed/playlist/${playlistId}`
 
   try {
     const response = await invidiousFetch(feedUrl)
@@ -160,12 +137,12 @@ async function getChannelShortsInvidious(channel, failedAttempts = 0) {
       // playlists don't exist if the channel was terminated but also if it doesn't have the tab,
       // so we need to check the channel feed too before deciding it errored, as that only 404s if the channel was terminated
 
-      const response2 = await fetch(`${currentInvidiousInstanceUrl.value}/feed/channel/${channel.id}`, {
+      const response2 = await fetch(`${invidiousInstanceUrl()}/feed/channel/${channel.id}`, {
         method: 'GET'
       })
 
       if (response2.status === 404) {
-        errorChannels.value.push(channel)
+        reportChannelUnavailable(FEED, channel)
 
         return {
           status: FETCH_UNAVAILABLE,
@@ -194,11 +171,11 @@ async function getChannelShortsInvidious(channel, failedAttempts = 0) {
       name: parsed.name
     }
   } catch (error) {
-    reportFetchError('shorts', { channel, error, api: 'invidious' })
+    reportFetchError(FEED, { channel, error, api: 'invidious' })
 
     switch (failedAttempts) {
       case 0:
-        if (process.env.SUPPORTS_LOCAL_API && backendFallback.value) {
+        if (process.env.SUPPORTS_LOCAL_API && backendFallback()) {
           return await getChannelShortsLocal(channel, failedAttempts + 1)
         } else {
           return {
@@ -214,4 +191,3 @@ async function getChannelShortsInvidious(channel, failedAttempts = 0) {
     }
   }
 }
-</script>

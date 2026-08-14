@@ -7,8 +7,11 @@ import { getInvidiousChannelLive, getInvidiousChannelVideos } from './api/invidi
 import {
   enqueueSubscriptionJobs,
   cancelSubscriptionLane,
+  promoteSubscriptionJobs,
+  subscriptionWorkerProgress,
   LANE_ENRICHMENT
 } from './subscriptionWorker'
+import { traceBackfill } from './subscriptionTrace'
 import { durationIsMissing } from '../../subscriptionVideoDetails'
 
 /**
@@ -115,8 +118,13 @@ export function channelsNeedingDetails(visibleEntries, feed = 'videos') {
 }
 
 /**
- * Offer the visible part of a feed for filling in. Safe to call whenever the
- * visible slice changes: the worker drops channels it already has queued.
+ * Offer the visible part of a feed for filling in, and put it at the front of
+ * the queue. Safe to call whenever the visible slice changes: the manager drops
+ * channels it already has queued, and moves the rest rather than repeating them.
+ *
+ * Since the refresh offers every channel it finds short of details, most of what
+ * is on screen is usually queued already, somewhere behind several hundred
+ * others. Promotion is what makes the part being read fill in first.
  *
  * @param {any[]} visibleEntries
  * @param {string} feed
@@ -124,21 +132,70 @@ export function channelsNeedingDetails(visibleEntries, feed = 'videos') {
  */
 export function backfillDetailsForVisibleVideos(visibleEntries, feed = 'videos') {
   if (!store.getters.getSubscriptionBackfillDetails) { return 0 }
-
-  const descriptor = FEEDS[feed]
-
-  if (descriptor == null) { return 0 }
+  if (FEEDS[feed] == null) { return 0 }
 
   const channels = channelsNeedingDetails(visibleEntries, feed)
 
   if (channels.length === 0) { return 0 }
 
+  const added = enqueueChannels(feed, channels)
+
+  promoteSubscriptionJobs(LANE_ENRICHMENT, channels.map(({ channelId }) => `${feed}-${channelId}`))
+
+  return added
+}
+
+/**
+ * Offer one channel for filling in, as soon as a refresh has cached what RSS
+ * had to say about it.
+ *
+ * This used to wait for the whole refresh to commit, because it was triggered by
+ * the visible slice changing and the slice only changed when the feed was
+ * replaced at the end. Waiting achieved nothing: the details are wanted for
+ * entries that are already in the cache, the manager's budget decides how fast
+ * they are fetched either way, and starting at the end meant the back-fill ran
+ * in a silence after the refresh instead of in the slack during it.
+ *
+ * Steady-state cost is small. Carry-over means only channels with genuinely new
+ * uploads are short of durations after the first full pass; the first pass
+ * back-fills everything, which is what it is for.
+ *
+ * @param {string} feed
+ * @param {any[] | null} entries what the refresh just cached for one channel
+ * @returns {number} how many channels were newly queued, so at most one
+ */
+export function backfillDetailsForFetchedChannel(feed, entries) {
+  if (!store.getters.getSubscriptionBackfillDetails) { return 0 }
+  if (FEEDS[feed] == null) { return 0 }
+  if (entries == null || entries.length === 0) { return 0 }
+
+  return enqueueChannels(feed, channelsNeedingDetails(entries, feed))
+}
+
+/**
+ * @param {string} feed
+ * @param {{ channelId: string, channelName?: string }[]} channels
+ * @returns {number}
+ */
+function enqueueChannels(feed, channels) {
+  if (channels.length === 0) { return 0 }
+
+  const descriptor = FEEDS[feed]
   const { failed, completed } = seen[feed]
 
   return enqueueSubscriptionJobs(LANE_ENRICHMENT, channels.map(({ channelId, channelName }) => ({
     key: `${feed}-${channelId}`,
     label: channelName ?? channelId,
     run: async () => {
+      const startedAt = Date.now()
+
+      /** @param {string} outcome */
+      const done = outcome => traceBackfill(feed, channelId, {
+        outcome,
+        ms: Date.now() - startedAt,
+        queued: subscriptionWorkerProgress.lanes.enrichment.queued
+      })
+
       let entries
 
       try {
@@ -148,11 +205,13 @@ export function backfillDetailsForVisibleVideos(visibleEntries, feed = 'videos')
       } catch (error) {
         console.error(error)
         failed.add(channelId)
+        done('threw')
         return
       }
 
       if (entries == null || entries.length === 0) {
         failed.add(channelId)
+        done('empty')
         return
       }
 
@@ -161,6 +220,7 @@ export function backfillDetailsForVisibleVideos(visibleEntries, feed = 'videos')
       await store.dispatch(descriptor.updateAction, { channelId, videos: entries })
 
       detailBackfillRevision.value++
+      done(`ok:${entries.length}`)
     }
   })))
 }

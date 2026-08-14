@@ -1,64 +1,40 @@
-<template>
-  <SubscriptionsTabUi
-    :is-loading="isLoading"
-    :is-refreshing="isRefreshing"
-    :video-list="entryList"
-    :error-channels="errorChannels"
-    :attempted-fetch="attemptedFetch"
-    :is-community="true"
-    :initial-data-limit="20"
-    :last-refresh-timestamp="lastRefreshTimestamp"
-    :title="t('Global.Posts')"
-    @refresh="refresh"
-  />
-</template>
+import store from '../../store/index'
 
-<script setup>
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-
-import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
-
-import store from '../store/index'
-
-import { useSubscriptionFeed } from '../composables/useSubscriptionFeed'
-
-import { getLocalChannelCommunity } from '../helpers/api/local'
-import { invidiousGetCommunityPosts } from '../helpers/api/invidious'
+import { invidiousGetCommunityPosts } from '../api/invidious'
+import { getLocalChannelCommunity } from '../api/local'
 import {
+  reportChannelUnavailable,
   reportFetchError,
   FETCH_FAILED,
   FETCH_OK,
   FETCH_UNAVAILABLE
-} from '../helpers/subscriptionFetchStatus'
+} from '../subscriptionFetchStatus'
 
-const { t } = useI18n()
+/** How the community posts feed is fetched. See `videos.js` for why this is here. */
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const backendFallback = computed(() => store.getters.getBackendFallback)
+const FEED = 'posts'
 
-/** @type {import('vue').ComputedRef<string[]>} */
-const forbiddenTitles = computed(() => {
+function backendFallback() {
+  return store.getters.getBackendFallback
+}
+
+function forbiddenTitles() {
   return JSON.parse(store.getters.getForbiddenTitles.toLowerCase())
-})
+}
 
-const {
-  isLoading,
-  isRefreshing,
-  entryList,
-  errorChannels,
-  attemptedFetch,
-  lastRefreshTimestamp,
-  refresh
-} = useSubscriptionFeed({
-  feed: 'posts',
+export const postsFeed = {
+  feed: FEED,
   cacheGetter: 'getPostsCache',
   updateAction: 'updateSubscriptionPostsCacheByChannel',
   entriesKey: 'posts',
-  autoFetchGetter: 'getSubscriptionForPostsFirstAutoFetchRun',
-  autoFetchMutation: 'setSubscriptionForPostsFirstAutoFetchRun',
   // Community posts are not published as RSS at all
   rssMode: 'never',
+  followsDetailBackfill: false,
+  isCommunity: true,
+  initialDataLimit: 20,
+  // The community tab is hidden entirely while RSS is on, since there is no RSS
+  // to serve it with
+  isEnabled: () => !store.getters.getHideSubscriptionsCommunity && !store.getters.getUseRssFeeds,
   fetchChannel: async (channel) => {
     const result = (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious')
       ? await getChannelPostsInvidious(channel)
@@ -72,11 +48,13 @@ const {
   // The cache deliberately keeps posts the filter would hide, so that turning
   // the setting off shows them again without a refetch.
   postProcess: (posts) => {
+    const forbidden = forbiddenTitles()
+
     return posts
-      .filter(post => !forbiddenTitles.value.some(text => post.author.toLowerCase().includes(text)))
+      .filter(post => !forbidden.some(text => post.author.toLowerCase().includes(text)))
       .sort((a, b) => b.publishedTime - a.publishedTime)
   }
-})
+}
 
 /**
  * Posts carry their author's name and avatar, so unlike the other feeds there
@@ -109,7 +87,7 @@ async function getChannelPostsLocal(channel) {
 
     if (entries === null) {
       // ChannelError, so the channel is gone rather than the request having failed
-      errorChannels.value.push(channel)
+      reportChannelUnavailable(FEED, channel)
 
       return {
         status: FETCH_UNAVAILABLE,
@@ -122,9 +100,9 @@ async function getChannelPostsLocal(channel) {
       entries
     }
   } catch (err) {
-    reportFetchError('posts', { channel, error: err, api: 'local' })
+    reportFetchError(FEED, { channel, error: err, api: 'local' })
 
-    if (store.getters.getBackendPreference === 'local' && backendFallback.value) {
+    if (store.getters.getBackendPreference === 'local' && backendFallback()) {
       return await getChannelPostsInvidious(channel)
     }
 
@@ -144,9 +122,9 @@ async function getChannelPostsInvidious(channel) {
       entries: result.posts
     }
   } catch (err) {
-    reportFetchError('posts', { channel, error: err, api: 'invidious' })
+    reportFetchError(FEED, { channel, error: err, api: 'invidious' })
 
-    if (process.env.SUPPORTS_LOCAL_API && store.getters.getBackendPreference === 'invidious' && backendFallback.value) {
+    if (process.env.SUPPORTS_LOCAL_API && store.getters.getBackendPreference === 'invidious' && backendFallback()) {
       return await getChannelPostsLocal(channel)
     } else {
       return {
@@ -156,4 +134,3 @@ async function getChannelPostsInvidious(channel) {
     }
   }
 }
-</script>
