@@ -171,6 +171,28 @@ export function traceRecovery(feed, stage, detail = {}) {
 }
 
 /**
+ * Report a channel the back-fill has finished with.
+ *
+ * The back-fill says nothing to the user by design: it improves a feed that
+ * already works, and it now grinds through every channel rather than the
+ * visible hundred, so announcing it would mean a crawling bar for the best part
+ * of an hour. That leaves "is it still going?" with no answer at all, which was
+ * asked within an hour of it shipping. This is the answer.
+ *
+ * @param {string} feed
+ * @param {string} channelId
+ * @param {object} detail
+ * @param {string} detail.outcome
+ * @param {number} detail.ms
+ * @param {number} detail.queued how many channels are still waiting
+ */
+export function traceBackfill(feed, channelId, { outcome, ms, queued }) {
+  if (!subscriptionTraceEnabled) { return }
+
+  console.log(`[subs-trace] backfill ${feed} ${channelId} ${outcome} ${ms}ms queued=${queued}`)
+}
+
+/**
  * Report the end of a whole refresh cycle, once every feed in it has finished.
  *
  * The peak is the number the shared budget exists to hold down, and it is only

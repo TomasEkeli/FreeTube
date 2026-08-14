@@ -8,8 +8,10 @@ import {
   enqueueSubscriptionJobs,
   cancelSubscriptionLane,
   promoteSubscriptionJobs,
+  subscriptionWorkerProgress,
   LANE_ENRICHMENT
 } from './subscriptionWorker'
+import { traceBackfill } from './subscriptionTrace'
 import { durationIsMissing } from '../../subscriptionVideoDetails'
 
 /**
@@ -185,6 +187,15 @@ function enqueueChannels(feed, channels) {
     key: `${feed}-${channelId}`,
     label: channelName ?? channelId,
     run: async () => {
+      const startedAt = Date.now()
+
+      /** @param {string} outcome */
+      const done = outcome => traceBackfill(feed, channelId, {
+        outcome,
+        ms: Date.now() - startedAt,
+        queued: subscriptionWorkerProgress.lanes.enrichment.queued
+      })
+
       let entries
 
       try {
@@ -194,11 +205,13 @@ function enqueueChannels(feed, channels) {
       } catch (error) {
         console.error(error)
         failed.add(channelId)
+        done('threw')
         return
       }
 
       if (entries == null || entries.length === 0) {
         failed.add(channelId)
+        done('empty')
         return
       }
 
@@ -207,6 +220,7 @@ function enqueueChannels(feed, channels) {
       await store.dispatch(descriptor.updateAction, { channelId, videos: entries })
 
       detailBackfillRevision.value++
+      done(`ok:${entries.length}`)
     }
   })))
 }
