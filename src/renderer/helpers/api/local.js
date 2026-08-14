@@ -625,7 +625,7 @@ function buildSessionFromYtConfig(ytConfig, fetchFunc) {
   context.client.screenDensityFloat ??= 1
   context.client.screenHeightPoints ??= 1440
   context.client.screenPixelDensity ??= 1
-  context.client.timeZone ??= 2560
+  context.client.screenWidthPoints ??= 2560
   context.client.utcOffsetMinutes ??= -Math.floor((new Date()).getTimezoneOffset())
   context.client.memoryTotalKbytes ??= '8000000'
 
@@ -667,9 +667,7 @@ function buildSessionFromYtConfig(ytConfig, fetchFunc) {
  * }>}
  */
 export async function getLocalVideoInfo(id) {
-  // This is a false positive, the variable is definitely used below
-  // eslint-disable-next-line no-useless-assignment
-  let responseTime = Date.now()
+  let responseTime
   let totalAdTimeMilliseconds = 0
 
   const fetchFunc = async (input, init) => {
