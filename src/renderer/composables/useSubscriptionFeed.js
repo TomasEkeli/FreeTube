@@ -222,14 +222,29 @@ export function useSubscriptionFeed(feed) {
     }
   })
 
-  watch(activeSubscriptionList, () => {
-    // Switching profile means everything queued is for channels nobody is
-    // looking at any more
+  /**
+   * Which channels this profile holds, as one string.
+   *
+   * Deliberately not the list itself, deeply watched, as it used to be. A
+   * refresh writes back the channel names and avatars it learned, which replaces
+   * the profile object; watching the list therefore meant every finishing feed
+   * announced itself as a profile change, and a profile change cancels the
+   * refresh. The first feed to finish would have cancelled the other two.
+   *
+   * What is actually being watched for is the set of channels changing:
+   * switching profile, subscribing, unsubscribing.
+   */
+  const activeProfileChannelIds = computed(() => {
+    return activeSubscriptionList.value.map(channel => channel.id).join()
+  })
+
+  watch(activeProfileChannelIds, () => {
+    // Everything queued is for channels nobody is looking at any more
     cancelSubscriptionRefresh()
 
     isLoading.value = true
     loadFromCacheSometimes()
-  }, { deep: true })
+  })
 
   if (followsDetailBackfill) {
     // The back-fill writes straight into the entry objects this list already

@@ -92,6 +92,11 @@ export const LANE_DELAYS_MS = {
  * @typedef {object} WorkerJob
  * @property {string} key deduplication key, usually feed + channel id
  * @property {string} [label] shown to the user while it runs
+ * @property {number} [weight] how many requests this job makes at once, if it is
+ *   not the usual one. The recovery asks for a whole group of channels in one
+ *   job, on purpose — the size of the group is the thing it is escalating down —
+ *   and a budget that counted that as one request would be counting a
+ *   twenty-five channel burst as politeness.
  * @property {() => Promise<void>} run
  */
 
@@ -153,8 +158,14 @@ let generation = 0
 /** When each lane last started a request, for the per-lane gap. */
 let lastStartedAt = { [LANE_REFRESH]: 0, [LANE_RECOVERY]: 0, [LANE_ENRICHMENT]: 0 }
 
-/** Start times inside the current budget window, oldest first. */
+/**
+ * Starts inside the current budget window, oldest first, with what each cost.
+ * @type {{ at: number, weight: number }[]}
+ */
 let recentStarts = []
+
+/** Requests in flight, counting a job that makes several as several. */
+let weightInFlight = 0
 
 /** The highest number of requests in flight at once since it was last read. */
 let peakInFlight = 0
@@ -357,13 +368,22 @@ function queuedCount() {
   return LANES.reduce((total, lane) => total + queues[lane].length, 0)
 }
 
+/** @param {WorkerJob} job */
+function jobWeight(job) {
+  return Math.max(1, job.weight ?? 1)
+}
+
 /** @param {number} now */
 function pruneRecentStarts(now) {
   const cutoff = now - budgetWindowMs()
 
-  while (recentStarts.length > 0 && recentStarts[0] <= cutoff) {
+  while (recentStarts.length > 0 && recentStarts[0].at <= cutoff) {
     recentStarts.shift()
   }
+}
+
+function startedWeightInWindow() {
+  return recentStarts.reduce((total, start) => total + start.weight, 0)
 }
 
 /**
@@ -375,6 +395,11 @@ function pruneRecentStarts(now) {
  * one manager. Only lanes with work waiting reserve anything, and only as much
  * as they are not already using, so the reservation costs nothing when there is
  * nothing under way beneath.
+ *
+ * Counted in requests, using each lane's width, which is exact for the lanes
+ * whose jobs make one request each. The recovery lane's group jobs make several,
+ * so a reservation for it is an understatement — deliberately, since holding
+ * back twenty five requests for a lane that may not want them would be worse.
  *
  * @param {string} lane
  */
@@ -405,16 +430,26 @@ function reservedForLowerLanes(lane) {
  *
  * @param {string} lane
  * @param {number} now
+ * @param {number} weight what the job at the head of the lane will cost
  * @returns {{ ok: boolean, at: number | null }}
  */
-function startability(lane, now) {
+function startability(lane, now, weight) {
   const budget = subscriptionBudget()
 
-  if (progress.inFlight + reservedForLowerLanes(lane) >= budget) { return { ok: false, at: null } }
+  // A single job that costs more than the entire budget still has to run, or it
+  // would wait for room that can never appear. It runs on its own instead.
+  const cost = Math.min(weight, budget)
+
+  if (weightInFlight > 0 && weightInFlight + cost + reservedForLowerLanes(lane) > budget) {
+    return { ok: false, at: null }
+  }
+
   if (progress.lanes[lane].inFlight >= widthForLane(lane)) { return { ok: false, at: null } }
 
-  if (recentStarts.length >= budget) {
-    return { ok: false, at: recentStarts[0] + budgetWindowMs() }
+  const startedWeight = startedWeightInWindow()
+
+  if (startedWeight > 0 && startedWeight + cost > budget) {
+    return { ok: false, at: recentStarts[0].at + budgetWindowMs() }
   }
 
   const gap = delayForLane(lane)
@@ -440,7 +475,7 @@ function startWhatWeCan() {
 
       pruneRecentStarts(now)
 
-      const { ok, at } = startability(lane, now)
+      const { ok, at } = startability(lane, now, jobWeight(queues[lane][0]))
 
       if (!ok) {
         if (at != null && (earliest == null || at < earliest)) { earliest = at }
@@ -461,9 +496,11 @@ function startWhatWeCan() {
 function startJob(lane, now) {
   const job = queues[lane].shift()
   const counters = progress.lanes[lane]
+  const weight = jobWeight(job)
 
-  recentStarts.push(now)
+  recentStarts.push({ at: now, weight })
   lastStartedAt[lane] = now
+  weightInFlight += weight
   counters.inFlight++
 
   if (job.label != null) {
@@ -474,8 +511,8 @@ function startJob(lane, now) {
 
   syncCounts()
 
-  if (progress.inFlight > peakInFlight) {
-    peakInFlight = progress.inFlight
+  if (weightInFlight > peakInFlight) {
+    peakInFlight = weightInFlight
   }
 
   Promise.resolve()
@@ -487,6 +524,7 @@ function startJob(lane, now) {
     })
     .finally(() => {
       claimed[lane].delete(job.key)
+      weightInFlight -= weight
       counters.inFlight--
       counters.done++
       syncCounts()
@@ -593,6 +631,7 @@ export function resetSubscriptionWorkerForTests() {
   generation++
   wake = null
   recentStarts = []
+  weightInFlight = 0
   lastStartedAt = { [LANE_REFRESH]: 0, [LANE_RECOVERY]: 0, [LANE_ENRICHMENT]: 0 }
   peakInFlight = 0
   progress.lane = 'idle'

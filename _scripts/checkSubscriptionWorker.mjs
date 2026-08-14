@@ -115,6 +115,59 @@ function tracker() {
   check(`and the budget is actually used (peak ${observedPeak})`, observedPeak >= 4)
 }
 
+// A job that makes several requests at once costs the budget several: the
+// recovery asks for a whole group in one job, and counting that as one request
+// would be counting a burst as politeness
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(10, 1000)
+
+  let inFlightWeight = 0
+  let peakWeight = 0
+
+  const groupJob = (name, weight) => ({
+    key: name,
+    weight,
+    run: async () => {
+      inFlightWeight += weight
+      peakWeight = Math.max(peakWeight, inFlightWeight)
+      await sleep(30)
+      inFlightWeight -= weight
+    }
+  })
+
+  enqueueSubscriptionJobs(LANE_REFRESH, [
+    groupJob('g1', 6),
+    groupJob('g2', 6),
+    groupJob('g3', 6)
+  ])
+
+  await sleep(80)
+
+  const observed = peakWeight
+
+  cancelAllSubscriptionWork()
+  await sleep(60)
+
+  check(`weighted jobs are charged what they spend (peak ${observed} of 10)`, observed <= 10)
+}
+
+// A single job bigger than the whole budget still has to run, on its own
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(4, 50)
+
+  let ran = 0
+
+  enqueueSubscriptionJobs(LANE_RECOVERY, [{ key: 'huge', weight: 25, run: async () => { ran++ } }])
+
+  await sleep(200)
+
+  check('an oversized job is not stuck waiting for room that cannot appear', ran === 1)
+}
+
 // The start rate is held down as well as the concurrency: a burst of very short
 // requests must not slip a second budget's worth through inside one window
 {
