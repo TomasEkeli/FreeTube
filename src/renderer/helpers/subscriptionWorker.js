@@ -448,7 +448,13 @@ function startability(lane, now, weight) {
 
   const startedWeight = startedWeightInWindow()
 
-  if (startedWeight > 0 && startedWeight + cost > budget) {
+  // The same reservation as above, and for the same reason. Leaving it off here
+  // was measured starving the back-fill: a refresh took every one of the fifty
+  // tokens in each two second window, so the back-fill managed one channel per
+  // window while the refresh ran, against two per second once it stopped. Room
+  // to run and permission to start are both room, and holding back one without
+  // the other reserves nothing.
+  if (startedWeight > 0 && startedWeight + cost + reservedForLowerLanes(lane) > budget) {
     return { ok: false, at: recentStarts[0].at + budgetWindowMs() }
   }
 

@@ -74,8 +74,12 @@ function percentile(sorted, fraction) {
  * @param {number} meta.channelCount
  * @param {boolean} [meta.useRss]
  * @param {string} [meta.backend]
+ * @param {string} [meta.reason] what asked for this refresh. Worth recording
+ *   because a refresh that starts on its own is indistinguishable in the log
+ *   from one someone asked for, and "why did it fetch that again?" is the
+ *   question this instrumentation keeps being pointed at.
  */
-export function beginSubscriptionTrace(feed, { channelCount, useRss, backend }) {
+export function beginSubscriptionTrace(feed, { channelCount, useRss, backend, reason }) {
   if (!subscriptionTraceEnabled) { return }
 
   sessions.set(feed, {
@@ -91,7 +95,7 @@ export function beginSubscriptionTrace(feed, { channelCount, useRss, backend }) 
   })
 
   console.log(
-    `[subs-trace] begin ${feed} channels=${channelCount} rss=${useRss ?? 'n/a'} backend=${backend ?? 'n/a'}`
+    `[subs-trace] begin ${feed} channels=${channelCount} rss=${useRss ?? 'n/a'} backend=${backend ?? 'n/a'} reason=${reason ?? 'n/a'}`
   )
 }
 

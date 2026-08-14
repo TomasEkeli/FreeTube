@@ -239,6 +239,37 @@ function tracker() {
   check(`enrichment runs during a refresh (peak ${enrichmentRan})`, enrichmentRan > 0)
 }
 
+// And it gets a share of the start rate, not only of the concurrency. Reserving
+// one without the other reserves nothing: a refresh that takes every token in
+// the window starves the lanes below it just as thoroughly as one that fills
+// every slot. Measured against a real subscription list before it was fixed: one
+// channel per two second window during a refresh, two per second after it.
+{
+  resetSubscriptionWorkerForTests()
+  setSubscriptionWorkerDelayForTests(1)
+  setSubscriptionBudgetForTests(8, 60)
+
+  const { starts, job } = tracker()
+
+  // Short jobs, so nothing is ever blocked by concurrency and only the start
+  // rate is left to govern anything
+  enqueueSubscriptionJobs(LANE_REFRESH, Array.from({ length: 200 }, (_, i) => job('refresh', `f${i}`, 1)))
+  enqueueSubscriptionJobs(LANE_ENRICHMENT, Array.from({ length: 20 }, (_, i) => job('enrichment', `e${i}`, 1)))
+
+  await sleep(400)
+
+  const enrichmentStarts = starts.filter(start => start.lane === 'enrichment').length
+  const refreshStarts = starts.filter(start => start.lane === 'refresh').length
+
+  cancelAllSubscriptionWork()
+  await sleep(100)
+
+  check(
+    `the back-fill keeps its share of the start rate (${enrichmentStarts} enrichment against ${refreshStarts} refresh)`,
+    enrichmentStarts >= 6
+  )
+}
+
 // What is on screen can be moved to the front of a queue it is already in
 {
   resetSubscriptionWorkerForTests()

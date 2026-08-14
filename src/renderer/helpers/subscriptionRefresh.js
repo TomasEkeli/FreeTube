@@ -141,10 +141,11 @@ let recoveryChain = Promise.resolve()
  * @param {object} [options]
  * @param {string} [options.preferredFeed] the feed being looked at, which is
  *   fetched first so that it finishes soonest
+ * @param {string} [options.reason] recorded in the trace
  * @returns {Promise<void>}
  */
-export function refreshAllSubscriptionFeeds({ preferredFeed } = {}) {
-  return refreshSubscriptionFeeds(enabledSubscriptionFeeds(), { preferredFeed })
+export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
+  return refreshSubscriptionFeeds(enabledSubscriptionFeeds(), { preferredFeed, reason })
 }
 
 /**
@@ -159,9 +160,10 @@ export function refreshAllSubscriptionFeeds({ preferredFeed } = {}) {
  * @param {string[]} feeds
  * @param {object} [options]
  * @param {string} [options.preferredFeed]
+ * @param {string} [options.reason] recorded in the trace
  * @returns {Promise<void>}
  */
-export function refreshSubscriptionFeeds(feeds, { preferredFeed } = {}) {
+export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason } = {}) {
   const ordered = feeds.slice().sort((a, b) => {
     if (a === preferredFeed) { return -1 }
     if (b === preferredFeed) { return 1 }
@@ -169,14 +171,15 @@ export function refreshSubscriptionFeeds(feeds, { preferredFeed } = {}) {
     return 0
   })
 
-  return Promise.all(ordered.map(feed => startFeedRefresh(feed))).then(() => {})
+  return Promise.all(ordered.map(feed => startFeedRefresh(feed, reason))).then(() => {})
 }
 
 /**
  * @param {string} feed
+ * @param {string} [reason]
  * @returns {Promise<void>}
  */
-function startFeedRefresh(feed) {
+function startFeedRefresh(feed, reason) {
   const existing = running.get(feed)
 
   if (existing != null) { return existing.promise }
@@ -225,7 +228,8 @@ function startFeedRefresh(feed) {
   beginSubscriptionTrace(feed, {
     channelCount: channels.length,
     useRss,
-    backend: store.getters.getBackendPreference
+    backend: store.getters.getBackendPreference,
+    reason
   })
   beginFetchErrorCollection(feed, channels.length)
 

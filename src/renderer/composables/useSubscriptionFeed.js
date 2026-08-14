@@ -126,7 +126,12 @@ export function useSubscriptionFeed(feed) {
     return true
   }
 
-  function loadFromCacheSometimes() {
+  /**
+   * @param {object} options
+   * @param {'profile' | 'cache-miss'} options.reason why this is being asked,
+   *   which decides how much gets fetched if anything must be
+   */
+  function loadFromCacheSometimes({ reason }) {
     // Can only load reliably when cache ready
     if (!subscriptionCacheReady.value) { return }
 
@@ -146,7 +151,17 @@ export function useSubscriptionFeed(feed) {
       // it up would be showing the wrong feed.
       entryList.value = []
       isLoading.value = true
-      refreshAllSubscriptionFeeds({ preferredFeed: feed })
+
+      // A profile switch invalidates every feed, so every feed is fetched. A
+      // cache that merely cannot supply this one feed is about this one feed:
+      // starting a whole cycle for it would mean navigating back to the
+      // subscriptions page could re-fetch six hundred channels three times over.
+      if (reason === 'profile') {
+        refreshAllSubscriptionFeeds({ preferredFeed: feed, reason })
+      } else {
+        refreshSubscriptionFeeds([feed], { reason })
+      }
+
       return
     }
 
@@ -162,7 +177,7 @@ export function useSubscriptionFeed(feed) {
       // Only auto fetch once per window, for every feed at once
       store.getters.getSubscriptionsFirstAutoFetchRun
     ) {
-      loadFromCacheSometimes()
+      loadFromCacheSometimes({ reason: 'cache-miss' })
       return
     }
 
@@ -178,7 +193,7 @@ export function useSubscriptionFeed(feed) {
     }
 
     store.commit('setSubscriptionsFirstAutoFetchRun')
-    refreshAllSubscriptionFeeds({ preferredFeed: feed })
+    refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'auto' })
   }
 
   /**
@@ -206,10 +221,10 @@ export function useSubscriptionFeed(feed) {
     }
 
     if (fetchSubscriptionsAutomatically.value) {
-      return refreshAllSubscriptionFeeds({ preferredFeed: feed })
+      return refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'button' })
     }
 
-    return refreshSubscriptionFeeds([feed])
+    return refreshSubscriptionFeeds([feed], { reason: 'button' })
   }
 
   watch(state.revision, rebuildFromCache)
@@ -243,7 +258,7 @@ export function useSubscriptionFeed(feed) {
     cancelSubscriptionRefresh()
 
     isLoading.value = true
-    loadFromCacheSometimes()
+    loadFromCacheSometimes({ reason: 'profile' })
   })
 
   if (followsDetailBackfill) {
@@ -263,7 +278,7 @@ export function useSubscriptionFeed(feed) {
   if (!subscriptionCacheReady.value) {
     watch(subscriptionCacheReady, () => {
       if (!alreadyLoadedRemotely) {
-        loadFromCacheSometimes()
+        loadFromCacheSometimes({ reason: 'cache-miss' })
         return
       }
 
