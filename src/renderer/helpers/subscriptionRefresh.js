@@ -229,6 +229,9 @@ function startFeedRefresh(feed) {
   })
   beginFetchErrorCollection(feed, channels.length)
 
+  // Safe to set the total after enqueueing, because the manager starts a job in
+  // a microtask at the earliest, so nothing can report itself done before this
+  // function returns
   const added = enqueueSubscriptionJobs(LANE_REFRESH, channels.map(channel => ({
     key: `refresh-${feed}-${channel.id}`,
     label: channel.name ?? channel.id,
@@ -279,6 +282,14 @@ async function fetchOneChannel(feed, descriptor, channel, context) {
         entries: result?.entries?.length ?? null,
         outcome: result?.status ?? 'threw'
       })
+    }
+
+    if (result == null) {
+      // The fetch threw its way past its own ladder, which the ladders are
+      // written not to do. Worth retrying, and worth not taking the rest of the
+      // refresh down over: one channel failing is the ordinary case here.
+      context.unresolved.push(channel)
+      return
     }
 
     const { status } = result
