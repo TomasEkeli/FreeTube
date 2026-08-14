@@ -48,12 +48,14 @@ const state = {
     sports: '',
     podcasts: ''
   },
-  subscriptionFirstAutoFetchRunData: {
-    videos: false,
-    liveStreams: false,
-    shorts: false,
-    posts: false,
-  },
+  /**
+   * Whether this window has done its automatic subscription fetch yet.
+   *
+   * One flag rather than one per feed, because one refresh now covers every
+   * feed. Four flags meant four refreshes, started at whatever moments the user
+   * happened to visit each tab.
+   */
+  subscriptionsFirstAutoFetchRun: false,
   appTitle: '',
   openPrompts: new Set()
 }
@@ -159,17 +161,8 @@ const getters = {
     return state.lastPopularRefreshTimestamp
   },
 
-  getSubscriptionForVideosFirstAutoFetchRun(state) {
-    return state.subscriptionFirstAutoFetchRunData.videos === true
-  },
-  getSubscriptionForLiveStreamsFirstAutoFetchRun (state) {
-    return state.subscriptionFirstAutoFetchRunData.liveStreams === true
-  },
-  getSubscriptionForShortsFirstAutoFetchRun (state) {
-    return state.subscriptionFirstAutoFetchRunData.shorts === true
-  },
-  getSubscriptionForPostsFirstAutoFetchRun (state) {
-    return state.subscriptionFirstAutoFetchRunData.posts === true
+  getSubscriptionsFirstAutoFetchRun(state) {
+    return state.subscriptionsFirstAutoFetchRun === true
   },
   getAppTitle (state) {
     return state.appTitle
@@ -787,17 +780,8 @@ const mutations = {
     state.openPrompts.delete(id)
   },
 
-  setSubscriptionForVideosFirstAutoFetchRun (state) {
-    state.subscriptionFirstAutoFetchRunData.videos = true
-  },
-  setSubscriptionForLiveStreamsFirstAutoFetchRun (state) {
-    state.subscriptionFirstAutoFetchRunData.liveStreams = true
-  },
-  setSubscriptionForShortsFirstAutoFetchRun (state) {
-    state.subscriptionFirstAutoFetchRunData.shorts = true
-  },
-  setSubscriptionForPostsFirstAutoFetchRun (state) {
-    state.subscriptionFirstAutoFetchRunData.posts = true
+  setSubscriptionsFirstAutoFetchRun (state) {
+    state.subscriptionsFirstAutoFetchRun = true
   }
 }
 

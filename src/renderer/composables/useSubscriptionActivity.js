@@ -1,12 +1,11 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import store from '../store/index'
-
 import {
   cancelSubscriptionRecovery,
   subscriptionRecoveryProgress
 } from '../helpers/subscriptionRecovery'
+import { subscriptionRefreshProgress } from '../helpers/subscriptionRefresh'
 import { subscriptionWorkerProgress } from '../helpers/subscriptionWorker'
 
 /**
@@ -32,6 +31,7 @@ export function useSubscriptionActivity({ isRefreshing }) {
 
   const recovery = subscriptionRecoveryProgress
   const worker = subscriptionWorkerProgress
+  const refreshing = subscriptionRefreshProgress
 
   /**
    * Recovery outranks the back-fill on the shared queue, so it is what gets
@@ -53,7 +53,7 @@ export function useSubscriptionActivity({ isRefreshing }) {
       return t('Subscriptions.Recovering Channels')
     }
 
-    if (worker.lane === 'enrichment') {
+    if (worker.lanes.enrichment.inFlight > 0 || worker.lanes.enrichment.queued > 0) {
       return t('Subscriptions.Filling In Details')
     }
 
@@ -72,8 +72,9 @@ export function useSubscriptionActivity({ isRefreshing }) {
    */
   const progress = computed(() => {
     if (isRefreshing.value) {
-      // The refresh already counts itself for the window's progress bar
-      return store.getters.getProgressBarPercentage / 100
+      // Read from the refresh itself rather than from the window's progress bar,
+      // which is a mirror of this and not a source
+      return refreshing.total > 0 ? refreshing.done / refreshing.total : null
     }
 
     if (recovery.active) {
@@ -82,10 +83,11 @@ export function useSubscriptionActivity({ isRefreshing }) {
       return total > 0 ? recovery.recovered / total : null
     }
 
-    if (worker.lane === 'enrichment') {
-      const total = worker.done + worker.queued
+    const enrichment = worker.lanes.enrichment
+    const enrichmentTotal = enrichment.done + enrichment.queued + enrichment.inFlight
 
-      return total > 0 ? worker.done / total : null
+    if (enrichmentTotal > 0) {
+      return enrichment.done / enrichmentTotal
     }
 
     return null

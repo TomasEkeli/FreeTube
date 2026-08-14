@@ -15,103 +15,31 @@
       >
         <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
         <div
-          v-if="!hideSubscriptionsVideos"
-          ref="videosTab"
+          v-for="(feed, index) in visibleFeeds"
+          :key="feed"
+          :ref="element => { tabElements[index] = element }"
           class="tab"
           role="tab"
-          :aria-selected="currentTab === 'videos'"
+          :aria-selected="currentFeed === feed"
           aria-controls="subscriptionsPanel"
-          :tabindex="currentTab === 'videos' ? 0 : -1"
-          :class="{ selectedTab: currentTab === 'videos' }"
-          @click="changeTab('videos')"
-          @keydown.space.enter.prevent="changeTab('videos')"
-          @keydown.left.right="focusTab($event, 'videos')"
+          :tabindex="currentFeed === feed ? 0 : -1"
+          :class="{ selectedTab: currentFeed === feed }"
+          @click="changeTab(feed)"
+          @keydown.space.enter.prevent="changeTab(feed)"
+          @keydown.left.right="focusTab($event, feed)"
         >
           <FontAwesomeIcon
-            :icon="['fa', 'video']"
+            :icon="FEED_ICONS[feed]"
             class="subscriptionIcon"
           />
-          {{ $t("Global.Videos") }}
-        </div>
-        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
-        <div
-          v-if="!hideSubscriptionsShorts"
-          ref="shortsTab"
-          class="tab"
-          role="tab"
-          :aria-selected="currentTab === 'shorts'"
-          aria-controls="subscriptionsPanel"
-          :tabindex="currentTab === 'shorts' ? 0 : -1"
-          :class="{ selectedTab: currentTab === 'shorts' }"
-          @click="changeTab('shorts')"
-          @keydown.space.enter.prevent="changeTab('shorts')"
-          @keydown.left.right="focusTab($event, 'shorts')"
-        >
-          <FontAwesomeIcon
-            :icon="['fa', 'clapperboard']"
-            class="subscriptionIcon"
-          />
-          {{ $t("Global.Shorts") }}
-        </div>
-        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
-        <div
-          v-if="!hideSubscriptionsLive"
-          ref="liveTab"
-          class="tab"
-          role="tab"
-          :aria-selected="currentTab === 'live'"
-          aria-controls="subscriptionsPanel"
-          :tabindex="currentTab === 'live' ? 0 : -1"
-          :class="{ selectedTab: currentTab === 'live' }"
-          @click="changeTab('live')"
-          @keydown.space.enter.prevent="changeTab('live')"
-          @keydown.left.right="focusTab($event, 'live')"
-        >
-          <FontAwesomeIcon
-            :icon="['fa', 'tower-broadcast']"
-            class="subscriptionIcon"
-          />
-          {{ $t("Global.Live") }}
-        </div>
-        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
-        <div
-          v-if="visibleTabs.includes('community')"
-          ref="communityTab"
-          class="tab"
-          role="tab"
-          :aria-selected="currentTab === 'community'"
-          aria-controls="subscriptionsPanel"
-          :tabindex="currentTab === 'community' ? 0 : -1"
-          :class="{ selectedTab: currentTab === 'community' }"
-          @click="changeTab('community')"
-          @keydown.space.enter.prevent="changeTab('community')"
-          @keydown.left.right="focusTab($event, 'community')"
-        >
-          <FontAwesomeIcon
-            :icon="['fa', 'message']"
-            class="subscriptionIcon"
-          />
-          {{ $t("Global.Posts") }}
+          {{ subscriptionFeedTitle(feed) }}
         </div>
       </FtFlexBox>
-      <SubscriptionsVideos
-        v-if="currentTab === 'videos'"
+      <SubscriptionsTab
+        v-if="currentFeed !== null"
         id="subscriptionsPanel"
-        role="tabpanel"
-      />
-      <SubscriptionsShorts
-        v-else-if="currentTab === 'shorts'"
-        id="subscriptionsPanel"
-        role="tabpanel"
-      />
-      <SubscriptionsLive
-        v-else-if="currentTab === 'live'"
-        id="subscriptionsPanel"
-        role="tabpanel"
-      />
-      <SubscriptionsPosts
-        v-else-if="currentTab === 'community'"
-        id="subscriptionsPanel"
+        :key="currentFeed"
+        :feed="currentFeed"
         role="tabpanel"
       />
       <p v-else>
@@ -126,138 +54,109 @@
 
 <script setup>
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { computed, ref, useTemplateRef, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
-import SubscriptionsVideos from '../../components/SubscriptionsVideos.vue'
-import SubscriptionsLive from '../../components/SubscriptionsLive.vue'
-import SubscriptionsShorts from '../../components/SubscriptionsShorts.vue'
-import SubscriptionsPosts from '../../components/SubscriptionsPosts.vue'
+import SubscriptionsTab from '../../components/SubscriptionsTab.vue'
 
 import store from '../../store/index'
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsVideos = computed(() => {
-  return store.getters.getHideSubscriptionsVideos
-})
+import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsShorts = computed(() => {
-  return store.getters.getHideSubscriptionsShorts
-})
+import { enabledSubscriptionFeeds } from '../../helpers/subscriptionFeeds'
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsLive = computed(() => {
-  return store.getters.getHideLiveStreams || store.getters.getHideSubscriptionsLive
-})
+/**
+ * Which feeds exist, and whether each is switched on, is the registry's
+ * business now: the same answer decides what the tab strip offers and what a
+ * refresh covers, and those two disagreeing would mean refreshing a feed nobody
+ * can see, or showing a tab nothing fetches.
+ *
+ * What stays here is what is genuinely about the strip: the icons, and which
+ * tab is selected.
+ */
+const FEED_ICONS = {
+  videos: ['fa', 'video'],
+  shorts: ['fa', 'clapperboard'],
+  live: ['fa', 'tower-broadcast'],
+  posts: ['fa', 'message']
+}
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsCommunity = computed(() => {
-  return store.getters.getHideSubscriptionsCommunity
-})
+const subscriptionFeedTitle = useSubscriptionFeedTitle()
 
-/** @type {import('vue').ComputedRef<boolean>} */
-const useRssFeeds = computed(() => {
-  return store.getters.getUseRssFeeds
-})
+/**
+ * The feeds switched on, in tab order. Reactive because deciding it reads the
+ * distraction-free settings out of the store, and doing that inside a computed
+ * is what subscribes to them.
+ *
+ * @type {import('vue').ComputedRef<string[]>}
+ */
+const visibleFeeds = computed(() => enabledSubscriptionFeeds())
 
-/** @type {import('vue').Ref<'videos' | 'shorts' | 'live' | 'community' | null>} */
-const currentTab = ref('videos')
+/** @type {import('vue').Ref<'videos' | 'shorts' | 'live' | 'posts' | null>} */
+const currentFeed = ref(visibleFeeds.value[0] ?? null)
 
-watch(currentTab, (value) => {
+// Restore the tab last used, from before this view was navigated away from
+const remembered = sessionStorage.getItem('Subscriptions/currentTab')
+
+if (remembered !== null && visibleFeeds.value.includes(remembered)) {
+  currentFeed.value = remembered
+}
+
+watch(currentFeed, (value) => {
   if (value !== null) {
-  // Save last used tab, restore when view mounted again
     sessionStorage.setItem('Subscriptions/currentTab', value)
   } else {
     sessionStorage.removeItem('Subscriptions/currentTab')
   }
 })
 
-const visibleTabs = computed(() => {
-  /** @type {('videos' | 'shorts' | 'live' | 'community')[]} */
-  const tabs = []
-
-  if (!hideSubscriptionsVideos.value) {
-    tabs.push('videos')
-  }
-
-  if (!hideSubscriptionsShorts.value) {
-    tabs.push('shorts')
-  }
-
-  if (!hideSubscriptionsLive.value) {
-    tabs.push('live')
-  }
-
-  // community does not support rss
-  if (!hideSubscriptionsCommunity.value && !useRssFeeds.value) {
-    tabs.push('community')
-  }
-
-  return tabs
-})
-
-watch(visibleTabs, (value) => {
+watch(visibleFeeds, (value) => {
   if (value.length === 0) {
-    currentTab.value = null
-  } else if (!value.includes(currentTab.value)) {
-    currentTab.value = value[0]
+    currentFeed.value = null
+  } else if (!value.includes(currentFeed.value)) {
+    currentFeed.value = value[0]
   }
 })
-
-if (visibleTabs.value.length === 0) {
-  currentTab.value = null
-} else {
-  // Restore currentTab
-  const lastCurrentTabId = sessionStorage.getItem('Subscriptions/currentTab')
-  if (lastCurrentTabId !== null) {
-    changeTab(lastCurrentTabId)
-  } else if (!visibleTabs.value.includes(currentTab.value)) {
-    currentTab.value = visibleTabs.value[0]
-  }
-}
 
 /**
- * @param {'videos' | 'shorts' | 'live' | 'community'} tab
+ * @param {string} feed
  */
-function changeTab(tab) {
-  if (tab === currentTab.value) {
+function changeTab(feed) {
+  if (feed === currentFeed.value) {
     return
   }
 
-  if (visibleTabs.value.includes(tab)) {
-    currentTab.value = tab
+  if (visibleFeeds.value.includes(feed)) {
+    currentFeed.value = feed
   } else {
     // First visible tab or no tab
-    currentTab.value = visibleTabs.value.length > 0 ? visibleTabs.value[0] : null
+    currentFeed.value = visibleFeeds.value.length > 0 ? visibleFeeds.value[0] : null
   }
 }
 
-const videosTab = useTemplateRef('videosTab')
-const liveTab = useTemplateRef('liveTab')
-const shortsTab = useTemplateRef('shortsTab')
-const communityTab = useTemplateRef('communityTab')
+/** @type {HTMLElement[]} */
+const tabElements = ref([])
 
 /**
  * @param {KeyboardEvent} event
- * @param {'videos' | 'shorts' | 'live' | 'community'} focusedTab
+ * @param {string} focusedFeed
  */
-function focusTab(event, focusedTab) {
+function focusTab(event, focusedFeed) {
   if (event.altKey) {
     return
   }
 
   event.preventDefault()
 
-  const visibleTabsCached = visibleTabs.value
+  const feeds = visibleFeeds.value
 
-  if (visibleTabsCached.length === 1) {
+  if (feeds.length === 1) {
     store.commit('setOutlinesHidden', false)
     return
   }
 
-  let index = visibleTabsCached.indexOf(focusedTab)
+  let index = feeds.indexOf(focusedFeed)
 
   if (event.key === 'ArrowLeft') {
     index--
@@ -266,25 +165,12 @@ function focusTab(event, focusedTab) {
   }
 
   if (index < 0) {
-    index = visibleTabsCached.length - 1
-  } else if (index > visibleTabsCached.length - 1) {
+    index = feeds.length - 1
+  } else if (index > feeds.length - 1) {
     index = 0
   }
 
-  switch (visibleTabsCached[index]) {
-    case 'videos':
-      videosTab.value?.focus()
-      break
-    case 'live':
-      liveTab.value?.focus()
-      break
-    case 'shorts':
-      shortsTab.value?.focus()
-      break
-    case 'community':
-      communityTab.value?.focus()
-      break
-  }
+  tabElements.value[index]?.focus()
 
   store.commit('setOutlinesHidden', false)
 }

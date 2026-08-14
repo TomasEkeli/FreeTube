@@ -171,6 +171,23 @@ export function traceRecovery(feed, stage, detail = {}) {
 }
 
 /**
+ * Report the end of a whole refresh cycle, once every feed in it has finished.
+ *
+ * The peak is the number the shared budget exists to hold down, and it is only
+ * meaningful across the lot: each feed's own peak says nothing about what the
+ * host saw while three of them were running at once.
+ *
+ * @param {object} detail
+ * @param {number} detail.peakInFlight
+ * @param {number} detail.channels
+ */
+export function traceRefreshCycleEnd({ peakInFlight, channels }) {
+  if (!subscriptionTraceEnabled) { return }
+
+  console.log(`[subs-trace] cycle end channels=${channels} peakInFlight=${peakInFlight}`)
+}
+
+/**
  * Close the trace for a feed and print the summary.
  * @param {string} feed
  */
