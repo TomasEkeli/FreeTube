@@ -46,13 +46,22 @@ export const SUBSCRIPTION_BUDGET_WINDOW_MS = 2000
 /**
  * Requests allowed to start per window, and to be in flight at once.
  *
- * Measured, not guessed: 50 at a time fetched 611 channels with no failures at
- * all; 100 at a time failed every request within 300ms of starting and took the
- * renderer down with it. That measurement had a confound — the devcontainer was
- * out of memory at the time — so `FT_SUBS_BUDGET` overrides this, to re-derive
- * it now that the confound is gone. Change the default only with evidence.
+ * Measured, not guessed, twice. The original measurement said 100 at a time
+ * failed every request within 300ms and took the renderer down; that failure
+ * was the devcontainer running out of memory, not YouTube. Re-measured
+ * 2026-08-14 with the confound mitigated: 50, 75 and 100 each fetched a full
+ * three-feed cycle of 1833 channel requests with zero failures, scaling almost
+ * exactly linearly (75s, 50s and 37s wall).
+ *
+ * 75 rather than 100 because each higher width has survived exactly one cycle,
+ * and this is the path that must keep working when things are already going
+ * wrong: a YouTube rate limit, once earned, also poisons the watch page that
+ * the poToken challenge is scraped from. 75 takes most of the speedup and
+ * keeps a margin below the tested ceiling. `FT_SUBS_BUDGET` overrides this
+ * for measuring. Change the default only with evidence.
+ * Traces: thoughts/logs/2026-08-14-subs-budget-{75,100}.log.
  */
-export const SUBSCRIPTION_BUDGET_DEFAULT = 50
+export const SUBSCRIPTION_BUDGET_DEFAULT = 75
 
 /**
  * How much of the budget each lane may occupy at once.

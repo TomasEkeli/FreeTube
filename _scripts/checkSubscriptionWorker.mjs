@@ -445,7 +445,7 @@ function tracker() {
 // The budget default is the measured one unless the environment says otherwise
 resetSubscriptionWorkerForTests()
 
-check(`budget defaults to the measured 50 (${subscriptionBudget()})`, subscriptionBudget() === 50)
+check(`budget defaults to the measured 75 (${subscriptionBudget()})`, subscriptionBudget() === 75)
 
 cancelAllSubscriptionWork()
 
