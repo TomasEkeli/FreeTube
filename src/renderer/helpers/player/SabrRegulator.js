@@ -25,6 +25,7 @@ const AbortableOperation = shaka.util.AbortableOperation
 /**
  * @typedef SabrRegulator
  * @type {object}
+ * @property {{ name: string, maxSessions: number, warmStandby: boolean }} policy
  * @property {(playerContext: PlayerContext) => void} attach
  * @property {(sabrData: import('../../views/Watch/Watch').SabrData) => import('./SabrSchemePlugin').SabrSession} startSession
  * @property {() => ?import('./SabrSchemePlugin').SabrSession} getSession
@@ -203,6 +204,57 @@ function secondsOfPlaybackLeft(player) {
 }
 
 /**
+ * What the classic/regulated switch actually selects.
+ *
+ * **Not two implementations.** There is one regulator and one transport, and
+ * the setting chooses a policy for them. Two code paths would be the trap: with
+ * one user a second path is exercised approximately never, and rots into dead
+ * code that complicates every change while providing no safety.
+ *
+ * **Every bug fix stays in force on both policies.** Classic means "one
+ * session, escalate as the ladder does, no pool, no standby" — the behaviour
+ * this fork has after 2026-08-16, which is upstream's structure with its bugs
+ * removed. It emphatically does not mean upstream's behaviour: nerfing it back
+ * would re-introduce a page reload on a full buffer, a dead end on a rejected
+ * token, and a dead player on a missing legacy format, which is not a fallback
+ * but a regression with a setting attached.
+ *
+ * **The two are currently identical, and that is the point of building this
+ * now rather than later.** Phases 1 and 2 moved ownership without changing
+ * behaviour, so there is nothing yet for the policies to differ on. Phase 3 is
+ * what makes them differ, and it can only land by raising these numbers under
+ * `regulated`. Had the switch been added afterwards it would have been
+ * retrofitted around code that already assumed it was not there.
+ *
+ * So: do not simplify these two branches together because they look the same.
+ * The sameness is temporary and the branch is the seam phase 3 lands on.
+ *
+ * @param {boolean} regulated
+ * @returns {{ name: string, maxSessions: number, warmStandby: boolean }}
+ */
+function recoveryPolicy(regulated) {
+  return {
+    name: regulated ? 'regulated' : 'classic',
+
+    /**
+     * How many SABR sessions the regulator may hold at once. Phase 3 raises
+     * this to 2 under `regulated` so that rung 1 can promote a standby rather
+     * than tearing the player down, which is where the whole eight to ten
+     * second gap lives.
+     */
+    maxSessions: 1,
+
+    /**
+     * Whether rung 1 warms a replacement session before it is needed. Bounded
+     * and never run against a healthy session when it does exist: a standby is
+     * a second session fetching real segments, against a host that is already
+     * rate limiting at exactly the moment recovery is wanted.
+     */
+    warmStandby: false,
+  }
+}
+
+/**
  * Owns the `sabr://` scheme slot, routes every segment request to the session
  * it is currently serving from, and makes every recovery decision for the
  * video being played.
@@ -232,9 +284,20 @@ function secondsOfPlaybackLeft(player) {
  * state here, having been module-global for as long as a network scheme
  * plugin owned them.
  *
+ * @param {object} [options]
+ * @param {boolean} [options.regulated] which recovery policy to run, from the
+ * experimental setting. Read once, when the watch view builds the regulator,
+ * so a video already playing is never re-policed underneath the viewer.
  * @returns {SabrRegulator}
  */
-export function createSabrRegulator() {
+export function createSabrRegulator({ regulated = false } = {}) {
+  const policy = recoveryPolicy(regulated)
+
+  // Named in the log because every watched run and every ordinary use
+  // collection has to say which policy produced it, or the two cannot be told
+  // apart afterwards
+  console.warn(`${RECOVERY_LOG} ${policy.name} policy: at most ${policy.maxSessions} session, ${policy.warmStandby ? 'warming a standby' : 'no standby'}`)
+
   /**
    * The player currently being served, or null between one being torn down and
    * the next attaching. A page reload leaves the regulator briefly playerless,
@@ -600,6 +663,13 @@ export function createSabrRegulator() {
   }
 
   return {
+    /**
+     * The policy this regulator was built with. Exposed so that what is in
+     * force can be read rather than inferred, and so the switch has a single
+     * place to be honoured from.
+     */
+    policy,
+
     /**
      * Takes charge of a player, and of nothing that belonged to the last one.
      * Called when a player is created, which happens again on every format

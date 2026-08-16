@@ -251,6 +251,9 @@ export default defineComponent({
     defaultVideoFormat: function () {
       return this.$store.getters.getDefaultVideoFormat
     },
+    enableRegulatedStreaming: function () {
+      return this.$store.getters.getEnableRegulatedStreaming
+    },
     autoplayEnabled: function () {
       return this.watchingPlaylist ? this.autoplayNextPlaylistVideo : this.autoplayNextRecommendedVideo
     },
@@ -378,7 +381,13 @@ export default defineComponent({
       // because its own ladder reloads the player, and a budget destroyed by
       // the remedy it bounds bounds nothing. `markRaw` because it holds a live
       // session and event handlers, none of which want a reactive proxy.
-      this.sabrRegulator = markRaw(createSabrRegulator())
+      //
+      // The policy is read once, here, rather than watched: changing it while
+      // a video plays would re-police a session already in flight, and the
+      // setting's own description promises it takes effect on the next video.
+      this.sabrRegulator = markRaw(createSabrRegulator({
+        regulated: this.enableRegulatedStreaming,
+      }))
     }
 
     this.videoId = this.$route.params.id
