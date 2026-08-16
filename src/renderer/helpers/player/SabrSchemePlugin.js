@@ -92,6 +92,24 @@ const ATTESTATION_PAGE_RELOAD_LIMIT = 1
 const ATTESTATION_RECOVERY_SEGMENTS = 10
 
 /**
+ * How many server requested backoffs within a single request, and how many
+ * NextRequestPolicy retries, count as a loop worth doing something about.
+ *
+ * Both numbers are upstream's and both are kept as they were. What has changed
+ * is what they authorise. A backoff is the server saying "ask again shortly",
+ * which it does routinely as traffic shaping, and three of those is not proof
+ * that asking will never work; nor is a redirect heavy session that ratchets
+ * the same counter without any refusal at all. Upstream reloaded the whole
+ * watch page the moment either number was reached, discarding a buffer that
+ * was usually full and, when the cause was a refused session, pre-empting the
+ * credential refresh that would have fixed it without the viewer noticing.
+ *
+ * So they now raise a suspicion, and the buffer decides what to do with it.
+ */
+const BACKOFF_LOOP_SUSPECTED_AT = 3
+const RETRY_LOOP_SUSPECTED_AT = 100
+
+/**
  * One prefix for the whole recovery ladder, so a single search of the log
  * says what happened and which rung fixed it.
  */
@@ -185,6 +203,7 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {number} cumulativeBackOffTimeMs
  * @property {number} cumulativeBackOffRequested
  * @property {number} cumulativeRetryDueToNextRequestPolicy
+ * @property {boolean} loopSuspicionLogged whether this request has already said it suspects a loop
  * @property {number} generation
  * @property {(abrRequest: VideoPlaybackAbrRequest, builtAtGeneration: number) => number} applyCredentials
  * @property {() => ?PendingRefresh} getPendingRefresh
@@ -405,6 +424,25 @@ function secondsOfPlaybackLeft(player) {
 }
 
 /**
+ * Whether playback is about to stop whatever we do, which is the only moment a
+ * remedy the viewer can see stops being a downgrade. Every rung above an in
+ * place credential refresh begins by unloading the player, so it spends the
+ * buffer whether it needs it or not: while the buffer still covers playback
+ * there is nothing to gain by taking one, and a stall to lose.
+ * @param {CurrentState} currentState
+ * @returns {boolean}
+ */
+function playbackIsAboutToStall(currentState) {
+  // A session that has not served anything yet has an empty buffer because it
+  // has not started, not because it is about to stop
+  if (!currentState.sabrStreamState.hasServedMedia) {
+    return false
+  }
+
+  return secondsOfPlaybackLeft(currentState.getPlayer()) < ATTESTATION_LOW_BUFFER_SECONDS
+}
+
+/**
  * Ends this SABR session and asks for the named recovery. Requests already in
  * flight abort themselves once `playerReloadRequested` is set.
  * @param {CurrentState} currentState
@@ -428,6 +466,61 @@ function endSessionForRecovery(currentState, event) {
  */
 function requestPlayerReload(currentState) {
   endSessionForRecovery(currentState, 'reload')
+}
+
+/**
+ * Rungs 1 and 2 of the recovery ladder: rebuild the SABR session, and once
+ * that budget is spent, reload the watch page. Both cost the viewer the
+ * buffer, so both callers reach here only once playback is about to stall
+ * anyway, and both draw on the same budgets, which belong to the video rather
+ * than to whatever noticed the trouble.
+ *
+ * Throws when it acts, so the caller's request ends here. Returns normally
+ * only when every budget is spent, which is the caller's to answer for: what
+ * comes after the ladder differs by who climbed it.
+ * @param {CurrentState} currentState
+ * @param {OperationInputs} operationInputs
+ * @param {string} reason for the log line
+ * @param {string} reloadLabel names the cause in the error the page reload throws
+ */
+function escalateRecovery(currentState, operationInputs, reason, reloadLabel) {
+  // Audio and video reach this together, so the first one to escalate ends the
+  // session for both
+  if (currentState.sabrStreamState.playerReloadRequested) {
+    throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
+  }
+
+  // Rebuilding the session is what a viewer does by hand when they reopen a
+  // walled video, and it succeeds where refreshing the credentials underneath
+  // a running session does not. Why is not established: a reload both takes
+  // longer and starts a genuinely new session, and we cannot yet tell which of
+  // the two is the cure.
+  if (attestationState.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
+    attestationState.hardReloads += 1
+    attestationState.mediaResponsesSinceReload = 0
+
+    console.warn(`${RECOVERY_LOG} ${reason}, rebuilding the session (reload ${attestationState.hardReloads} of ${ATTESTATION_HARD_RELOAD_LIMIT})`)
+
+    endSessionForRecovery(currentState, 'hard-reload-needed')
+
+    throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
+  }
+
+  if (attestationState.pageReloads < ATTESTATION_PAGE_RELOAD_LIMIT) {
+    attestationState.pageReloads += 1
+    attestationState.mediaResponsesSinceReload = 0
+
+    console.warn(`${RECOVERY_LOG} ${reason}, session reloads spent, reloading the page`)
+
+    requestPlayerReload(currentState)
+
+    throw createRecoverableNetworkError(
+      ShakaError.Code.HTTP_ERROR,
+      operationInputs.uri,
+      new Error(`Reloading player: ${reloadLabel}`),
+      operationInputs.requestType,
+    )
+  }
 }
 
 /**
@@ -530,6 +623,7 @@ async function parkUntilRefreshed(operationInputs, currentState) {
   currentState.cumulativeRetryDueToNextRequestPolicy = 0
   currentState.cumulativeBackOffRequested = 0
   currentState.cumulativeBackOffTimeMs = 0
+  currentState.loopSuspicionLogged = false
 
   rebuildRequestBody(currentState)
 }
@@ -657,13 +751,38 @@ async function doRequest(
       currentState.cumulativeBackOffRequested += 1
       const timeoutMs = operationInputs.request.retryParameters.timeout
       // Detect infinite backoff loop by no. of times requested and cumulative time approaching timeout
-      if (currentState.cumulativeBackOffRequested >= 3 || (timeoutMs > 0 && timeoutMs <= (currentState.cumulativeBackOffTimeMs + currentBackoffTimeMs))) {
+      if (currentState.cumulativeBackOffRequested >= BACKOFF_LOOP_SUSPECTED_AT || (timeoutMs > 0 && timeoutMs <= (currentState.cumulativeBackOffTimeMs + currentBackoffTimeMs))) {
         shouldReloadDueToBackoffLoop = true
       }
     }
-    if (shouldReloadDueToBackoffLoop || currentState.cumulativeRetryDueToNextRequestPolicy >= 100) {
-      // Fire fake reload event due to detecting retry loop
-      requestPlayerReload(currentState)
+    if (shouldReloadDueToBackoffLoop || currentState.cumulativeRetryDueToNextRequestPolicy >= RETRY_LOOP_SUSPECTED_AT) {
+      const reason = shouldReloadDueToBackoffLoop
+        ? `${currentState.cumulativeBackOffRequested} backoffs in one request, ${(currentState.cumulativeBackOffTimeMs / 1000).toFixed(1)}s of waiting`
+        : `${currentState.cumulativeRetryDueToNextRequestPolicy} retries in one request`
+
+      if (playbackIsAboutToStall(currentState)) {
+        // Throws once it takes a rung. Returns only when every budget is
+        // spent, and a video that has already been rebuilt and reloaded is
+        // telling us the reloading is not what is wrong.
+        escalateRecovery(currentState, operationInputs, reason, 'SABR retry loop')
+
+        if (!currentState.loopSuspicionLogged) {
+          currentState.loopSuspicionLogged = true
+          console.warn(`${RECOVERY_LOG} ${reason}, and every reload is spent, so letting the request run`)
+        }
+      } else if (!currentState.loopSuspicionLogged) {
+        currentState.loopSuspicionLogged = true
+
+        // Being told to wait is not a fault to be fixed, and while there is
+        // something left to play it costs the viewer nothing to do as we are
+        // told. If it really never ends, the buffer drains and we come back
+        // here in earnest.
+        const waitingBecause = currentState.sabrStreamState.hasServedMedia
+          ? `${secondsOfPlaybackLeft(currentState.getPlayer()).toFixed(1)}s of watching left`
+          : 'this session has not served anything yet, so its empty buffer says nothing'
+
+        console.warn(`${RECOVERY_LOG} ${reason}, but ${waitingBecause}, so waiting rather than reloading`)
+      }
     }
 
     const sabrURL = new URL(currentState.sabrStreamState.sabrUrl)
@@ -922,48 +1041,11 @@ async function doRequest(
         attestationState.refreshes >= ATTESTATION_REFRESH_CEILING)
 
     if (outOfPatience) {
-      // Audio and video reach this together, so the first one to escalate
-      // ends the session for both. The budgets belong to the video, not to
-      // each stream.
-      if (currentState.sabrStreamState.playerReloadRequested) {
-        throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
-      }
-
       const reason = runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
         ? `${playbackLeft.toFixed(1)}s of watching left`
         : `${attestationState.refreshes} refreshes, the limit`
 
-      // Rebuilding the session is what a viewer does by hand when they reopen
-      // a walled video, and it succeeds where refreshing the credentials
-      // underneath a running session does not. Why is not established: a
-      // reload both takes longer and starts a genuinely new session, and we
-      // cannot yet tell which of the two is the cure.
-      if (attestationState.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
-        attestationState.hardReloads += 1
-        attestationState.mediaResponsesSinceReload = 0
-
-        console.warn(`${RECOVERY_LOG} ${reason}, rebuilding the session (reload ${attestationState.hardReloads} of ${ATTESTATION_HARD_RELOAD_LIMIT})`)
-
-        endSessionForRecovery(currentState, 'hard-reload-needed')
-
-        throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
-      }
-
-      if (attestationState.pageReloads < ATTESTATION_PAGE_RELOAD_LIMIT) {
-        attestationState.pageReloads += 1
-        attestationState.mediaResponsesSinceReload = 0
-
-        console.warn(`${RECOVERY_LOG} ${reason}, session reloads spent, reloading the page`)
-
-        requestPlayerReload(currentState)
-
-        throw createRecoverableNetworkError(
-          ShakaError.Code.HTTP_ERROR,
-          operationInputs.uri,
-          new Error('Reloading player: SABR attestation recovery'),
-          operationInputs.requestType,
-        )
-      }
+      escalateRecovery(currentState, operationInputs, reason, 'SABR attestation recovery')
 
       // Audio and video both arrive here, and both have to fail, but the
       // episode only ends once
@@ -1373,6 +1455,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
       cumulativeBackOffTimeMs: 0,
       cumulativeBackOffRequested: 0,
       cumulativeRetryDueToNextRequestPolicy: 0,
+      loopSuspicionLogged: false,
       generation: sessionGeneration,
       applyCredentials,
       getPendingRefresh: () => pendingRefresh,
