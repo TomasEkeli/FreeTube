@@ -43,6 +43,8 @@
  *                                    seconds before asking again
  *   FT_SABR_WALL=10:1:status=3       the token is rejected outright rather
  *                                    than left pending
+ *   FT_SABR_WALL=0:never:refreshes=3 escalate after three credential refreshes
+ *                                    rather than the usual twelve
  *
  * `backoff` is what makes the loop detector countable. It counts backoffs
  * within a single segment request and only a refused request retries inside
@@ -58,6 +60,19 @@
  * retries are spent. 3 is a token the server has rejected, which carries no
  * directive at all and enters the ladder at once, since only a different token
  * can change that answer.
+ *
+ * `refreshes` lowers the ceiling on in place credential refreshes, which is
+ * how long a test has to sit through before the ladder climbs. A session that
+ * has never served has no runway, so the buffer test cannot fire and that
+ * ceiling is the only gate: twelve refreshes at about seven seconds each is
+ * ninety seconds per rung, and six minutes to walk the whole ladder. Three
+ * makes the same walk take a quarter of the time and reaches every rung by
+ * the same path.
+ *
+ * It is the one option that changes a tuned number rather than imitating the
+ * server, so it is for testing structure, not thresholds. A run that is meant
+ * to say something about how patient the ladder should be must leave it alone,
+ * and so must any run where the buffer is supposed to decide first.
  *
  * Responses are rewritten rather than prevented, so everything downstream runs
  * exactly as it does against a real wall: the server's media is read and then
@@ -104,6 +119,7 @@ const CONFIG = (() => {
 
   let backoffMs = 0
   let protectionStatus = 2
+  let refreshCeiling = 0
 
   // Named rather than positional, so that either can be given alone and so
   // that a command line still says what it does a month later
@@ -130,13 +146,22 @@ const CONFIG = (() => {
 
         break
       }
+      case 'refreshes': {
+        refreshCeiling = Number.parseInt(value)
+
+        if (!(refreshCeiling > 0)) {
+          return refuseConfig(raw, `refreshes "${value}" is not a count of credential refreshes`)
+        }
+
+        break
+      }
       default: {
-        return refuseConfig(raw, `"${optionText}" is not one of backoff=<seconds> or status=<2|3>`)
+        return refuseConfig(raw, `"${optionText}" is not one of backoff=<seconds>, status=<2|3> or refreshes=<count>`)
       }
     }
   }
 
-  return { delayMs: delaySeconds * 1000, credentialsUntilTrusted, backoffMs, protectionStatus }
+  return { delayMs: delaySeconds * 1000, credentialsUntilTrusted, backoffMs, protectionStatus, refreshCeiling }
 })()
 
 export const sabrWallInjectionEnabled = CONFIG !== null
@@ -148,9 +173,10 @@ if (CONFIG !== null) {
 
   const refusal = CONFIG.protectionStatus === 3 ? 'as a rejected token' : 'as a pending attestation'
   const backoff = CONFIG.backoffMs > 0 ? `, asking for ${CONFIG.backoffMs / 1000}s of backoff each time` : ''
+  const ceiling = CONFIG.refreshCeiling > 0 ? `, escalating after ${CONFIG.refreshCeiling} refreshes instead of the usual number` : ''
 
   console.warn(
-    `[SABR recovery] WALL INJECTION ACTIVE: sessions wall ${CONFIG.delayMs / 1000}s in ${refusal}${backoff}, ${needed}. Unset FT_SABR_WALL to stop.`
+    `[SABR recovery] WALL INJECTION ACTIVE: sessions wall ${CONFIG.delayMs / 1000}s in ${refusal}${backoff}${ceiling}, ${needed}. Unset FT_SABR_WALL to stop.`
   )
 }
 
@@ -226,6 +252,16 @@ export function injectedProtectionStatus() {
  */
 export function injectedBackoffMs() {
   return CONFIG?.backoffMs ?? 0
+}
+
+/**
+ * How many credential refreshes a walled session may make before the ladder
+ * escalates, when a test has asked for fewer than the tuned number. Zero means
+ * it has not, and the real ceiling stands.
+ * @returns {number}
+ */
+export function injectedRefreshCeiling() {
+  return CONFIG?.refreshCeiling ?? 0
 }
 
 /**
