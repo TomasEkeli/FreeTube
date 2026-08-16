@@ -473,7 +473,8 @@ function extractAttestationData(htmlPage) {
  * @returns {Promise<{ url: string, finalUrl: string, html: string }>}
  */
 async function fetchHtmlPage(url) {
-  // This returns session/tracking cookies but they get removed in onHeadersReceived in the main process before they are saved by Electron
+  // This returns session/tracking cookies but they get removed in onHeadersReceived in the main process before they are saved by Electron.
+  // That holds only for URLs named in trackingCookieRequestFilter in src/main/index.js, so a new page to scrape has to be added there too.
   const response = await fetch(url, {
     headers: {
       // We need to be able to parse the localised strings in the /next response data (e.g. view counts and published dates)
