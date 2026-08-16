@@ -1683,6 +1683,20 @@ export default defineComponent({
 
         console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
       } catch (error) {
+        // The regulator may have moved past this rebuild while it was running:
+        // ordered a page reload, or ended the ladder. Either kills the load we
+        // are waiting on, and reading that as our own failure is how a verdict
+        // became a page reload nobody counted, with the error screen it wanted
+        // never reaching the viewer. Hand the error on instead and let it be
+        // what it is: an abort is nothing to report, and a give-up is the view's.
+        if (sabrRegulator.rebuildWasSuperseded()) {
+          console.warn(`[SABR recovery] session reload abandoned (${error?.message ?? error}), the regulator has already decided what happens next`)
+
+          ignoreErrors = false
+          handleError(error, 'sabr session reload')
+          return
+        }
+
         console.error(`[SABR recovery] session reload failed (${error?.message ?? error}), falling back to a page reload`)
 
         sabrAbortController?.abort()

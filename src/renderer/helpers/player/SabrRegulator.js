@@ -30,6 +30,7 @@ const AbortableOperation = shaka.util.AbortableOperation
  * @property {() => ?import('./SabrSchemePlugin').SabrSession} getSession
  * @property {() => boolean} isRecovering
  * @property {() => void} noteRebuildSettled
+ * @property {() => boolean} rebuildWasSuperseded
  * @property {(videoId: string) => void} resetBudget
  * @property {(videoId: string) => void} reset
  * @property {() => void} detach
@@ -245,6 +246,16 @@ export function createSabrRegulator() {
   let rebuildUnsettled = false
 
   /**
+   * Whether a decision larger than a rebuild was taken while a rebuild was
+   * still outstanding, so the player is waiting on a load that this has just
+   * killed. It has to be able to tell that from a rebuild that simply failed,
+   * because its answer to a failure is to reload the page, and doing that in
+   * answer to a verdict turns "there is nothing left to try" into another
+   * reload that nobody counted and an error screen the viewer never sees.
+   */
+  let rebuildSuperseded = false
+
+  /**
    * The recovery ladder's state for the video being watched. Reset when the
    * video changes, and when the viewer asks for a retry themselves.
    */
@@ -291,6 +302,7 @@ export function createSabrRegulator() {
     currentSession = null
     playerContext = null
     rebuildUnsettled = false
+    rebuildSuperseded = false
   }
 
   function claimScheme() {
@@ -348,6 +360,7 @@ export function createSabrRegulator() {
       ladder.hardReloads += 1
       ladder.mediaResponsesSinceReload = 0
       rebuildUnsettled = true
+      rebuildSuperseded = false
 
       return {
         action: 'rebuild',
@@ -364,6 +377,8 @@ export function createSabrRegulator() {
       const why = rebuildUnsettled
         ? 'the last session reload never finished loading'
         : 'session reloads spent'
+
+      rebuildSuperseded = rebuildUnsettled
 
       return {
         action: 'reload-page',
@@ -449,6 +464,10 @@ export function createSabrRegulator() {
       const escalation = escalate(reason)
 
       if (escalation) { return escalation }
+
+      // A rebuild still waiting on a load it will never get is now waiting for
+      // nothing, and must not read this as its own failure
+      rebuildSuperseded = rebuildUnsettled
 
       // Audio and video both arrive here, and both have to fail, but the
       // episode only ends once
@@ -607,6 +626,18 @@ export function createSabrRegulator() {
      */
     noteRebuildSettled() {
       rebuildUnsettled = false
+      rebuildSuperseded = false
+    },
+
+    /**
+     * Whether the rebuild the player is running was overtaken by a decision of
+     * ours: a page reload, or the end of the ladder. Either way the load it is
+     * waiting on has been killed by us rather than having failed, so its own
+     * fallback is not the right answer and would be a remedy nobody ordered.
+     * @returns {boolean}
+     */
+    rebuildWasSuperseded() {
+      return rebuildSuperseded
     },
 
     /**
