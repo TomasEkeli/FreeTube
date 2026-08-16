@@ -596,7 +596,15 @@ function runApp() {
         requestHeaders['Sec-Fetch-Site'] = 'same-origin'
         requestHeaders['Sec-Fetch-Mode'] = 'same-origin'
         requestHeaders['X-Youtube-Bootstrap-Logged-In'] = 'false'
-      } else if (url.startsWith('https://www.youtube.com/watch')) {
+      } else if (
+        url.startsWith('https://www.youtube.com/watch') ||
+        // The BotGuard challenge fallback in getWatchHTMLWatchPage asks for the
+        // homepage when the watch page comes back without a challenge. That
+        // request exists to escape a captcha, so it has to look like the same
+        // browser navigation the watch page request does, down to the cookie:
+        // any difference between the two is one more thing to be told apart by.
+        (urlObj.origin === 'https://www.youtube.com' && urlObj.pathname === '/')
+      ) {
         delete requestHeaders.Referer
         delete requestHeaders.Origin
         requestHeaders['Sec-Fetch-Dest'] = 'document'
@@ -643,7 +651,10 @@ function runApp() {
       urls: [
         'https://www.youtube.com/sw.js_data',
         'https://www.youtube.com/iframe_api',
-        'https://www.youtube.com/watch?*'
+        'https://www.youtube.com/watch?*',
+        // the homepage the BotGuard challenge fallback asks for hands out the
+        // same tracking cookies the watch page does, and is wanted just as little
+        'https://www.youtube.com/'
       ]
     }
 
