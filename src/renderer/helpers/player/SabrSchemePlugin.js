@@ -17,7 +17,7 @@ import {
 import shaka from 'shaka-player'
 
 import { deepCopy } from '../utils'
-import { noteCredentialsInstalled, noteSessionServing, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
+import { injectedBackoffMs, injectedProtectionStatus, noteCredentialsInstalled, noteSessionServing, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
@@ -988,9 +988,31 @@ async function doRequest(
 
   if (wallInjected) {
     // Answer as a walled session does, whatever the server actually said
-    protectionStatus = 2
-    shouldRetry = true
-    shouldRetryDueToNextRequestPolicy = true
+    protectionStatus = injectedProtectionStatus()
+
+    if (protectionStatus === 3) {
+      // A rejected token comes with nothing to retry: the server has judged
+      // this token, and sending it again cannot change the verdict
+      invalidPoToken = true
+    } else {
+      shouldRetry = true
+      shouldRetryDueToNextRequestPolicy = true
+    }
+
+    const backoffMs = injectedBackoffMs()
+
+    if (backoffMs > 0) {
+      // Only a refused request retries inside itself, and the loop detector
+      // counts backoffs within one request, so this is the one place a
+      // countable backoff can be injected from. The rewriting stops at what we
+      // received: the outgoing streamerContext still echoes the server's own
+      // number, so the real conversation is not told anything untrue.
+      if (currentState.sabrStreamState.nextRequestPolicy) {
+        currentState.sabrStreamState.nextRequestPolicy.backoffTimeMs = backoffMs
+      } else {
+        currentState.sabrStreamState.nextRequestPolicy = /** @type {NextRequestPolicy} */ ({ backoffTimeMs: backoffMs })
+      }
+    }
   }
 
   // The server answered without media because it does not trust the PO token.
