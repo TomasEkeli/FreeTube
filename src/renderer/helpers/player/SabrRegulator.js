@@ -717,6 +717,10 @@ export function createSabrRegulator({ isRegulated = () => false } = {}) {
     startSession(sabrData) {
       currentSession?.cleanup()
 
+      // Same video means the ladder built this one to replace a session that
+      // was refused, rather than the viewer opening something
+      const isRecoverySession = ladder.videoId === sabrData.videoId
+
       if (ladder.videoId !== sabrData.videoId) {
         resetBudget(sabrData.videoId)
         resetWallInjection()
@@ -756,6 +760,14 @@ export function createSabrRegulator({ isRegulated = () => false } = {}) {
       )
 
       claimScheme()
+
+      // The denominator. Every other line under this prefix is something going
+      // wrong, so a log full of nothing cannot be told apart from a log of a
+      // hundred sessions that all worked — and the question phase 0 exists to
+      // answer is a rate, not a count. Saying that a session started, and
+      // whether it is a fresh video or a rung of the ladder replacing one,
+      // makes both terms readable from the same stream.
+      console.warn(`${RECOVERY_LOG} SABR session started for ${sabrData.videoId} under the ${policy.name} policy${isRecoverySession ? ', replacing one that was refused' : ''}`)
 
       return currentSession
     },
