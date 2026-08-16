@@ -32,8 +32,6 @@ import {
 } from '../../helpers/utils'
 import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
-import { createSabrRegulator } from '../../helpers/player/SabrRegulator'
-import { isAttestationRecovering } from '../../helpers/player/SabrSchemePlugin'
 
 /** @typedef {import('../../helpers/sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
 
@@ -101,6 +99,16 @@ export default defineComponent({
       required: true
     },
     sabrData: {
+      type: Object,
+      default: null
+    },
+    /**
+     * The watch view's SABR regulator. It owns the `sabr://` scheme slot and
+     * every recovery decision, and it belongs to the view rather than to us
+     * because reloading this player is one of the remedies it can choose.
+     * @type {import('vue').PropType<import('../../helpers/player/SabrRegulator').SabrRegulator>}
+     */
+    sabrRegulator: {
       type: Object,
       default: null
     },
@@ -1436,11 +1444,13 @@ export default defineComponent({
     let sabrManifest
 
     /**
-     * Owns the `sabr://` scheme slot for as long as this player does, and
-     * holds the session behind it. Only exists when this is a SABR playback.
+     * The watch view's regulator, borrowed for as long as this player lives.
+     * It owns the `sabr://` scheme slot and every recovery decision, and it
+     * outlives us on purpose: reloading this player is one of the remedies it
+     * chooses, so its budgets cannot be ours to keep.
      * @type {import('../../helpers/player/SabrRegulator').SabrRegulator | undefined}
      */
-    let sabrRegulator
+    const sabrRegulator = props.sabrRegulator
 
     /** @type {import('../../helpers/player/SabrSchemePlugin').SabrSession | undefined} */
     let sabrStream
@@ -1449,40 +1459,39 @@ export default defineComponent({
 
     /**
      * True from the first credential refresh until the video plays again or
-     * the ladder gives up. Read from the plugin as well as subscribed to,
-     * because a rebuilt session starts in the middle of an episode that began
-     * before it existed.
+     * the ladder gives up. Asked of the regulator as well as subscribed to,
+     * because this player may have been built in the middle of an episode
+     * that began before it existed.
      */
     const isRecoveringFromWall = ref(false)
 
     /** True while the session is being rebuilt, when there is no media at all */
     const isRebuildingSabrSession = ref(false)
 
-    /**
-     * Starts a SABR session and wires up its recovery events. Called again
-     * from `hardReloadSabrSession`, which rebuilds the session from scratch,
-     * so nothing here may assume it only ever runs once.
-     * @param {import('../../views/Watch/Watch').SabrData} sabrData
-     */
-    function initSabrScheme(sabrData) {
-      sabrRegulator ??= /** @__NOINLINE__ */ createSabrRegulator({
+    if (process.env.SUPPORTS_LOCAL_API && sabrRegulator) {
+      sabrRegulator.attach({
         getPlayer: () => player,
         getManifest: () => sabrManifest,
         playerWidth,
         playerHeight,
+        onRecoveryStarted: () => { isRecoveringFromWall.value = true },
+        onRecoveryEnded: () => { isRecoveringFromWall.value = false },
       })
 
+      // An episode can have begun before this player existed, since reloading
+      // the player is one of the remedies
+      isRecoveringFromWall.value = sabrRegulator.isRecovering()
+    }
+
+    /**
+     * Starts a SABR session and wires up what it reports. Called again from
+     * `hardReloadSabrSession`, which rebuilds the session from scratch, so
+     * nothing here may assume it only ever runs once.
+     * @param {import('../../views/Watch/Watch').SabrData} sabrData
+     */
+    function initSabrScheme(sabrData) {
       sabrStream = sabrRegulator.startSession(sabrData)
       sabrAbortController = new AbortController()
-
-      isRecoveringFromWall.value = isAttestationRecovering()
-
-      sabrStream.onRecoveryStarted(() => {
-        isRecoveringFromWall.value = true
-      })
-      sabrStream.onRecoveryEnded(() => {
-        isRecoveringFromWall.value = false
-      })
 
       // Since there can be 2 requests at the same time (video + audio), we debounce the listener to only show the message once
       sabrStream.onBackoffRequested(debounce(({ backoffMs }) => {
@@ -1733,9 +1742,9 @@ export default defineComponent({
     }
 
     /**
-     * Gives the `sabr://` scheme slot back and finishes the session behind it.
-     * The slot is process-global, so anything we still hold outlives this
-     * player and answers for the next one.
+     * Hands the regulator back: it gives up the `sabr://` scheme slot and
+     * finishes the session behind it, while keeping the recovery budgets,
+     * which belong to the video rather than to this player.
      *
      * Called from both teardown paths, and safe to call twice: the watch view
      * hides the player on an error, which unmounts us without going through
@@ -1744,10 +1753,9 @@ export default defineComponent({
     function releaseSabrRegulator() {
       if (!process.env.SUPPORTS_LOCAL_API || !sabrRegulator) { return }
 
-      sabrRegulator.release()
+      sabrRegulator.detach()
       sabrAbortController?.abort()
 
-      sabrRegulator = undefined
       sabrStream = undefined
     }
 

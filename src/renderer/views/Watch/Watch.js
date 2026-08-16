@@ -1,4 +1,4 @@
-import { defineComponent } from 'vue'
+import { defineComponent, markRaw } from 'vue'
 import { isNavigationFailure, NavigationFailureType } from 'vue-router'
 import { mapActions, mapMutations } from 'vuex'
 import shaka from 'shaka-player'
@@ -41,7 +41,8 @@ import {
 } from '../../helpers/api/invidious'
 import { sortCaptions } from '../../helpers/player/utils'
 import { buildFormatId, MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
-import { ATTESTATION_GIVE_UP_MESSAGE, resetAttestationBudget } from '../../helpers/player/SabrSchemePlugin'
+import { createSabrRegulator } from '../../helpers/player/SabrRegulator'
+import { ATTESTATION_GIVE_UP_MESSAGE } from '../../helpers/player/SabrSchemePlugin'
 import { useI18n } from 'vue-i18n'
 
 /**
@@ -145,6 +146,11 @@ export default defineComponent({
       manifestMimeType: MANIFEST_TYPE_DASH,
       /** @type {SabrData | null} */
       sabrData: null,
+      /**
+       * Owns the SABR transport and the recovery ladder for this view.
+       * @type {?import('../../helpers/player/SabrRegulator').SabrRegulator}
+       */
+      sabrRegulator: null,
       legacyFormats: [],
       /**
        * Formats the automatic fallback has already tried and seen fail for
@@ -367,6 +373,15 @@ export default defineComponent({
     },
   },
   created: function () {
+    if (process.env.SUPPORTS_LOCAL_API) {
+      // The regulator owns the SABR transport and every recovery decision for
+      // as long as this view lives. It belongs here rather than to the player
+      // because its own ladder reloads the player, and a budget destroyed by
+      // the remedy it bounds bounds nothing. `markRaw` because it holds a live
+      // session and event handlers, none of which want a reactive proxy.
+      this.sabrRegulator = markRaw(createSabrRegulator())
+    }
+
     this.videoId = this.$route.params.id
     this.activeFormat = this.defaultVideoFormat
     // So that the value for this session remains unchanged even if setting changed
@@ -1635,12 +1650,16 @@ export default defineComponent({
 
     /**
      * Reopens the video from scratch at the position it stopped, which is what
-     * the viewer would otherwise do by navigating away and back. Asking for it
-     * explicitly restores the automatic recovery budget as well: they have
-     * decided this attempt is worth making, whatever the ladder already spent.
+     * the viewer would otherwise do by navigating away and back.
+     *
+     * Asking for it explicitly resets the regulator to how it started: a full
+     * recovery budget, no session, and no claim on the SABR transport. Its
+     * counters are meant to outlive a player reload, since reloading is one of
+     * the things they bound, so this is the one way back for a viewer who has
+     * decided that whatever it is holding onto is the problem.
      */
     async retryVideo() {
-      resetAttestationBudget(this.videoId)
+      this.sabrRegulator?.reset(this.videoId)
 
       const timestamp = this.errorRetryTimestamp
 

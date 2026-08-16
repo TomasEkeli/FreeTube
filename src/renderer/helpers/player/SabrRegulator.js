@@ -1,24 +1,64 @@
 import shaka from 'shaka-player'
 
 import { createSabrSession } from './SabrSchemePlugin'
+import { noteCredentialsInstalled, noteSessionStarted, resetWallInjection } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 
 /**
+ * Everything the regulator needs from the player it is serving, including
+ * where to report an episode of recovery starting and ending. The callbacks
+ * travel with the context rather than through subscriptions on purpose: the
+ * regulator outlives players, so a subscription list would grow by one dead
+ * player on every format switch and every reload, and nothing would ever
+ * remove them.
  * @typedef PlayerContext
  * @type {object}
  * @property {() => shaka.Player} getPlayer
  * @property {() => shaka.extern.Manifest} getManifest
  * @property {import('vue').ComputedRef<number>} playerWidth
  * @property {import('vue').ComputedRef<number>} playerHeight
+ * @property {() => void} [onRecoveryStarted]
+ * @property {() => void} [onRecoveryEnded]
  */
 
 /**
  * @typedef SabrRegulator
  * @type {object}
+ * @property {(playerContext: PlayerContext) => void} attach
  * @property {(sabrData: import('../../views/Watch/Watch').SabrData) => import('./SabrSchemePlugin').SabrSession} startSession
  * @property {() => ?import('./SabrSchemePlugin').SabrSession} getSession
- * @property {() => void} release
+ * @property {() => boolean} isRecovering
+ * @property {(videoId: string) => void} resetBudget
+ * @property {(videoId: string) => void} reset
+ * @property {() => void} detach
+ */
+
+/**
+ * What a session may report, and every answer it may be given.
+ * @typedef SabrRecovery
+ * @type {object}
+ * @property {() => void} noteMediaServed
+ * @property {(facts: { hasServedMedia: boolean, sessionEnded: boolean }) => RecoveryDecision} decideOnRefusal
+ * @property {() => void} noteRefreshStarted
+ * @property {(facts: { description: string, hasServedMedia: boolean, sessionEnded: boolean }) => RecoveryDecision} decideOnLoopSuspicion
+ */
+
+/**
+ * What the regulator answers a session with. The session performs it, because
+ * each remedy destroys state at a different radius and only its owner can
+ * destroy it; the regulator decides and delegates rather than acting.
+ *
+ * `log` is the line to print, already prefixed. The session prints it rather
+ * than the regulator, because at the loop suspicion site the same decision can
+ * be reached many times within one request and the request is what knows
+ * whether it has said this already. Episode transitions are the exception and
+ * are printed here: they belong to the video, not to any request.
+ *
+ * @typedef RecoveryDecision
+ * @type {object}
+ * @property {'run-on' | 'refresh' | 'rebuild' | 'reload-page' | 'give-up' | 'abort'} action
+ * @property {?string} log
  */
 
 /**
@@ -29,8 +69,106 @@ const AbortableOperation = shaka.util.AbortableOperation
 const SABR_SCHEME = 'sabr'
 
 /**
- * Owns the `sabr://` scheme slot for as long as the player exists, and routes
- * every segment request to the session it is currently serving from.
+ * One prefix for the whole recovery ladder, so a single search of the log
+ * says what happened and which rung fixed it.
+ */
+const RECOVERY_LOG = '[SABR recovery]'
+
+/**
+ * How many credential refreshes to always try before anything heavier.
+ *
+ * One, because a fresh token is cheap and often enough, and because every
+ * refresh after it spends about ten seconds of the runway that the escalation
+ * needs to land in. This was three, on the reasoning that a session walled
+ * before it buffered anything has nothing to lose by trying again, which had
+ * it backwards: nothing left to play means the viewer is already stopped, and
+ * that is when reaching the remedy that works matters most. Three refreshes
+ * put the earliest possible rebuild thirty seconds after the wall, by which
+ * time no threshold could have saved the playback.
+ */
+const ATTESTATION_REFRESH_FLOOR = 1
+
+/**
+ * How little watching time must remain before rebuilding the session beats
+ * refreshing the credentials again.
+ *
+ * Small, and deliberately so. Rebuilding unloads the player, which throws the
+ * buffer away rather than playing through it, so the gap it costs is its own
+ * duration however much was buffered. Twenty five seconds was tried on the
+ * assumption that the buffer would cover the rebuild; it cannot, and a rebuild
+ * with 18.4s in hand stalled exactly as one with none would.
+ *
+ * Since the gap is the same whenever it is taken, the buffer is worth nothing
+ * except the refreshes it pays for, and those are the only remedy the viewer
+ * never sees. So spend it all on them, and rebuild only once it is nearly gone
+ * and there is nothing left to lose by discarding it.
+ */
+const ATTESTATION_LOW_BUFFER_SECONDS = 8
+
+/**
+ * Hard stop on refreshes regardless of buffer. A paused player never drains
+ * its buffer, so without this it would refresh for as long as YouTube kept
+ * saying no.
+ */
+const ATTESTATION_REFRESH_CEILING = 12
+
+/**
+ * How many times to rebuild the SABR session from scratch, keeping the page.
+ * This is the automatic version of what a viewer does by reopening a walled
+ * video, which is known to work where repeated refreshes do not.
+ */
+const ATTESTATION_HARD_RELOAD_LIMIT = 2
+
+/**
+ * How many times to fall back to reloading the whole watch page. More
+ * disruptive than a session reload and no more likely to work, so this is a
+ * backstop for the cases a session reload cannot cover, such as the formats
+ * changing underneath us.
+ */
+const ATTESTATION_PAGE_RELOAD_LIMIT = 1
+
+/**
+ * How many media bearing responses count as the video genuinely having
+ * recovered, at which point the reload budgets are restored. Without a
+ * threshold, a video that walled and recovered every half minute would mint
+ * itself an unlimited supply of reloads.
+ */
+const ATTESTATION_RECOVERY_SEGMENTS = 10
+
+/**
+ * How long the viewer can keep watching without another byte arriving, in real
+ * seconds rather than media seconds. This is the runway recovery has to land
+ * in, so it is what decides how patient the in place refresh can afford to be.
+ *
+ * The distinction matters: buffer is measured in media time, but it is spent
+ * at the playback rate, so ten seconds of it lasts a little over three at
+ * triple speed. Treating the two as the same made every escalation late, and
+ * latest exactly for the viewers who had sped the video up.
+ * @param {?shaka.Player} player
+ * @returns {number}
+ */
+function secondsOfPlaybackLeft(player) {
+  const media = player?.getMediaElement()
+
+  if (typeof media?.currentTime !== 'number') return 0
+
+  const currentTime = media.currentTime
+
+  // `total` is the intersection across the active streams, which is exactly
+  // what playback can continue on
+  for (const { start, end } of player.getBufferedInfo().total) {
+    if (start <= currentTime && currentTime < end) {
+      return (end - currentTime) / Math.max(media.playbackRate || 1, 0.1)
+    }
+  }
+
+  return 0
+}
+
+/**
+ * Owns the `sabr://` scheme slot, routes every segment request to the session
+ * it is currently serving from, and makes every recovery decision for the
+ * video being played.
  *
  * The slot used to belong to a session, which is the wrong way round: a
  * session is the shortest lived thing in the player, so replacing one meant
@@ -40,21 +178,87 @@ const SABR_SCHEME = 'sabr'
  * that outlives its sessions can hold the slot steady and decide, per request,
  * which session answers.
  *
- * This is only the ownership change: there is still exactly one session at a
- * time, and every policy decision is still where it was.
+ * The recovery decisions live here for a related reason. They used to be spread
+ * across six layers, each with its own idea of what to do when YouTube stops
+ * cooperating and none able to see the others' decisions, and every recovery
+ * bug found so far has been two of those layers each believing it owned the
+ * answer. Sessions now report what happened and are told what to do about it.
  *
- * @param {PlayerContext} playerContext everything a session needs to describe
- * the player it is serving. The same for every session, since they all serve
- * the same player, which is why the regulator holds it rather than the caller
- * passing it again per session.
+ * **This belongs to the watch view, not to the player.** The ladder's own
+ * remedies decide that: rung 1 rebuilds the session and rung 2 reloads the
+ * player, so a regulator owned by either would have its budgets destroyed by
+ * the very thing they bound, and a budget that resets when it fires bounds
+ * nothing. The view survives both — `reloadView` is one of its own methods,
+ * and the router reuses the instance across a query or param change — and it
+ * dies when the viewer leaves the watch page, which is exactly when the
+ * ladder should be forgotten. That is why these counters can be ordinary
+ * state here, having been module-global for as long as a network scheme
+ * plugin owned them.
+ *
  * @returns {SabrRegulator}
  */
-export function createSabrRegulator(playerContext) {
+export function createSabrRegulator() {
+  /**
+   * The player currently being served, or null between one being torn down and
+   * the next attaching. A page reload leaves the regulator briefly playerless,
+   * which is the whole point of it outliving the player.
+   * @type {?PlayerContext}
+   */
+  let playerContext = null
+
   /** @type {?import('./SabrSchemePlugin').SabrSession} */
   let currentSession = null
 
   /** Whether the scheme slot is ours right now, so it is claimed once and released once */
   let holdsScheme = false
+
+  /**
+   * The recovery ladder's state for the video being watched. Reset when the
+   * video changes, and when the viewer asks for a retry themselves.
+   */
+  const ladder = {
+    /** @type {?string} */
+    videoId: null,
+    refreshes: 0,
+    hardReloads: 0,
+    pageReloads: 0,
+    mediaResponsesSinceReload: 0,
+    /** Whether an episode of this is under way, so its end can be reported */
+    recovering: false,
+    /**
+     * Refreshes made during the current episode. Separate from the budget
+     * counter above, which a trusted token clears the moment it arrives,
+     * usually in the same response as the media that ends the episode.
+     */
+    refreshesThisEpisode: 0,
+  }
+
+  function resetBudget(videoId) {
+    ladder.videoId = videoId
+    ladder.refreshes = 0
+    ladder.hardReloads = 0
+    ladder.pageReloads = 0
+    ladder.mediaResponsesSinceReload = 0
+    ladder.recovering = false
+    ladder.refreshesThisEpisode = 0
+  }
+
+  /**
+   * Gives up the scheme slot, the session behind it and the player they were
+   * serving. The ladder is deliberately untouched: this is usually the first
+   * half of a remedy the ladder itself chose, and a budget that forgot itself
+   * at that moment would bound nothing.
+   */
+  function giveUpPlayer() {
+    if (holdsScheme) {
+      shaka.net.NetworkingEngine.unregisterScheme(SABR_SCHEME)
+      holdsScheme = false
+    }
+
+    currentSession?.cleanup()
+    currentSession = null
+    playerContext = null
+  }
 
   function claimScheme() {
     if (holdsScheme) { return }
@@ -75,7 +279,232 @@ export function createSabrRegulator(playerContext) {
     holdsScheme = true
   }
 
+  /**
+   * Ends the recovery episode, if one was under way, and says how it went.
+   * @param {string} outcome
+   */
+  function endEpisode(outcome) {
+    if (!ladder.recovering) { return }
+
+    ladder.recovering = false
+    playerContext?.onRecoveryEnded?.()
+
+    console.warn(`${RECOVERY_LOG} ${outcome}`)
+    ladder.refreshesThisEpisode = 0
+  }
+
+  /**
+   * Rungs 1 and 2: rebuild the SABR session, and once that budget is spent,
+   * reload the watch page. Both cost the viewer the buffer, so both callers
+   * reach here only once playback is about to stall anyway, and both draw on
+   * the same budgets, which belong to the video rather than to whatever
+   * noticed the trouble.
+   *
+   * Returns null when every budget is spent. What comes after the ladder
+   * differs by who climbed it, so that answer is the caller's.
+   * @param {string} reason for the log line
+   * @returns {?RecoveryDecision}
+   */
+  function escalate(reason) {
+    // Rebuilding the session is what a viewer does by hand when they reopen a
+    // walled video, and it succeeds where refreshing the credentials
+    // underneath a running session does not. Why is not established: a reload
+    // both takes longer and starts a genuinely new session, and we cannot yet
+    // tell which of the two is the cure.
+    if (ladder.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
+      ladder.hardReloads += 1
+      ladder.mediaResponsesSinceReload = 0
+
+      return {
+        action: 'rebuild',
+        log: `${RECOVERY_LOG} ${reason}, rebuilding the session (reload ${ladder.hardReloads} of ${ATTESTATION_HARD_RELOAD_LIMIT})`,
+      }
+    }
+
+    if (ladder.pageReloads < ATTESTATION_PAGE_RELOAD_LIMIT) {
+      ladder.pageReloads += 1
+      ladder.mediaResponsesSinceReload = 0
+
+      return {
+        action: 'reload-page',
+        log: `${RECOVERY_LOG} ${reason}, session reloads spent, reloading the page`,
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Everything a session may report, and every answer it may be given. A
+   * session decides nothing about recovery; it says what the server did and
+   * does as it is told.
+   */
+  const recovery = {
+    /**
+     * The server served media, which is the only proof that recovery worked.
+     * Enough of it restores the reload budgets.
+     */
+    noteMediaServed() {
+      endEpisode(
+        `playing again after ${ladder.refreshesThisEpisode} refreshes, ` +
+        `${ladder.hardReloads} session reloads and ${ladder.pageReloads} page reloads`
+      )
+
+      ladder.refreshes = 0
+
+      if (ladder.mediaResponsesSinceReload < ATTESTATION_RECOVERY_SEGMENTS) {
+        ladder.mediaResponsesSinceReload += 1
+
+        if (ladder.mediaResponsesSinceReload === ATTESTATION_RECOVERY_SEGMENTS) {
+          ladder.hardReloads = 0
+          ladder.pageReloads = 0
+        }
+      }
+    },
+
+    /**
+     * The server answered without media because it does not trust the PO
+     * token. Retrying sends an identical request, so it cannot succeed; a
+     * fresh token sometimes is trusted, and that is rung 0 of the ladder.
+     *
+     * @param {object} facts
+     * @param {boolean} facts.hasServedMedia whether this session has ever served
+     * @param {boolean} facts.sessionEnded whether this session has already been ended for a recovery
+     * @returns {RecoveryDecision}
+     */
+    decideOnRefusal({ hasServedMedia, sessionEnded }) {
+      const playbackLeft = secondsOfPlaybackLeft(playerContext?.getPlayer())
+
+      // A session that has not served anything yet has an empty buffer because
+      // it has not started, not because it is about to stop, and reading that
+      // as an imminent stall makes every fresh session escalate on its first
+      // block. Rebuilding one rebuilt a moment ago is the one thing that
+      // cannot help.
+      const runwayIsMeaningful = hasServedMedia
+
+      // Refreshing costs the viewer nothing for as long as the buffer covers
+      // playback, so there is no reason to stop while it does. Once the buffer
+      // is nearly gone the video is about to stall whatever we do, which is
+      // the moment a more disruptive remedy stops being a downgrade.
+      const outOfPatience = ladder.refreshes >= ATTESTATION_REFRESH_FLOOR &&
+        ((runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS) ||
+          ladder.refreshes >= ATTESTATION_REFRESH_CEILING)
+
+      if (!outOfPatience) {
+        return { action: 'refresh', log: null }
+      }
+
+      // Audio and video reach this together, so the first one to escalate ends
+      // the session for both, and the second must not spend a second rung
+      if (sessionEnded) {
+        return { action: 'abort', log: null }
+      }
+
+      const reason = runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
+        ? `${playbackLeft.toFixed(1)}s of watching left`
+        : `${ladder.refreshes} refreshes, the limit`
+
+      const escalation = escalate(reason)
+
+      if (escalation) { return escalation }
+
+      // Audio and video both arrive here, and both have to fail, but the
+      // episode only ends once
+      endEpisode(`giving up: ${ladder.hardReloads} session reloads and ${ladder.pageReloads} page reloads did not get a trusted token`)
+
+      return { action: 'give-up', log: null }
+    },
+
+    /**
+     * Records that a credential refresh is actually starting, which is what
+     * spends the budget. Both the audio and the video request are told to
+     * refresh, and only the first of them starts one.
+     */
+    noteRefreshStarted() {
+      ladder.refreshes += 1
+      ladder.refreshesThisEpisode += 1
+
+      if (!ladder.recovering) {
+        ladder.recovering = true
+        playerContext?.onRecoveryStarted?.()
+      }
+
+      const playbackLeft = secondsOfPlaybackLeft(playerContext?.getPlayer())
+
+      console.warn(`${RECOVERY_LOG} PO token not trusted, refreshing credentials (attempt ${ladder.refreshes}, ${playbackLeft.toFixed(1)}s of watching left)`)
+    },
+
+    /**
+     * The request has been told to wait, or to retry, often enough to look
+     * like a loop.
+     *
+     * Being told to wait is not a fault to be fixed, and while there is
+     * something left to play it costs the viewer nothing to do as we are told.
+     * If it really never ends, the buffer drains and we come back here in
+     * earnest. Upstream reloaded the whole page here on the spot, which
+     * discarded a buffer that was usually full.
+     *
+     * @param {object} facts
+     * @param {string} facts.description what was counted, for the log line
+     * @param {boolean} facts.hasServedMedia whether this session has ever served
+     * @param {boolean} facts.sessionEnded whether this session has already been ended for a recovery
+     * @returns {RecoveryDecision}
+     */
+    decideOnLoopSuspicion({ description, hasServedMedia, sessionEnded }) {
+      const playbackLeft = secondsOfPlaybackLeft(playerContext?.getPlayer())
+
+      // A session that has not served anything yet has an empty buffer because
+      // it has not started, not because it is about to stop
+      const aboutToStall = hasServedMedia && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
+
+      if (!aboutToStall) {
+        const waitingBecause = hasServedMedia
+          ? `${playbackLeft.toFixed(1)}s of watching left`
+          : 'this session has not served anything yet, so its empty buffer says nothing'
+
+        return {
+          action: 'run-on',
+          log: `${RECOVERY_LOG} ${description}, but ${waitingBecause}, so waiting rather than reloading`,
+        }
+      }
+
+      if (sessionEnded) {
+        return { action: 'abort', log: null }
+      }
+
+      const escalation = escalate(description)
+
+      if (escalation) { return escalation }
+
+      // A video that has already been rebuilt and reloaded is telling us that
+      // the reloading is not what is wrong
+      return {
+        action: 'run-on',
+        log: `${RECOVERY_LOG} ${description}, and every reload is spent, so letting the request run`,
+      }
+    },
+  }
+
   return {
+    /**
+     * Takes charge of a player, and of nothing that belonged to the last one.
+     * Called when a player is created, which happens again on every format
+     * switch and every page reload while the regulator and its ladder carry
+     * on.
+     *
+     * It re-arms rather than merely accepting, so that whatever state the
+     * previous player left behind — a session, the scheme slot, a context
+     * pointing at a destroyed player — is given up first. Reloading the player
+     * is one of the ladder's own remedies, so a reload has to be able to fix
+     * the transport; the counters are the only thing meant to survive it.
+     * @param {PlayerContext} context
+     */
+    attach(context) {
+      giveUpPlayer()
+
+      playerContext = context
+    },
+
     /**
      * Builds a session from fresh credentials and serves from it. Any previous
      * session is finished first, in the same order as before the regulator
@@ -90,8 +519,28 @@ export function createSabrRegulator(playerContext) {
     startSession(sabrData) {
       currentSession?.cleanup()
 
+      if (ladder.videoId !== sabrData.videoId) {
+        resetBudget(sabrData.videoId)
+        resetWallInjection()
+      } else {
+        // Same video, so this session was built to recover the last one, and
+        // its credentials are fresh ones the simulated wall should count
+        noteCredentialsInstalled()
+      }
+
+      noteSessionStarted()
+
+      // A new session gets a full refresh budget, whatever produced it: a new
+      // video, the user reopening a walled one, or a recovery reload. Carrying
+      // a spent budget into a fresh session made every attempt after the first
+      // give up on its first block, which is why reopening a walled video only
+      // sometimes helped. The reload budgets deliberately do not reset here,
+      // since they are what bounds the ladder.
+      ladder.refreshes = 0
+
       currentSession = /** @__NOINLINE__ */ createSabrSession(
         sabrData,
+        recovery,
         playerContext.getPlayer,
         playerContext.getManifest,
         playerContext.playerWidth,
@@ -108,18 +557,46 @@ export function createSabrRegulator(playerContext) {
     },
 
     /**
-     * Gives up the scheme slot and finishes the session behind it. The slot is
-     * process-global, so a regulator that is not released leaks its handler
-     * into whatever plays next.
+     * Whether the video is currently being recovered. Survives both the
+     * session being rebuilt and the player being reloaded, which is how a
+     * player built in the middle of an episode knows it has walked into one.
+     * @returns {boolean}
      */
-    release() {
-      if (holdsScheme) {
-        shaka.net.NetworkingEngine.unregisterScheme(SABR_SCHEME)
-        holdsScheme = false
-      }
+    isRecovering() {
+      return ladder.recovering
+    },
 
-      currentSession?.cleanup()
-      currentSession = null
+    /**
+     * Restores the full recovery budget for a video. Called when the viewer
+     * asks for a retry themselves, which is a clear statement that they want
+     * the attempt made regardless of what the automatic ladder already spent.
+     * @param {string} videoId
+     */
+    resetBudget,
+
+    /**
+     * The player being served is going away: give up the scheme slot and
+     * finish the session behind it. The slot is process-global, so a handler
+     * left registered answers for whatever plays next.
+     *
+     * The ladder is deliberately untouched. Detaching is usually the first
+     * half of a remedy the ladder itself chose, and a budget that forgot
+     * itself at that moment would bound nothing.
+     */
+    detach: giveUpPlayer,
+
+    /**
+     * Back to how it was born, for a viewer who has decided this is broken:
+     * no session, no scheme slot, no player, and a full budget. Everything the
+     * automatic ladder holds onto across a reload is meant to be spendable
+     * exactly once, so the one thing the viewer can do about a regulator that
+     * has painted itself into a corner is to say so, and this is what that
+     * says.
+     * @param {string} videoId
+     */
+    reset(videoId) {
+      giveUpPlayer()
+      resetBudget(videoId)
     },
   }
 }
