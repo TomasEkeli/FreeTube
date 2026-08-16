@@ -1,7 +1,7 @@
 import shaka from 'shaka-player'
 
 import { createSabrSession } from './SabrSchemePlugin'
-import { injectedRefreshCeiling, noteCredentialsInstalled, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled } from './sabrWallInjection'
+import { injectedPatienceSeconds, noteCredentialsInstalled, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 
@@ -123,11 +123,31 @@ const ATTESTATION_REFRESH_FLOOR = 1
 const ATTESTATION_LOW_BUFFER_SECONDS = 8
 
 /**
- * Hard stop on refreshes regardless of buffer. A paused player never drains
- * its buffer, so without this it would refresh for as long as YouTube kept
- * saying no.
+ * Hard stop on refreshing regardless of buffer, in real seconds. A paused
+ * player never drains its buffer, and a session that has never served has no
+ * buffer to drain, so without this the ladder would refresh for as long as
+ * YouTube kept saying no.
+ *
+ * This was a count of twelve refreshes, and a count is the wrong unit. What is
+ * being bounded is patience — how long the viewer is left waiting before
+ * something heavier is tried — but refusals arrive at the rate the player asks
+ * for segments, so the count is spent at the playback rate while the runway it
+ * is standing in for drains at one real second per real second. Measured on
+ * 2026-08-16: twelve refreshes took 85 seconds at 1x and escalated on the
+ * buffer as designed, and 49 seconds at 2x, where the count ran out first and
+ * escalated with 23 seconds of watching still in hand. A ceiling tuned against
+ * a 1x cadence therefore fired earliest for exactly the viewers who speed
+ * videos up.
+ *
+ * 85 seconds is not a new judgement about how patient to be: it is what the
+ * old count already meant at the rate it was tuned at, so 1x behaviour is
+ * unchanged and only the rate dependence is gone. Whether 85 is the right
+ * amount of patience is a separate question with its own measurement to make —
+ * in particular it is still long enough that a session which never serves
+ * spends about six minutes and dozens of PO token mints reaching the give-up
+ * screen, which is its own problem and not this one.
  */
-const ATTESTATION_REFRESH_CEILING = 12
+const ATTESTATION_PATIENCE_SECONDS = 85
 
 /**
  * How many times to rebuild the SABR session from scratch, keeping the page.
@@ -263,6 +283,17 @@ export function createSabrRegulator() {
     /** @type {?string} */
     videoId: null,
     refreshes: 0,
+    /**
+     * When this session first started refreshing, which is when the clock the
+     * patience bound reads begins. Null while nothing is being refreshed.
+     *
+     * It belongs to the session rather than to the episode, exactly as the
+     * refresh count above does: a session rebuilt to recover the last one gets
+     * a full budget, because carrying a spent one into a fresh session made
+     * every attempt after the first give up on its first block.
+     * @type {?number}
+     */
+    patienceSince: null,
     hardReloads: 0,
     pageReloads: 0,
     mediaResponsesSinceReload: 0,
@@ -276,9 +307,19 @@ export function createSabrRegulator() {
     refreshesThisEpisode: 0,
   }
 
+  /**
+   * Gives the session a full refresh budget back: the count the floor reads
+   * and the clock the patience bound reads, which have to move together or the
+   * bound outlives the thing it is bounding.
+   */
+  function restoreRefreshBudget() {
+    ladder.refreshes = 0
+    ladder.patienceSince = null
+  }
+
   function resetBudget(videoId) {
     ladder.videoId = videoId
-    ladder.refreshes = 0
+    restoreRefreshBudget()
     ladder.hardReloads = 0
     ladder.pageReloads = 0
     ladder.mediaResponsesSinceReload = 0
@@ -407,7 +448,7 @@ export function createSabrRegulator() {
         `${ladder.hardReloads} session reloads and ${ladder.pageReloads} page reloads`
       )
 
-      ladder.refreshes = 0
+      restoreRefreshBudget()
 
       if (ladder.mediaResponsesSinceReload < ATTESTATION_RECOVERY_SEGMENTS) {
         ladder.mediaResponsesSinceReload += 1
@@ -445,11 +486,15 @@ export function createSabrRegulator() {
       // the moment a more disruptive remedy stops being a downgrade.
       // Only ever lowered when FT_SABR_WALL asks for it, so that walking the
       // whole ladder does not take six minutes of sitting still
-      const ceiling = (sabrWallInjectionEnabled && injectedRefreshCeiling()) || ATTESTATION_REFRESH_CEILING
+      const patienceSeconds = (sabrWallInjectionEnabled && injectedPatienceSeconds()) || ATTESTATION_PATIENCE_SECONDS
+
+      const secondsRefreshing = ladder.patienceSince === null
+        ? 0
+        : (Date.now() - ladder.patienceSince) / 1000
 
       const outOfPatience = ladder.refreshes >= ATTESTATION_REFRESH_FLOOR &&
         ((runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS) ||
-          ladder.refreshes >= ceiling)
+          secondsRefreshing >= patienceSeconds)
 
       if (!outOfPatience) {
         return { action: 'refresh', log: null }
@@ -463,7 +508,7 @@ export function createSabrRegulator() {
 
       const reason = runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS
         ? `${playbackLeft.toFixed(1)}s of watching left`
-        : `${ladder.refreshes} refreshes, the limit`
+        : `${secondsRefreshing.toFixed(0)}s of refreshing across ${ladder.refreshes} attempts, out of patience`
 
       const escalation = escalate(reason)
 
@@ -488,6 +533,10 @@ export function createSabrRegulator() {
     noteRefreshStarted() {
       ladder.refreshes += 1
       ladder.refreshesThisEpisode += 1
+
+      // The clock starts with the first refresh of this session, not with the
+      // refusal that provoked it, so it measures time spent on the remedy
+      ladder.patienceSince ??= Date.now()
 
       if (!ladder.recovering) {
         ladder.recovering = true
@@ -601,7 +650,7 @@ export function createSabrRegulator() {
       // give up on its first block, which is why reopening a walled video only
       // sometimes helped. The reload budgets deliberately do not reset here,
       // since they are what bounds the ladder.
-      ladder.refreshes = 0
+      restoreRefreshBudget()
 
       currentSession = /** @__NOINLINE__ */ createSabrSession(
         sabrData,
