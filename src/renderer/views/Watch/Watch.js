@@ -146,6 +146,12 @@ export default defineComponent({
       /** @type {SabrData | null} */
       sabrData: null,
       legacyFormats: [],
+      /**
+       * Formats the automatic fallback has already tried and seen fail for
+       * this load, so it cannot offer them again and ring the changes forever.
+       * @type {('dash'|'audio'|'legacy')[]}
+       */
+      attemptedFormats: [],
       captions: [],
       /** @type {'EQUIRECTANGULAR' | 'EQUIRECTANGULAR_THREED_TOP_BOTTOM' | 'MESH'| null} */
       vrProjection: null,
@@ -437,6 +443,7 @@ export default defineComponent({
       this.manifestMimeType = MANIFEST_TYPE_DASH
       this.sabrData = null
       this.legacyFormats = []
+      this.attemptedFormats = []
       this.captions = []
       this.vrProjection = null
       this.recommendedVideos = []
@@ -1444,47 +1451,74 @@ export default defineComponent({
       }
     },
 
+    /**
+     * Whether this video can be played in the given format at all. One place
+     * to ask, so the automatic fallback can look before it leaps rather than
+     * finding out by way of a toast meant for someone who chose the format
+     * from the menu.
+     * @param {'dash'|'audio'|'legacy'} format
+     * @returns {boolean}
+     */
+    canUseFormat: function (format) {
+      switch (format) {
+        case 'dash':
+          return this.manifestSrc !== null
+        case 'legacy':
+          // YouTube serves no progressive formats for most videos now, so this
+          // is usually false, which is why it can no longer be the only rung
+          // the fallback tries
+          return !this.isLive && !this.isPostLiveDvr && this.legacyFormats.length > 0
+        case 'audio':
+          return this.manifestSrc !== null &&
+            !((this.isLive || this.isPostLiveDvr) &&
+              // The WEB HLS manifests only contain combined audio and video files, so we can't do audio only
+              // The IOS HLS manifests have audio-only streams
+              this.manifestMimeType === MANIFEST_TYPE_HLS && !this.manifestSrc.includes('/demuxed/1'))
+        default:
+          return false
+      }
+    },
+
     enableDashFormat: function () {
       if (this.activeFormat === 'dash') {
-        return
+        return false
       }
 
-      if (this.manifestSrc === null) {
+      if (!this.canUseFormat('dash')) {
         showToast(this.t('Change Format.Dash formats are not available for this video'))
-        return
+        return false
       }
 
       this.activeFormat = 'dash'
+      return true
     },
 
     enableLegacyFormat: function () {
       if (this.activeFormat === 'legacy') {
-        return
+        return false
       }
 
-      if (this.isLive || this.isPostLiveDvr || this.legacyFormats.length === 0) {
+      if (!this.canUseFormat('legacy')) {
         showToast(this.t('Change Format.Legacy formats are not available for this video'))
-        return
+        return false
       }
 
       this.activeFormat = 'legacy'
+      return true
     },
 
     enableAudioFormat: function () {
       if (this.activeFormat === 'audio') {
-        return
+        return false
       }
 
-      if (this.manifestSrc === null ||
-        ((this.isLive || this.isPostLiveDvr) &&
-        // The WEB HLS manifests only contain combined audio and video files, so we can't do audio only
-        // The IOS HLS manifests have audio-only streams
-          this.manifestMimeType === MANIFEST_TYPE_HLS && !this.manifestSrc.includes('/demuxed/1'))) {
+      if (!this.canUseFormat('audio')) {
         showToast(this.t('Change Format.Audio formats are not available for this video'))
-        return
+        return false
       }
 
       this.activeFormat = 'audio'
+      return true
     },
 
     handleVideoEnded: function () {
@@ -1690,34 +1724,39 @@ export default defineComponent({
         }
       }
 
-      if (this.isLive || this.isPostLiveDvr) {
-        // live streams don't have legacy formats, so only switch between dash and audio
+      // Live streams have no legacy formats, so they only switch between DASH
+      // and audio. Everything else loops DASH -> legacy -> audio -> DASH.
+      const alternatives = this.isLive || this.isPostLiveDvr
+        ? { dash: ['audio'], legacy: ['dash'], audio: ['dash'] }
+        : { dash: ['legacy', 'audio'], legacy: ['audio', 'dash'], audio: ['dash', 'legacy'] }
 
-        if (this.activeFormat === 'dash') {
-          console.error('Unable to play DASH formats. Reverting to audio formats...')
-          this.enableAudioFormat()
-        } else {
-          console.error('Unable to play audio formats. Reverting to DASH formats...')
-          this.enableDashFormat()
-        }
-      } else {
-        // loop through formats DASH -> legacy -> audio -> DASH
-
-        switch (this.activeFormat) {
-          case 'dash':
-            console.error('Unable to play DASH formats. Reverting to legacy formats...')
-            this.enableLegacyFormat()
-            break
-          case 'legacy':
-            console.error('Unable to play legacy formats. Reverting to audio formats...')
-            this.enableAudioFormat()
-            break
-          case 'audio':
-            console.error('Unable to play audio formats. Reverting to DASH formats...')
-            this.enableDashFormat()
-            break
-        }
+      if (!this.attemptedFormats.includes(this.activeFormat)) {
+        this.attemptedFormats.push(this.activeFormat)
       }
+
+      // Take the first one this video actually has and has not already failed.
+      // Trying only the next one in the ring and stopping if it was missing is
+      // what left a dead player behind: for most videos YouTube now serves no
+      // progressive formats, so `legacy` is absent and it was the first thing
+      // a failed DASH stream reached for. The viewer got a toast about legacy
+      // formats, which named neither what had gone wrong nor anything they
+      // could act on, and since the format never changed the player was never
+      // reloaded and every further error was ignored.
+      const nextFormat = (alternatives[this.activeFormat] ?? [])
+        .find(format => !this.attemptedFormats.includes(format) && this.canUseFormat(format))
+
+      if (nextFormat) {
+        console.error(`Unable to play ${this.activeFormat} formats. Reverting to ${nextFormat} formats...`)
+        this.handleFormatChange(nextFormat)
+        return
+      }
+
+      // Nothing left to switch to. Say so, and offer the one thing that is
+      // known to work: reopening the video, which builds a new session and
+      // usually plays the very formats that just failed.
+      console.error(`Unable to play ${this.activeFormat} formats, and this video has no other format to fall back to.`)
+
+      this.showRetryableError(this.t('Video.This video stopped playing and there is no other format to try'))
     },
 
     /**
