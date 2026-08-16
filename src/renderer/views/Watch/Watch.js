@@ -382,11 +382,15 @@ export default defineComponent({
       // the remedy it bounds bounds nothing. `markRaw` because it holds a live
       // session and event handlers, none of which want a reactive proxy.
       //
-      // The policy is read once, here, rather than watched: changing it while
-      // a video plays would re-police a session already in flight, and the
-      // setting's own description promises it takes effect on the next video.
+      // The policy is passed as a reader rather than a value because this
+      // hook runs once per view instance, not once per video: the router
+      // reuses the watch view across a param change, which is the same
+      // property that lets the regulator outlive every rung. Passing the
+      // value here fixed the policy for as long as the viewer stayed on watch
+      // pages, so the setting's promise that it takes effect on the next
+      // video was false. The regulator re-reads it when the video changes.
       this.sabrRegulator = markRaw(createSabrRegulator({
-        regulated: this.enableRegulatedStreaming,
+        isRegulated: () => this.enableRegulatedStreaming,
       }))
     }
 

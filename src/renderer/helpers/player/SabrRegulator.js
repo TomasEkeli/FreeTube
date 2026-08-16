@@ -285,18 +285,30 @@ function recoveryPolicy(regulated) {
  * plugin owned them.
  *
  * @param {object} [options]
- * @param {boolean} [options.regulated] which recovery policy to run, from the
- * experimental setting. Read once, when the watch view builds the regulator,
- * so a video already playing is never re-policed underneath the viewer.
+ * @param {() => boolean} [options.isRegulated] reads the experimental setting.
+ *
+ * A function rather than a value, and consulted when the video changes rather
+ * than when the regulator is built. Built-time was wrong and the log said so:
+ * the router reuses the watch view across a param change, so `created` runs
+ * once and the policy would have been fixed for as long as the viewer stayed
+ * on watch pages — which is to say, effectively for the session. Per video is
+ * both what the setting promises and the only moment at which changing it is
+ * safe, since every rung of the ladder is mid-video by definition.
  * @returns {SabrRegulator}
  */
-export function createSabrRegulator({ regulated = false } = {}) {
-  const policy = recoveryPolicy(regulated)
+export function createSabrRegulator({ isRegulated = () => false } = {}) {
+  let policy = recoveryPolicy(isRegulated())
 
-  // Named in the log because every watched run and every ordinary use
-  // collection has to say which policy produced it, or the two cannot be told
-  // apart afterwards
-  console.warn(`${RECOVERY_LOG} ${policy.name} policy: at most ${policy.maxSessions} session, ${policy.warmStandby ? 'warming a standby' : 'no standby'}`)
+  /**
+   * Names the policy in force. Every watched run and every ordinary use
+   * collection has to say which one produced it, or the two cannot be told
+   * apart afterwards.
+   */
+  function announcePolicy() {
+    console.warn(`${RECOVERY_LOG} ${policy.name} policy: at most ${policy.maxSessions} session, ${policy.warmStandby ? 'warming a standby' : 'no standby'}`)
+  }
+
+  announcePolicy()
 
   /**
    * The player currently being served, or null between one being torn down and
@@ -664,11 +676,13 @@ export function createSabrRegulator({ regulated = false } = {}) {
 
   return {
     /**
-     * The policy this regulator was built with. Exposed so that what is in
-     * force can be read rather than inferred, and so the switch has a single
-     * place to be honoured from.
+     * The policy currently in force. A getter, because it is re-read when the
+     * video changes, so a caller that captured it once would be answering with
+     * a policy the viewer has since turned off.
      */
-    policy,
+    get policy() {
+      return policy
+    },
 
     /**
      * Takes charge of a player, and of nothing that belonged to the last one.
@@ -706,6 +720,16 @@ export function createSabrRegulator({ regulated = false } = {}) {
       if (ladder.videoId !== sabrData.videoId) {
         resetBudget(sabrData.videoId)
         resetWallInjection()
+
+        // A new video is the one safe moment to change policy, and the only
+        // one the viewer was promised. Mid-video would mean re-policing a
+        // ladder already climbing, which every rung is by definition.
+        const chosen = recoveryPolicy(isRegulated())
+
+        if (chosen.name !== policy.name) {
+          policy = chosen
+          announcePolicy()
+        }
       } else {
         // Same video, so this session was built to recover the last one, and
         // its credentials are fresh ones the simulated wall should count
