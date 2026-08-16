@@ -1586,15 +1586,13 @@ export default defineComponent({
       if (!sabrStream) return
 
       if (isRebuildingSabrSession.value) {
-        // The plugin ends a session before asking for this, so the session the
-        // rebuild already under way is loading against has just been killed
-        // and its load can never finish. Ignoring the request leaves the video
-        // waiting on it forever, which is the one outcome worse than the
-        // reload we can still fall back to.
-        console.error('[SABR recovery] a second session reload was needed while one was still loading, falling back to a page reload')
-
-        sabrAbortController?.abort()
-        emit('player-reload-requested')
+        // The regulator does not authorise a rebuild while one is unsettled,
+        // so reaching here means we and it disagree about what is happening.
+        // Saying so and doing nothing is right: it is still waiting on the
+        // rebuild we are already running, and reloading the page behind its
+        // back is exactly the unauthorised, uncounted remedy this arrangement
+        // exists to remove.
+        console.error('[SABR recovery] a second session reload was asked for while one was still loading, and was refused')
         return
       }
 
@@ -1691,6 +1689,11 @@ export default defineComponent({
         emit('player-reload-requested')
       } finally {
         isRebuildingSabrSession.value = false
+
+        // However it went, the regulator may authorise another one. It
+        // deliberately does not hear this when the load never resolves, which
+        // is the case that used to produce two page reloads from two owners.
+        sabrRegulator.noteRebuildSettled()
       }
     }
 

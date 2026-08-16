@@ -29,6 +29,7 @@ const AbortableOperation = shaka.util.AbortableOperation
  * @property {(sabrData: import('../../views/Watch/Watch').SabrData) => import('./SabrSchemePlugin').SabrSession} startSession
  * @property {() => ?import('./SabrSchemePlugin').SabrSession} getSession
  * @property {() => boolean} isRecovering
+ * @property {() => void} noteRebuildSettled
  * @property {(videoId: string) => void} resetBudget
  * @property {(videoId: string) => void} reset
  * @property {() => void} detach
@@ -213,6 +214,22 @@ export function createSabrRegulator() {
   let holdsScheme = false
 
   /**
+   * Whether a session rebuild this authorised has yet to come to anything.
+   *
+   * A rebuild is not finished when the new session starts: the player has to
+   * load against it, and under a wall that never lifts that load never
+   * resolves, because the init segment it waits for never arrives. The
+   * rebuilt session meanwhile keeps being refused and keeps climbing the
+   * ladder, and used to ask for a second rebuild on top of the first. The
+   * player refused the collision and reloaded the page itself, which the
+   * ladder had not authorised and did not count, so its own page reload was
+   * still unspent and fired ninety seconds later: two page reloads, from two
+   * owners that could not see each other. Measured 2026-08-16 at
+   * FT_SABR_WALL=0:never.
+   */
+  let rebuildUnsettled = false
+
+  /**
    * The recovery ladder's state for the video being watched. Reset when the
    * video changes, and when the viewer asks for a retry themselves.
    */
@@ -258,6 +275,7 @@ export function createSabrRegulator() {
     currentSession?.cleanup()
     currentSession = null
     playerContext = null
+    rebuildUnsettled = false
   }
 
   function claimScheme() {
@@ -311,9 +329,10 @@ export function createSabrRegulator() {
     // underneath a running session does not. Why is not established: a reload
     // both takes longer and starts a genuinely new session, and we cannot yet
     // tell which of the two is the cure.
-    if (ladder.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
+    if (!rebuildUnsettled && ladder.hardReloads < ATTESTATION_HARD_RELOAD_LIMIT) {
       ladder.hardReloads += 1
       ladder.mediaResponsesSinceReload = 0
+      rebuildUnsettled = true
 
       return {
         action: 'rebuild',
@@ -325,9 +344,15 @@ export function createSabrRegulator() {
       ladder.pageReloads += 1
       ladder.mediaResponsesSinceReload = 0
 
+      // Naming which of the two it is matters: one says the rebuilds did not
+      // work, the other says the last one never got to try
+      const why = rebuildUnsettled
+        ? 'the last session reload never finished loading'
+        : 'session reloads spent'
+
       return {
         action: 'reload-page',
-        log: `${RECOVERY_LOG} ${reason}, session reloads spent, reloading the page`,
+        log: `${RECOVERY_LOG} ${reason}, ${why}, reloading the page`,
       }
     }
 
@@ -345,6 +370,8 @@ export function createSabrRegulator() {
      * Enough of it restores the reload budgets.
      */
     noteMediaServed() {
+      rebuildUnsettled = false
+
       endEpisode(
         `playing again after ${ladder.refreshesThisEpisode} refreshes, ` +
         `${ladder.hardReloads} session reloads and ${ladder.pageReloads} page reloads`
@@ -554,6 +581,17 @@ export function createSabrRegulator() {
 
     getSession() {
       return currentSession
+    },
+
+    /**
+     * The player has finished trying to rebuild the session, whether it worked
+     * or not. Until it says so, no second rebuild is authorised: the first one
+     * has not had its chance yet, and a rebuild that replaces a rebuild in
+     * progress leaves the player loading against a session that no longer
+     * exists.
+     */
+    noteRebuildSettled() {
+      rebuildUnsettled = false
     },
 
     /**
