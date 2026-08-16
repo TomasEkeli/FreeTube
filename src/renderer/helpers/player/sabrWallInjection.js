@@ -13,7 +13,9 @@
  *   FT_SABR_WALL=10        wall the session ten seconds in, until one fresh
  *                          set of credentials has been installed
  *   FT_SABR_WALL=10:3      the same, but three sets are needed
- *   FT_SABR_WALL=10:never  nothing ever satisfies it, which drives the ladder
+ *   FT_SABR_WALL=10:never  nothing ever satisfies it, so the wall keeps coming
+ *                          back ten seconds into every session it walls
+ *   FT_SABR_WALL=0:never   nothing ever plays, which is what drives the ladder
  *                          all the way to the error screen and its retry
  *
  * Credentials count whether they came from a refresh underneath the running
@@ -24,6 +26,16 @@
  * The delay matters as much as the count: a session that walls before it has
  * buffered anything tests the floor, and one that walls with a full buffer
  * tests the patience the buffer buys.
+ *
+ * It also decides whether `never` ever ends, which is not what this file used
+ * to claim. A rebuilt session gets its delay over again, so at any delay above
+ * zero it serves for that long, ATTESTATION_RECOVERY_SEGMENTS reads ten served
+ * segments as the video playing again, and the budgets go back to full. The
+ * ladder then cycles indefinitely and never reaches its top: measured on
+ * 2026-08-16 at `15:never:backoff=4`, four minutes of unbroken playback, three
+ * session rebuilds each logged as "reload 1 of 2", no page reload. That is the
+ * ladder behaving correctly under an intermittent wall, but it is not a test
+ * of the rungs above the rebuild, and only a delay of zero is.
  *
  * Two named options may follow, in either order, and either on its own:
  *
