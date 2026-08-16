@@ -993,13 +993,22 @@ async function doRequest(
     shouldRetryDueToNextRequestPolicy = true
   }
 
-  // The server answered without media because it does not trust the PO token
-  // (attestation pending). Retrying sends an identical request, so it cannot
-  // succeed. Reloading mints a new token, which sometimes is trusted.
-  const attestationBlocked = !invalidPoToken &&
-    protectionStatus >= 2 &&
-    !receivedMediaPart &&
-    currentState.cumulativeRetryDueToNextRequestPolicy >= ATTESTATION_RETRY_LIMIT
+  // The server answered without media because it does not trust the PO token.
+  // Retrying sends an identical request, so it cannot succeed; a fresh token
+  // sometimes is trusted, and that is rung 0 of the ladder.
+  //
+  // The two refusals differ only in how long to humour them. A pending
+  // attestation (status 2) arrives with a retry directive, so it is not a wall
+  // until those retries are spent. A rejected token (status 3) has nothing to
+  // retry: the server has already said what it thinks of this token, and
+  // sending it again cannot change that answer. It used to skip the ladder
+  // altogether and fail the video outright, which is the wrong way round, and
+  // wrong on the evidence: reopening a video that died this way plays it back
+  // in the same formats, because reopening is what mints the new token.
+  const attestationBlocked = !receivedMediaPart && (
+    invalidPoToken ||
+    (protectionStatus >= 2 && currentState.cumulativeRetryDueToNextRequestPolicy >= ATTESTATION_RETRY_LIMIT)
+  )
 
   if (responseDataChunks.length > 0 && segmentComplete) {
     const data = /** @__NOINLINE__ */ concatenateChunks(responseDataChunks)
