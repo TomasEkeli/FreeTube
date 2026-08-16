@@ -864,6 +864,8 @@ Video:
   Private: Private videos cannot be watched in FreeTube as they require Google login and ownership of the video.
   # Shown on the video error screen, for errors that reopening the video can clear
   Try Again: Try Again
+  # Shown when playback failed and the video has no other format left to fall back to
+  This video stopped playing and there is no other format to try: This video stopped playing, and it has no other format to fall back to. Reopening it usually works, since that starts a new session with YouTube.
   More Options: More Options
   Mark As Watched: Mark As Watched
   Remove From History: Remove From History
