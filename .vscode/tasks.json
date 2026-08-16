@@ -36,6 +36,25 @@
         "panel": "dedicated",
         "reveal": "always"
       }
+    },
+    {
+      "label": "FreeTube: run (dev, ordinary use, appending daily log)",
+      "detail": "For collecting what the recovery ladder actually does in real viewing. Appends to thoughts/logs/ordinary-use/<date>.log so an evening across several launches is one file. Never set FT_SABR_WALL for these runs: the point is what YouTube does unprovoked.",
+      "type": "shell",
+      "command": "mkdir -p thoughts/logs/ordinary-use && unset FT_SABR_WALL && pnpm dev 2>&1 | tee -a \"thoughts/logs/ordinary-use/$(date +%Y-%m-%d).log\"",
+      "options": {
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "FT_NO_DEVTOOLS": "1",
+          "ELECTRON_ENABLE_LOGGING": "1"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      }
     }
   ]
 }
