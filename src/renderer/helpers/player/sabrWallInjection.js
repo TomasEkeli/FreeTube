@@ -43,8 +43,8 @@
  *                                    seconds before asking again
  *   FT_SABR_WALL=10:1:status=3       the token is rejected outright rather
  *                                    than left pending
- *   FT_SABR_WALL=0:never:refreshes=3 escalate after three credential refreshes
- *                                    rather than the usual twelve
+ *   FT_SABR_WALL=0:never:patience=20 escalate after twenty seconds of refreshing
+ *                                    rather than the usual eighty five
  *
  * `backoff` is what makes the loop detector countable. It counts backoffs
  * within a single segment request and only a refused request retries inside
@@ -61,13 +61,12 @@
  * directive at all and enters the ladder at once, since only a different token
  * can change that answer.
  *
- * `refreshes` lowers the ceiling on in place credential refreshes, which is
- * how long a test has to sit through before the ladder climbs. A session that
- * has never served has no runway, so the buffer test cannot fire and that
- * ceiling is the only gate: twelve refreshes at about seven seconds each is
- * ninety seconds per rung, and six minutes to walk the whole ladder. Three
- * makes the same walk take a quarter of the time and reaches every rung by
- * the same path.
+ * `patience` lowers the bound on in place credential refreshing, which is how
+ * long a test has to sit through before the ladder climbs. A session that has
+ * never served has no runway, so the buffer test cannot fire and that bound is
+ * the only gate: eighty five seconds per rung is nearly six minutes to walk
+ * the whole ladder. Twenty makes the same walk take a quarter of the time and
+ * reaches every rung by the same path.
  *
  * It is the one option that changes a tuned number rather than imitating the
  * server, so it is for testing structure, not thresholds. A run that is meant
@@ -92,7 +91,7 @@
  * @returns {null}
  */
 function refuseConfig(raw, because) {
-  console.error(`[SABR recovery] FT_SABR_WALL="${raw}" ignored: ${because}. Expected <seconds>[:<credentials>|never][:backoff=<seconds>][:status=<2|3>]`)
+  console.error(`[SABR recovery] FT_SABR_WALL="${raw}" ignored: ${because}. Expected <seconds>[:<credentials>|never][:backoff=<seconds>][:status=<2|3>][:patience=<seconds>]`)
 
   return null
 }
@@ -119,7 +118,7 @@ const CONFIG = (() => {
 
   let backoffMs = 0
   let protectionStatus = 2
-  let refreshCeiling = 0
+  let patienceSeconds = 0
 
   // Named rather than positional, so that either can be given alone and so
   // that a command line still says what it does a month later
@@ -146,22 +145,22 @@ const CONFIG = (() => {
 
         break
       }
-      case 'refreshes': {
-        refreshCeiling = Number.parseInt(value)
+      case 'patience': {
+        patienceSeconds = Number.parseFloat(value)
 
-        if (!(refreshCeiling > 0)) {
-          return refuseConfig(raw, `refreshes "${value}" is not a count of credential refreshes`)
+        if (!(patienceSeconds > 0)) {
+          return refuseConfig(raw, `patience "${value}" is not a number of seconds`)
         }
 
         break
       }
       default: {
-        return refuseConfig(raw, `"${optionText}" is not one of backoff=<seconds>, status=<2|3> or refreshes=<count>`)
+        return refuseConfig(raw, `"${optionText}" is not one of backoff=<seconds>, status=<2|3> or patience=<seconds>`)
       }
     }
   }
 
-  return { delayMs: delaySeconds * 1000, credentialsUntilTrusted, backoffMs, protectionStatus, refreshCeiling }
+  return { delayMs: delaySeconds * 1000, credentialsUntilTrusted, backoffMs, protectionStatus, patienceSeconds }
 })()
 
 export const sabrWallInjectionEnabled = CONFIG !== null
@@ -173,10 +172,10 @@ if (CONFIG !== null) {
 
   const refusal = CONFIG.protectionStatus === 3 ? 'as a rejected token' : 'as a pending attestation'
   const backoff = CONFIG.backoffMs > 0 ? `, asking for ${CONFIG.backoffMs / 1000}s of backoff each time` : ''
-  const ceiling = CONFIG.refreshCeiling > 0 ? `, escalating after ${CONFIG.refreshCeiling} refreshes instead of the usual number` : ''
+  const patience = CONFIG.patienceSeconds > 0 ? `, escalating after ${CONFIG.patienceSeconds}s of refreshing instead of the usual number` : ''
 
   console.warn(
-    `[SABR recovery] WALL INJECTION ACTIVE: sessions wall ${CONFIG.delayMs / 1000}s in ${refusal}${backoff}${ceiling}, ${needed}. Unset FT_SABR_WALL to stop.`
+    `[SABR recovery] WALL INJECTION ACTIVE: sessions wall ${CONFIG.delayMs / 1000}s in ${refusal}${backoff}${patience}, ${needed}. Unset FT_SABR_WALL to stop.`
   )
 }
 
@@ -255,13 +254,13 @@ export function injectedBackoffMs() {
 }
 
 /**
- * How many credential refreshes a walled session may make before the ladder
- * escalates, when a test has asked for fewer than the tuned number. Zero means
- * it has not, and the real ceiling stands.
+ * How long a walled session may go on refreshing its credentials before the
+ * ladder escalates, when a test has asked for less than the tuned number of
+ * seconds. Zero means it has not, and the real bound stands.
  * @returns {number}
  */
-export function injectedRefreshCeiling() {
-  return CONFIG?.refreshCeiling ?? 0
+export function injectedPatienceSeconds() {
+  return CONFIG?.patienceSeconds ?? 0
 }
 
 /**
