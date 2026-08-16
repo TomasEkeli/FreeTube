@@ -60,7 +60,22 @@ const AbortableOperation = shaka.util.AbortableOperation
  * @type {object}
  * @property {'run-on' | 'refresh' | 'rebuild' | 'reload-page' | 'give-up' | 'abort'} action
  * @property {?string} log
+ * @property {SabrGiveUpError} [error] the verdict itself, for a 'give-up'
  */
+
+/**
+ * The regulator's verdict that nothing left to it can make this session play,
+ * carried as a type rather than as a message. The watch view matches on it to
+ * show a real error instead of cycling formats, and that match is the only
+ * thing standing between a refused session and a format ring that cannot help
+ * it, so it should not rest on two copies of a sentence staying identical.
+ */
+export class SabrGiveUpError extends Error {
+  constructor() {
+    super('YouTube did not accept the PO token for this session')
+    this.name = 'SabrGiveUpError'
+  }
+}
 
 /**
  * The name of the scheme every SABR segment URL is written against, in the
@@ -439,7 +454,7 @@ export function createSabrRegulator() {
       // episode only ends once
       endEpisode(`giving up: ${ladder.hardReloads} session reloads and ${ladder.pageReloads} page reloads did not get a trusted token`)
 
-      return { action: 'give-up', log: null }
+      return { action: 'give-up', log: null, error: new SabrGiveUpError() }
     },
 
     /**

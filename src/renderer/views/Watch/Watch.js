@@ -41,8 +41,7 @@ import {
 } from '../../helpers/api/invidious'
 import { sortCaptions } from '../../helpers/player/utils'
 import { buildFormatId, MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
-import { createSabrRegulator } from '../../helpers/player/SabrRegulator'
-import { ATTESTATION_GIVE_UP_MESSAGE } from '../../helpers/player/SabrSchemePlugin'
+import { createSabrRegulator, SabrGiveUpError } from '../../helpers/player/SabrRegulator'
 import { useI18n } from 'vue-i18n'
 
 /**
@@ -1692,7 +1691,7 @@ export default defineComponent({
       const { Code } = shaka.util.Error
 
       if (error.code === Code.HTTP_ERROR) {
-        if (error.data[1]?.message === ATTESTATION_GIVE_UP_MESSAGE) {
+        if (error.data[1] instanceof SabrGiveUpError) {
           // Every automatic recovery is spent. The format fallback below
           // cannot help here (the legacy URLs answer to the same distrusted
           // session), so show an honest error instead of stalling silently.
@@ -1753,6 +1752,21 @@ export default defineComponent({
         this.attemptedFormats.push(this.activeFormat)
       }
 
+      // A failure of the SABR transport is not a failure of the formats, and
+      // the regulator has already spent everything it has on it by the time
+      // one reaches us. DASH and audio are the same session in different
+      // clothes, so offering them is offering the thing that just refused us;
+      // only legacy is fetched over its own URLs and can genuinely differ.
+      // This is what the evidence says too: a video that died this way played
+      // again on reopening, in the very formats that had just failed.
+      const failedTransport = error.category === shaka.util.Error.Category.NETWORK &&
+        typeof error.data?.[0] === 'string' &&
+        error.data[0].startsWith('sabr:')
+
+      const ring = failedTransport
+        ? ['legacy']
+        : (alternatives[this.activeFormat] ?? [])
+
       // Take the first one this video actually has and has not already failed.
       // Trying only the next one in the ring and stopping if it was missing is
       // what left a dead player behind: for most videos YouTube now serves no
@@ -1761,7 +1775,7 @@ export default defineComponent({
       // formats, which named neither what had gone wrong nor anything they
       // could act on, and since the format never changed the player was never
       // reloaded and every further error was ignored.
-      const nextFormat = (alternatives[this.activeFormat] ?? [])
+      const nextFormat = ring
         .find(format => !this.attemptedFormats.includes(format) && this.canUseFormat(format))
 
       if (nextFormat) {

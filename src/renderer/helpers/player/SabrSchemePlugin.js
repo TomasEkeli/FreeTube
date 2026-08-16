@@ -49,12 +49,6 @@ const BACKOFF_LOOP_SUSPECTED_AT = 3
 const RETRY_LOOP_SUSPECTED_AT = 100
 
 /**
- * The give-up error raised once the refresh budget is spent. The watch view
- * matches on this message to show a real error instead of cycling formats.
- */
-export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token for this session'
-
-/**
  * @typedef OperationInputs
  * @type {object}
  * @property {string} uri
@@ -334,12 +328,14 @@ function actOnRecoveryDecision(decision, currentState, operationInputs, reloadLa
         operationInputs.requestType,
       )
     case 'give-up':
+      // CRITICAL because no retry of ours can change the answer: the verdict
+      // travels as the error's cause, for the view to recognise by type
       throw new ShakaError(
         ShakaError.Severity.CRITICAL,
         ShakaError.Category.NETWORK,
         ShakaError.Code.HTTP_ERROR,
         operationInputs.uri,
-        new Error(ATTESTATION_GIVE_UP_MESSAGE),
+        decision.error,
         operationInputs.requestType,
       )
   }
