@@ -17,7 +17,7 @@ import {
 import shaka from 'shaka-player'
 
 import { deepCopy } from '../utils'
-import { noteCredentialsInstalled, noteSessionServing, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
+import { injectedBackoffMs, injectedProtectionStatus, noteCredentialsInstalled, noteSessionServing, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
@@ -240,8 +240,9 @@ export const ATTESTATION_GIVE_UP_MESSAGE = 'YouTube did not accept the PO token 
  * @property {() => void} clearTimeout
  */
 /**
- * @typedef SabrStream
+ * @typedef SabrSession
  * @type {object}
+ * @property {shaka.extern.SchemePlugin} handleRequest
  * @property {(cb: ({backoffMs: number}) => void) => void} onBackoffRequested
  * @property {(cb: () => void) => void} onReloadOnce
  * @property {(cb: () => void) => void} onRefreshNeeded
@@ -988,9 +989,31 @@ async function doRequest(
 
   if (wallInjected) {
     // Answer as a walled session does, whatever the server actually said
-    protectionStatus = 2
-    shouldRetry = true
-    shouldRetryDueToNextRequestPolicy = true
+    protectionStatus = injectedProtectionStatus()
+
+    if (protectionStatus === 3) {
+      // A rejected token comes with nothing to retry: the server has judged
+      // this token, and sending it again cannot change the verdict
+      invalidPoToken = true
+    } else {
+      shouldRetry = true
+      shouldRetryDueToNextRequestPolicy = true
+    }
+
+    const backoffMs = injectedBackoffMs()
+
+    if (backoffMs > 0) {
+      // Only a refused request retries inside itself, and the loop detector
+      // counts backoffs within one request, so this is the one place a
+      // countable backoff can be injected from. The rewriting stops at what we
+      // received: the outgoing streamerContext still echoes the server's own
+      // number, so the real conversation is not told anything untrue.
+      if (currentState.sabrStreamState.nextRequestPolicy) {
+        currentState.sabrStreamState.nextRequestPolicy.backoffTimeMs = backoffMs
+      } else {
+        currentState.sabrStreamState.nextRequestPolicy = /** @type {NextRequestPolicy} */ ({ backoffTimeMs: backoffMs })
+      }
+    }
   }
 
   // The server answered without media because it does not trust the PO token.
@@ -1162,14 +1185,24 @@ async function doRequest(
 }
 
 /**
+ * Builds one SABR streaming session: its credentials, its protocol state, and
+ * the request handler that speaks for it.
+ *
+ * It does not register the handler anywhere. The `sabr://` scheme slot is
+ * process-global and a session is the shortest lived thing in the player, so a
+ * session that claimed the slot could only ever be replaced by first giving it
+ * up, which is what made every rebuild visible to the viewer. The regulator
+ * owns the slot instead and routes to whichever session it is currently
+ * serving from; see `SabrRegulator.js`.
+ *
  * @param {import('../../views/Watch/Watch').SabrData} sabrData
  * @param {() => shaka.Player} getPlayer
  * @param {() => shaka.extern.Manifest} getManifest
  * @param {import('vue').ComputedRef<number>} playerWidth
  * @param {import('vue').ComputedRef<number>} playerHeight
- * @return SabrStream
+ * @return SabrSession
  */
-export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, playerHeight) {
+export function createSabrSession(sabrData, getPlayer, getManifest, playerWidth, playerHeight) {
   const eventEmitter = new EventEmitterLike()
 
   /**
@@ -1282,8 +1315,14 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     hasServedMedia: false,
   }
 
-  shaka.net.NetworkingEngine.registerScheme('sabr', (uri, request, requestType, _progressUpdated, headersReceived, _config) => {
-    // lazily fetch it as the variable is only set after setupSabrScheme is called
+  /**
+   * Answers one Shaka request from this session. The regulator hands these to
+   * whichever session it is serving from, so a request that arrives here is
+   * already this session's to answer.
+   * @type {shaka.extern.SchemePlugin}
+   */
+  function handleRequest(uri, request, requestType, _progressUpdated, headersReceived, _config) {
+    // lazily fetch it as the variable is only set after the session is created
     // but it will definitely exist when we receive a request here.
     const player = getPlayer()
     if (player == null) {
@@ -1489,12 +1528,11 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
     }
 
     return op
-  })
+  }
 
   const cleanup = () => {
     tornDown = true
 
-    shaka.net.NetworkingEngine.unregisterScheme('sabr')
     initDataCache.clear()
 
     // Release anything still parked, so requests cannot outlive the player
@@ -1504,6 +1542,7 @@ export function setupSabrScheme(sabrData, getPlayer, getManifest, playerWidth, p
   }
 
   return {
+    handleRequest,
     onBackoffRequested(callback) {
       eventEmitter.on('backoff-requested', callback)
     },
