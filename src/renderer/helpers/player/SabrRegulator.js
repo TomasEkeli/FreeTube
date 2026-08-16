@@ -1,7 +1,7 @@
 import shaka from 'shaka-player'
 
 import { createSabrSession } from './SabrSchemePlugin'
-import { noteCredentialsInstalled, noteSessionStarted, resetWallInjection } from './sabrWallInjection'
+import { injectedRefreshCeiling, noteCredentialsInstalled, noteSessionStarted, resetWallInjection, sabrWallInjectionEnabled } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 
@@ -443,9 +443,13 @@ export function createSabrRegulator() {
       // playback, so there is no reason to stop while it does. Once the buffer
       // is nearly gone the video is about to stall whatever we do, which is
       // the moment a more disruptive remedy stops being a downgrade.
+      // Only ever lowered when FT_SABR_WALL asks for it, so that walking the
+      // whole ladder does not take six minutes of sitting still
+      const ceiling = (sabrWallInjectionEnabled && injectedRefreshCeiling()) || ATTESTATION_REFRESH_CEILING
+
       const outOfPatience = ladder.refreshes >= ATTESTATION_REFRESH_FLOOR &&
         ((runwayIsMeaningful && playbackLeft < ATTESTATION_LOW_BUFFER_SECONDS) ||
-          ladder.refreshes >= ATTESTATION_REFRESH_CEILING)
+          ladder.refreshes >= ceiling)
 
       if (!outOfPatience) {
         return { action: 'refresh', log: null }
