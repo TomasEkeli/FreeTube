@@ -251,6 +251,9 @@ export default defineComponent({
     defaultVideoFormat: function () {
       return this.$store.getters.getDefaultVideoFormat
     },
+    enableRegulatedStreaming: function () {
+      return this.$store.getters.getEnableRegulatedStreaming
+    },
     autoplayEnabled: function () {
       return this.watchingPlaylist ? this.autoplayNextPlaylistVideo : this.autoplayNextRecommendedVideo
     },
@@ -378,7 +381,17 @@ export default defineComponent({
       // because its own ladder reloads the player, and a budget destroyed by
       // the remedy it bounds bounds nothing. `markRaw` because it holds a live
       // session and event handlers, none of which want a reactive proxy.
-      this.sabrRegulator = markRaw(createSabrRegulator())
+      //
+      // The policy is passed as a reader rather than a value because this
+      // hook runs once per view instance, not once per video: the router
+      // reuses the watch view across a param change, which is the same
+      // property that lets the regulator outlive every rung. Passing the
+      // value here fixed the policy for as long as the viewer stayed on watch
+      // pages, so the setting's promise that it takes effect on the next
+      // video was false. The regulator re-reads it when the video changes.
+      this.sabrRegulator = markRaw(createSabrRegulator({
+        isRegulated: () => this.enableRegulatedStreaming,
+      }))
     }
 
     this.videoId = this.$route.params.id

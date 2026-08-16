@@ -15,6 +15,15 @@
         :tooltip="$t('Tooltips.Experimental Settings.Replace HTTP Cache')"
         @change="handleRestartPrompt"
       />
+      <FtToggleSwitch
+        v-if="supportsLocalApi"
+        tooltip-position="top"
+        :label="$t('Settings.Experimental Settings.Regulated Streaming')"
+        compact
+        :default-value="regulatedStreaming"
+        :tooltip="$t('Tooltips.Experimental Settings.Regulated Streaming')"
+        @change="handleRegulatedStreaming"
+      />
     </FtFlexBox>
     <FtPrompt
       v-if="showRestartPrompt"
@@ -27,16 +36,34 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import FtSettingsSection from '../FtSettingsSection/FtSettingsSection.vue'
 import FtFlexBox from '../ft-flex-box/ft-flex-box.vue'
 import FtToggleSwitch from '../FtToggleSwitch/FtToggleSwitch.vue'
 import FtPrompt from '../FtPrompt/FtPrompt.vue'
 
+import store from '../../store/index'
+
 const replaceHttpCacheLoading = ref(true)
 const replaceHttpCache = ref(false)
 const showRestartPrompt = ref(false)
+
+/**
+ * SABR is the local API's transport, so there is nothing here to regulate on a
+ * build that cannot use it.
+ */
+const supportsLocalApi = process.env.SUPPORTS_LOCAL_API
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const regulatedStreaming = computed(() => store.getters.getEnableRegulatedStreaming)
+
+/**
+ * @param {boolean} value
+ */
+function handleRegulatedStreaming(value) {
+  store.dispatch('updateEnableRegulatedStreaming', value)
+}
 
 onMounted(async () => {
   if (process.env.IS_ELECTRON) {

@@ -183,6 +183,7 @@ const state = {
   disableSmoothScrolling: false,
   disableChannelLinks: false,
   displayVideoPlayButton: false,
+  enableRegulatedStreaming: false,
   enableSearchSuggestions: true,
   enableSubtitlesByDefault: false,
   enterFullscreenOnDisplayRotate: false,

@@ -707,6 +707,7 @@ Settings:
     Experimental Settings: Experimental
     Warning: These settings are experimental, they may cause crashes while enabled. Making backups is highly recommended. Use at your own risk!
     Replace HTTP Cache: Replace HTTP Cache
+    Regulated Streaming: Regulated Streaming
   Password Dialog:
     Password: Password
     Enter Password To Unlock: Enter password to unlock settings
@@ -1142,6 +1143,11 @@ Tooltips:
       feed stays usable throughout and fills in as they arrive.'
   Experimental Settings:
     Replace HTTP Cache: Disables Electron's disk based HTTP cache and enables a custom in-memory image cache. Will lead to increased RAM usage.
+    Regulated Streaming: 'When YouTube stops trusting a playback session, FreeTube
+      recovers it in the background rather than interrupting you. This enables the
+      more eager version of that, which may keep a spare session ready so a recovery
+      costs you nothing at all. Currently identical to the standard behaviour;
+      the difference arrives with the session pool. Takes effect on the next video.'
   SponsorBlock Settings:
     UseDeArrowTitles: Replace video titles with user-submitted titles from DeArrow.
     UseDeArrowThumbnails: Replace video thumbnails with thumbnails from DeArrow.
