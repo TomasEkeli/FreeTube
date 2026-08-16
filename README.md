@@ -6,7 +6,7 @@ If you want FreeTube, you almost certainly want the official project: [FreeTubeA
 
 If you want the fixes here, you are welcome to them. FreeTube is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE), which this fork keeps, and which gives anyone the right to use, study, change and share it. Builds for Windows, macOS and Linux are produced on every push to `main`: pick the newest [build workflow run](https://github.com/TomasEkeli/FreeTube/actions/workflows/build.yml) and download the artifact for your platform (downloading artifacts needs a GitHub account).
 
-The `development` branch mirrors upstream; `main` is upstream plus my fixes. Issues here are fine for the fork's own changes, but anything about FreeTube itself belongs with [the official project](https://github.com/FreeTubeApp/FreeTube/issues). The same goes for contributing: if you want to contribute to FreeTube, the official project and [its contributing guidelines](https://github.com/FreeTubeApp/FreeTube/blob/development/CONTRIBUTING.md) are where to do that, and the contribution section below refers to them, not to this fork.
+`main` is upstream plus my fixes, and it is the only long lived branch here; upstream is merged into it as it moves. Issues here are fine for the fork's own changes, but anything about FreeTube itself belongs with [the official project](https://github.com/FreeTubeApp/FreeTube/issues). The same goes for contributing: if you want to contribute to FreeTube, the official project and [its contributing guidelines](https://github.com/FreeTubeApp/FreeTube/blob/development/CONTRIBUTING.md) are where to do that, and the contribution section below refers to them, not to this fork.
 
 ---
 
