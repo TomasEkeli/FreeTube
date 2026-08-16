@@ -32,7 +32,8 @@ import {
 } from '../../helpers/utils'
 import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
-import { isAttestationRecovering, setupSabrScheme } from '../../helpers/player/SabrSchemePlugin'
+import { createSabrRegulator } from '../../helpers/player/SabrRegulator'
+import { isAttestationRecovering } from '../../helpers/player/SabrSchemePlugin'
 
 /** @typedef {import('../../helpers/sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
 
@@ -1434,7 +1435,14 @@ export default defineComponent({
     /** @type {shaka.extern.Manifest | undefined} */
     let sabrManifest
 
-    /** @type {import('../../helpers/player/SabrSchemePlugin').SabrStream | undefined} */
+    /**
+     * Owns the `sabr://` scheme slot for as long as this player does, and
+     * holds the session behind it. Only exists when this is a SABR playback.
+     * @type {import('../../helpers/player/SabrRegulator').SabrRegulator | undefined}
+     */
+    let sabrRegulator
+
+    /** @type {import('../../helpers/player/SabrSchemePlugin').SabrSession | undefined} */
     let sabrStream
     /** @type {AbortController | undefined} */
     let sabrAbortController
@@ -1457,7 +1465,14 @@ export default defineComponent({
      * @param {import('../../views/Watch/Watch').SabrData} sabrData
      */
     function initSabrScheme(sabrData) {
-      sabrStream = /** @__NOINLINE__ */ setupSabrScheme(sabrData, () => player, () => sabrManifest, playerWidth, playerHeight)
+      sabrRegulator ??= /** @__NOINLINE__ */ createSabrRegulator({
+        getPlayer: () => player,
+        getManifest: () => sabrManifest,
+        playerWidth,
+        playerHeight,
+      })
+
+      sabrStream = sabrRegulator.startSession(sabrData)
       sabrAbortController = new AbortController()
 
       isRecoveringFromWall.value = isAttestationRecovering()
@@ -1619,7 +1634,7 @@ export default defineComponent({
         const activeCaptionIndex = player.getTextTracks().findIndex(caption => caption.active)
         restoreCaptionIndex = activeCaptionIndex >= 0 ? activeCaptionIndex : null
 
-        // Unload before cleaning up the session: it cancels the requests still
+        // Unload before replacing the session: it cancels the requests still
         // in flight, so the plugin's parked ones bow out as cancelled instead
         // of reading the teardown as a failed refresh and asking for a page
         // reload on top of this one
@@ -1627,8 +1642,9 @@ export default defineComponent({
           await player.unload()
         } catch { }
 
-        sabrStream.cleanup()
         sabrAbortController.abort()
+        // Finishes the old session and starts the new one in one step, without
+        // the scheme slot ever being vacant
         initSabrScheme(result.sabrData)
 
         ignoreErrors = false
@@ -1714,6 +1730,25 @@ export default defineComponent({
       if (chosenVariant) {
         player.selectVariantTrack(chosenVariant)
       }
+    }
+
+    /**
+     * Gives the `sabr://` scheme slot back and finishes the session behind it.
+     * The slot is process-global, so anything we still hold outlives this
+     * player and answers for the next one.
+     *
+     * Called from both teardown paths, and safe to call twice: the watch view
+     * hides the player on an error, which unmounts us without going through
+     * `destroyPlayer`.
+     */
+    function releaseSabrRegulator() {
+      if (!process.env.SUPPORTS_LOCAL_API || !sabrRegulator) { return }
+
+      sabrRegulator.release()
+      sabrAbortController?.abort()
+
+      sabrRegulator = undefined
+      sabrStream = undefined
     }
 
     // #endregion SABR
@@ -3677,11 +3712,7 @@ export default defineComponent({
       // us without going through destroyPlayer. Left alone, the SABR scheme
       // stays registered globally and anything parked on a refresh waits
       // forever, both of which outlive the player that owned them.
-      if (process.env.SUPPORTS_LOCAL_API && sabrStream) {
-        sabrStream.cleanup()
-        sabrAbortController?.abort()
-        sabrStream = undefined
-      }
+      releaseSabrRegulator()
     })
 
     // #endregion tear down
@@ -3739,11 +3770,7 @@ export default defineComponent({
         player = null
       }
 
-      if (process.env.SUPPORTS_LOCAL_API && sabrStream) {
-        sabrStream.cleanup()
-        sabrAbortController?.abort()
-        sabrStream = undefined
-      }
+      releaseSabrRegulator()
 
       // shaka-player doesn't clear these itself, which prevents shaka.ui.Overlay from being garbage collected
       // Should really be fixed in shaka-player but it's easier just to do it ourselves
