@@ -316,7 +316,8 @@ export default defineComponent({
 
     watch(displayVideoPlayButton, (newValue) => {
       ui.configure({
-        bigButtons: newValue ? ['play_pause'] : []
+        bigButtons: newValue ? ['play_pause_buffering'] : [],
+        showBufferingSpinner: !newValue
       })
     })
 
@@ -368,6 +369,12 @@ export default defineComponent({
       return parseInt(store.getters.getMaxVideoPlaybackRate)
     })
 
+    watch(maxVideoPlaybackRate, (newValue) => {
+      ui.configure({
+        playbackRateSliderMax: newValue
+      })
+    })
+
     const videoPlaybackRateInterval = computed(() => {
       return parseFloat(store.getters.getVideoPlaybackRateInterval)
     })
@@ -396,15 +403,31 @@ export default defineComponent({
       return loudnessDbToGain(props.loudnessDb)
     })
 
+    /**
+     * The presets offered beside shaka's playback rate slider.
+     *
+     * Half steps, and deliberately not the viewer's playback rate interval.
+     * shaka 5.2 turned this menu from a plain list into a slider with presets
+     * beside it, which is a different thing than the list was: a preset is a
+     * place worth jumping to, so a handful of round numbers serve, while the
+     * interval is how far one keypress moves. Driving the presets from the
+     * interval conflates the two, and it does not degrade gracefully -- an
+     * interval of 0.1 with a maximum of 10 asks for a hundred of them.
+     *
+     * The interval keeps its own job, stepping the rate for the increase and
+     * decrease shortcuts, where it means what it says.
+     *
+     * The maximum is honoured, so raising it offers more presets rather than
+     * silently capping them. 1 is always among them, since half steps from a
+     * half include it, and returning to normal speed has to stay one click
+     * away.
+     */
     const playbackRates = computed(() => {
-      const interval = videoPlaybackRateInterval.value
+      const PRESET_STEP = 0.5
       const playbackRates = []
-      let i = interval
 
-      while (i <= maxVideoPlaybackRate.value) {
-        playbackRates.unshift(i)
-        i += interval
-        i = parseFloat(i.toFixed(2))
+      for (let rate = PRESET_STEP; rate <= maxVideoPlaybackRate.value; rate += PRESET_STEP) {
+        playbackRates.push(rate)
       }
 
       return playbackRates
@@ -710,7 +733,7 @@ export default defineComponent({
         // Electron doesn't like YouTube's vp9 VR video streams and throws:
         // "CHUNK_DEMUXER_ERROR_APPEND_FAILED: Projection element is incomplete; ProjectionPoseYaw required."
         // So use the AV1 and h264 codecs instead which it doesn't reject
-        preferredVideoCodecs: typeof props.vrProjection === 'string' ? ['av01', 'avc1'] : []
+        preferredVideo: typeof props.vrProjection === 'string' ? [{ codec: 'av01' }, { codec: 'avc1' }] : []
       }
     }
 
@@ -870,6 +893,11 @@ export default defineComponent({
         'ft_skip_previous',
         'play_pause',
         'ft_skip_next',
+        // shaka 5.2 merged its own mute and volume controls into one
+        // `mute_volume` element. Not taken: the volume control here is
+        // `ft_volume`, a replacement for shaka's whose travel goes past 100%
+        // for the gain stage, so the merged element has nothing to merge. Both
+        // `mute` and `volume` still exist in 5.2 for anyone wanting them apart.
         'mute',
         'ft_volume',
         'time_and_duration',
@@ -1016,8 +1044,12 @@ export default defineComponent({
           },
 
           // these have their own watchers
-          bigButtons: displayVideoPlayButton.value ? ['play_pause'] : [],
+          bigButtons: displayVideoPlayButton.value ? ['play_pause_buffering'] : [],
+          showBufferingSpinner: !displayVideoPlayButton.value,
           enableFullscreenOnRotation: enterFullscreenOnDisplayRotate.value,
+          playbackRateSliderMax: maxVideoPlaybackRate.value,
+          // the slider's lower bound is left at shaka's own default of 0.5,
+          // which is where the presets start too
           playbackRates: playbackRates.value,
           tapSeekDistance: defaultSkipInterval.value,
 
