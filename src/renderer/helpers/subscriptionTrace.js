@@ -22,8 +22,8 @@
  * This traces the per-channel funnel, not individual HTTP requests, so
  * `requests` counts channels rather than round trips: a channel whose retry
  * ladder falls back RSS -> scraper -> Invidious makes several requests and is
- * counted once. Per-request statuses arrive in the commit that introduces
- * failure classification, which edits those code paths anyway.
+ * counted once. `traceFetchStatus` covers the round trips themselves, at the
+ * verbose level, because there is one per channel per rung.
  */
 
 /** @type {false | 'summary' | 'verbose'} */
@@ -146,6 +146,58 @@ export function traceChannelFetch(feed, channelId) {
       )
     }
   }
+}
+
+/**
+ * Report one HTTP response from a feed fetch.
+ *
+ * Verbose only: there is one of these per channel per rung of the ladder, so a
+ * full refresh of several hundred subscriptions produces thousands.
+ *
+ * The reason this exists at all: on 2026-08-22 every YouTube RSS request in a
+ * refresh answered 404, and the only thing visible from outside was that the
+ * feed had decided six hundred channels were terminated. The status histogram
+ * that would have said "every request 404ed, so this is the endpoint and not
+ * the channels" had to be added before the diagnosis could be made, which is
+ * the sort of work worth doing once.
+ *
+ * @param {string} feed
+ * @param {string} channelId
+ * @param {object} detail
+ * @param {string} detail.rung which fetch path made the request
+ * @param {number} detail.status HTTP status
+ * @param {number} [detail.attempt] how far down the retry ladder this is
+ * @param {string} [detail.note] anything else worth recording about the response
+ */
+export function traceFetchStatus(feed, channelId, { rung, status, attempt, note }) {
+  if (TRACE_LEVEL !== 'verbose') { return }
+
+  console.log(
+    `[subs-trace] http ${feed} ${channelId} ${rung} status=${status} attempt=${attempt ?? 0}${note ? ` ${note}` : ''}`
+  )
+}
+
+/**
+ * Report how a claim that a channel is gone was resolved.
+ *
+ * Summary level rather than verbose, because in ordinary operation these are
+ * rare: a handful of genuinely dead channels, once. A flood of them is itself
+ * the finding, and is what the mass-failure guard in `subscriptionFetchStatus`
+ * exists to refuse to act on.
+ *
+ * @param {string} feed
+ * @param {string} channelId
+ * @param {object} detail
+ * @param {string} detail.source what claimed the channel was gone
+ * @param {string} detail.verdict what was concluded
+ * @param {number} detail.suspected how many channels this run has suspected
+ */
+export function traceGoneVerdict(feed, channelId, { source, verdict, suspected }) {
+  if (!subscriptionTraceEnabled) { return }
+
+  console.log(
+    `[subs-trace] gone ${feed} ${channelId} source=${source} verdict=${verdict} suspectedThisRun=${suspected}`
+  )
 }
 
 /**

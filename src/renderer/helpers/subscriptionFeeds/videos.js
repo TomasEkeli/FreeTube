@@ -4,13 +4,14 @@ import { getInvidiousChannelVideos, invidiousFetch } from '../api/invidious'
 import { getLocalChannelVideos } from '../api/local'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../subscriptions'
 import { getChannelPlaylistId } from '../utils'
+import { probeChannelLiveness } from '../subscriptionChannelLiveness'
+import { traceFetchStatus } from '../subscriptionTrace'
 import {
-  reportChannelUnavailable,
   reportFetchError,
+  resolveGoneVerdict,
   FETCH_FAILED,
   FETCH_OK,
-  FETCH_RATE_LIMITED,
-  FETCH_UNAVAILABLE
+  FETCH_RATE_LIMITED
 } from '../subscriptionFetchStatus'
 
 /**
@@ -59,12 +60,14 @@ async function getChannelVideosLocalScraper(channel, failedAttempts = 0) {
     const result = await getLocalChannelVideos(channel.id)
 
     if (result === null) {
-      // ChannelError, so the channel is gone rather than the request having failed
-      reportChannelUnavailable(FEED, channel)
-      return {
-        status: FETCH_UNAVAILABLE,
-        entries: []
-      }
+      // ChannelError, so the channel is gone rather than the request having
+      // failed. Innertube says so explicitly, which needs no second opinion,
+      // but it still passes through the guard: several hundred of these in one
+      // refresh would be no more believable than several hundred 404s.
+      return await resolveGoneVerdict(FEED, channel, {
+        source: 'local-scraper',
+        authoritative: true
+      })
     }
 
     return {
@@ -106,6 +109,8 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
   try {
     const response = await fetch(feedUrl)
 
+    traceFetchStatus(FEED, channel.id, { rung: 'local-rss', status: response.status, attempt: failedAttempts })
+
     if (response.status === 403 || response.status === 429) {
       return {
         status: FETCH_RATE_LIMITED,
@@ -121,13 +126,19 @@ async function getChannelVideosLocalRSS(channel, failedAttempts = 0) {
         method: 'HEAD'
       })
 
-      if (response2.status === 404) {
-        reportChannelUnavailable(FEED, channel)
+      traceFetchStatus(FEED, channel.id, {
+        rung: 'local-rss-channel-probe',
+        status: response2.status,
+        attempt: failedAttempts
+      })
 
-        return {
-          status: FETCH_UNAVAILABLE,
-          entries: []
-        }
+      if (response2.status === 404) {
+        // Both of those came from the same RSS service, so they are one opinion
+        // and not two. Ask something independent before condemning the channel.
+        return await resolveGoneVerdict(FEED, channel, {
+          source: 'local-rss',
+          corroborate: () => probeChannelLiveness(channel)
+        })
       }
 
       // the channel is alive, it just has no videos tab
@@ -229,6 +240,8 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
   try {
     const response = await invidiousFetch(feedUrl)
 
+    traceFetchStatus(FEED, channel.id, { rung: 'invidious-rss', status: response.status, attempt: failedAttempts })
+
     if (response.status === 403 || response.status === 429) {
       return {
         status: FETCH_RATE_LIMITED,
@@ -244,13 +257,20 @@ async function getChannelVideosInvidiousRSS(channel, failedAttempts = 0) {
         method: 'GET'
       })
 
-      if (response2.status === 404) {
-        reportChannelUnavailable(FEED, channel)
+      traceFetchStatus(FEED, channel.id, {
+        rung: 'invidious-rss-channel-probe',
+        status: response2.status,
+        attempt: failedAttempts
+      })
 
-        return {
-          status: FETCH_UNAVAILABLE,
-          entries: []
-        }
+      if (response2.status === 404) {
+        // Both answers came from the one instance, so they are one opinion. An
+        // instance that is broken, blocked or behind should not be able to
+        // convince us a channel no longer exists.
+        return await resolveGoneVerdict(FEED, channel, {
+          source: 'invidious-rss',
+          corroborate: () => probeChannelLiveness(channel)
+        })
       }
 
       return {

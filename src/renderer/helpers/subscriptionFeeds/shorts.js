@@ -3,13 +3,14 @@ import store from '../../store/index'
 import { invidiousFetch } from '../api/invidious'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../subscriptions'
 import { getChannelPlaylistId } from '../utils'
+import { probeChannelLiveness } from '../subscriptionChannelLiveness'
+import { traceFetchStatus } from '../subscriptionTrace'
 import {
-  reportChannelUnavailable,
   reportFetchError,
+  resolveGoneVerdict,
   FETCH_FAILED,
   FETCH_OK,
-  FETCH_RATE_LIMITED,
-  FETCH_UNAVAILABLE
+  FETCH_RATE_LIMITED
 } from '../subscriptionFetchStatus'
 
 /** How the shorts feed is fetched. See `videos.js` for why this is here. */
@@ -52,6 +53,8 @@ async function getChannelShortsLocal(channel, failedAttempts = 0) {
   try {
     const response = await fetch(feedUrl)
 
+    traceFetchStatus(FEED, channel.id, { rung: 'local-rss', status: response.status, attempt: failedAttempts })
+
     if (response.status === 403 || response.status === 429) {
       return {
         status: FETCH_RATE_LIMITED,
@@ -67,13 +70,20 @@ async function getChannelShortsLocal(channel, failedAttempts = 0) {
         method: 'HEAD'
       })
 
-      if (response2.status === 404) {
-        reportChannelUnavailable(FEED, channel)
+      traceFetchStatus(FEED, channel.id, {
+        rung: 'local-rss-channel-probe',
+        status: response2.status,
+        attempt: failedAttempts
+      })
 
-        return {
-          status: FETCH_UNAVAILABLE,
-          entries: []
-        }
+      if (response2.status === 404) {
+        // This feed has no path off RSS at all, so it is the one that suffers
+        // most when the RSS service misbehaves: on 2026-08-22 it condemned
+        // every channel in the profile. One service asked twice is one opinion.
+        return await resolveGoneVerdict(FEED, channel, {
+          source: 'local-rss',
+          corroborate: () => probeChannelLiveness(channel)
+        })
       }
 
       // the channel is alive, it just has no shorts tab
@@ -126,6 +136,8 @@ async function getChannelShortsInvidious(channel, failedAttempts = 0) {
   try {
     const response = await invidiousFetch(feedUrl)
 
+    traceFetchStatus(FEED, channel.id, { rung: 'invidious-rss', status: response.status, attempt: failedAttempts })
+
     if (response.status === 403 || response.status === 429) {
       return {
         status: FETCH_RATE_LIMITED,
@@ -141,13 +153,18 @@ async function getChannelShortsInvidious(channel, failedAttempts = 0) {
         method: 'GET'
       })
 
-      if (response2.status === 404) {
-        reportChannelUnavailable(FEED, channel)
+      traceFetchStatus(FEED, channel.id, {
+        rung: 'invidious-rss-channel-probe',
+        status: response2.status,
+        attempt: failedAttempts
+      })
 
-        return {
-          status: FETCH_UNAVAILABLE,
-          entries: []
-        }
+      if (response2.status === 404) {
+        // One instance, asked twice, is still one opinion. See `videos.js`.
+        return await resolveGoneVerdict(FEED, channel, {
+          source: 'invidious-rss',
+          corroborate: () => probeChannelLiveness(channel)
+        })
       }
 
       return {

@@ -3,11 +3,10 @@ import store from '../../store/index'
 import { invidiousGetCommunityPosts } from '../api/invidious'
 import { getLocalChannelCommunity } from '../api/local'
 import {
-  reportChannelUnavailable,
   reportFetchError,
+  resolveGoneVerdict,
   FETCH_FAILED,
-  FETCH_OK,
-  FETCH_UNAVAILABLE
+  FETCH_OK
 } from '../subscriptionFetchStatus'
 
 /** How the community posts feed is fetched. See `videos.js` for why this is here. */
@@ -86,13 +85,13 @@ async function getChannelPostsLocal(channel) {
     const entries = await getLocalChannelCommunity(channel.id)
 
     if (entries === null) {
-      // ChannelError, so the channel is gone rather than the request having failed
-      reportChannelUnavailable(FEED, channel)
-
-      return {
-        status: FETCH_UNAVAILABLE,
-        entries: []
-      }
+      // ChannelError, so the channel is gone rather than the request having
+      // failed. Explicit, so it needs no corroboration, but still counted
+      // against the run's anomaly limit. See `videos.js`.
+      return await resolveGoneVerdict(FEED, channel, {
+        source: 'local-scraper',
+        authoritative: true
+      })
     }
 
     return {

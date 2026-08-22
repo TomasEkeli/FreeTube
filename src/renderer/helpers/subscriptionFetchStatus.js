@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 
 import i18n from '../i18n/index'
 
+import { traceGoneVerdict } from './subscriptionTrace'
 import { copyToClipboard, showToast } from './utils'
 
 /**
@@ -85,6 +86,8 @@ export function clearUnavailableChannels(feed) {
  * @property {number} total
  * @property {{ channelId: string, channelName: string, api: string, error: unknown }[]} errors
  * @property {number} rateLimited
+ * @property {number} suspectedGone how many channels this run has been told are gone
+ * @property {boolean} goneBreakerTripped whether that count stopped being believed
  */
 
 /** @type {Map<string, FetchErrorCollector>} */
@@ -108,7 +111,138 @@ const MAX_REPORTED_ITEMS = 40
  * @param {number} total how many channels this refresh will attempt
  */
 export function beginFetchErrorCollection(feed, total) {
-  collectors.set(feed, { total, errors: [], rateLimited: 0 })
+  collectors.set(feed, {
+    total,
+    errors: [],
+    rateLimited: 0,
+    suspectedGone: 0,
+    goneBreakerTripped: false
+  })
+}
+
+/**
+ * The share of a profile's channels that can be declared gone in one refresh
+ * before the verdict stops being believed, and the floor below which the share
+ * is not applied at all.
+ *
+ * Channels do get terminated, and a handful in one refresh is ordinary. What is
+ * not ordinary is a fifth of a subscription list going at once: that is a
+ * broken endpoint, a blocked address or a bad deploy, and acting on it means
+ * caching emptiness over content that is still there. The floor keeps a small
+ * profile from tripping the guard over two or three genuinely dead channels.
+ */
+const GONE_ANOMALY_FRACTION = 0.2
+const GONE_ANOMALY_FLOOR = 15
+
+/**
+ * @param {FetchErrorCollector} collector
+ */
+function goneAnomalyLimit(collector) {
+  return Math.max(GONE_ANOMALY_FLOOR, Math.ceil(collector.total * GONE_ANOMALY_FRACTION))
+}
+
+/**
+ * Decide what a claim that a channel is gone actually means.
+ *
+ * Two separate problems are solved here, both found when YouTube's RSS service
+ * began answering 404 for every valid id on 2026-08-22.
+ *
+ * The first is that the claim used to be believed outright. A 404 on the RSS
+ * playlist feed was checked against the RSS channel feed, which is the same
+ * service, so the check agreed with it whenever the service was the thing at
+ * fault. `corroborate` asks something independent instead, and an unconfirmed
+ * claim now means `FETCH_FAILED`: retryable, and the cache left alone. Refusing
+ * to condemn a channel costs a retry later, while condemning it wrongly caches
+ * emptiness over a feed that was fine and marks it not worth retrying, so the
+ * two errors are not equally bad and this leans the safe way deliberately.
+ *
+ * The second is that no amount of individually reasonable verdicts should add up
+ * to "your entire subscription list was terminated". Past the anomaly limit the
+ * guard stops believing any of them, and stops probing: during an outage the
+ * corroboration would otherwise be several hundred extra requests fired at a
+ * host that is already refusing everything.
+ *
+ * @param {string} feed
+ * @param {{ id: string, name?: string }} channel
+ * @param {object} options
+ * @param {string} options.source what claimed the channel is gone, for the trace
+ * @param {boolean} [options.authoritative] set when the claim came from an
+ *   endpoint that reports termination explicitly rather than by absence, which
+ *   needs no second opinion. Still counted against the anomaly limit, because a
+ *   flood of explicit terminations is no more believable than a flood of 404s.
+ * @param {() => Promise<'gone' | 'alive' | 'unknown'>} [options.corroborate]
+ * @returns {Promise<{ status: string, entries: any[] | null }>}
+ */
+export async function resolveGoneVerdict(feed, channel, { source, authoritative = false, corroborate }) {
+  const collector = collectors.get(feed)
+
+  // No refresh open, so this is a one-off fetch with no run to be anomalous
+  // within. Keep the old behaviour for it.
+  if (collector == null) {
+    if (authoritative) {
+      reportChannelUnavailable(feed, channel)
+      return { status: FETCH_UNAVAILABLE, entries: [] }
+    }
+
+    const verdict = corroborate == null ? 'unknown' : await corroborate()
+
+    if (verdict === 'gone') {
+      reportChannelUnavailable(feed, channel)
+      return { status: FETCH_UNAVAILABLE, entries: [] }
+    }
+
+    return { status: FETCH_FAILED, entries: null }
+  }
+
+  collector.suspectedGone++
+
+  if (collector.goneBreakerTripped) {
+    return { status: FETCH_FAILED, entries: null }
+  }
+
+  if (collector.suspectedGone > goneAnomalyLimit(collector)) {
+    collector.goneBreakerTripped = true
+
+    console.warn(
+      `[subscriptions] ${collector.suspectedGone} of ${collector.total} ${feed} channels reported gone in one refresh, ` +
+      'which is not credible. Treating these as failures to retry rather than terminations, and leaving the cache alone. ' +
+      'Something the feed depends on is broken rather than the channels.'
+    )
+
+    traceGoneVerdict(feed, channel.id, {
+      source,
+      verdict: 'breaker-tripped',
+      suspected: collector.suspectedGone
+    })
+
+    return { status: FETCH_FAILED, entries: null }
+  }
+
+  if (authoritative) {
+    traceGoneVerdict(feed, channel.id, { source, verdict: 'gone', suspected: collector.suspectedGone })
+    reportChannelUnavailable(feed, channel)
+
+    return { status: FETCH_UNAVAILABLE, entries: [] }
+  }
+
+  const verdict = corroborate == null ? 'unknown' : await corroborate()
+
+  traceGoneVerdict(feed, channel.id, {
+    source,
+    verdict: verdict === 'gone' ? 'gone' : `unconfirmed:${verdict}`,
+    suspected: collector.suspectedGone
+  })
+
+  if (verdict === 'gone') {
+    reportChannelUnavailable(feed, channel)
+
+    return { status: FETCH_UNAVAILABLE, entries: [] }
+  }
+
+  // 'alive' means the source lied and this is retryable. 'unknown' means the
+  // probe failed and nothing was established, which is not grounds to condemn
+  // a channel either. Both leave the cache untouched.
+  return { status: FETCH_FAILED, entries: null }
 }
 
 /**

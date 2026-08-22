@@ -4,13 +4,14 @@ import { getInvidiousChannelLive, invidiousFetch } from '../api/invidious'
 import { getLocalChannelLiveStreams } from '../api/local'
 import { parseYouTubeRSSFeed, updateVideoListAfterProcessing } from '../subscriptions'
 import { getChannelPlaylistId } from '../utils'
+import { probeChannelLiveness } from '../subscriptionChannelLiveness'
+import { traceFetchStatus } from '../subscriptionTrace'
 import {
-  reportChannelUnavailable,
   reportFetchError,
+  resolveGoneVerdict,
   FETCH_FAILED,
   FETCH_OK,
-  FETCH_RATE_LIMITED,
-  FETCH_UNAVAILABLE
+  FETCH_RATE_LIMITED
 } from '../subscriptionFetchStatus'
 
 /** How the live streams feed is fetched. See `videos.js` for why this is here. */
@@ -52,12 +53,13 @@ async function getChannelLiveLocal(channel, failedAttempts = 0) {
     const result = await getLocalChannelLiveStreams(channel.id)
 
     if (result === null) {
-      // ChannelError, so the channel is gone rather than the request having failed
-      reportChannelUnavailable(FEED, channel)
-      return {
-        status: FETCH_UNAVAILABLE,
-        entries: []
-      }
+      // ChannelError, so the channel is gone rather than the request having
+      // failed. Explicit, so it needs no corroboration, but still counted
+      // against the run's anomaly limit. See `videos.js`.
+      return await resolveGoneVerdict(FEED, channel, {
+        source: 'local-scraper',
+        authoritative: true
+      })
     }
 
     return {
@@ -99,6 +101,8 @@ async function getChannelLiveLocalRSS(channel, failedAttempts = 0) {
   try {
     const response = await fetch(feedUrl)
 
+    traceFetchStatus(FEED, channel.id, { rung: 'local-rss', status: response.status, attempt: failedAttempts })
+
     if (response.status === 403 || response.status === 429) {
       return {
         status: FETCH_RATE_LIMITED,
@@ -114,13 +118,18 @@ async function getChannelLiveLocalRSS(channel, failedAttempts = 0) {
         method: 'HEAD'
       })
 
-      if (response2.status === 404) {
-        reportChannelUnavailable(FEED, channel)
+      traceFetchStatus(FEED, channel.id, {
+        rung: 'local-rss-channel-probe',
+        status: response2.status,
+        attempt: failedAttempts
+      })
 
-        return {
-          status: FETCH_UNAVAILABLE,
-          entries: []
-        }
+      if (response2.status === 404) {
+        // One service, asked twice, is still one opinion. See `videos.js`.
+        return await resolveGoneVerdict(FEED, channel, {
+          source: 'local-rss',
+          corroborate: () => probeChannelLiveness(channel)
+        })
       }
 
       // the channel is alive, it just has no live tab
@@ -222,6 +231,8 @@ async function getChannelLiveInvidiousRSS(channel, failedAttempts = 0) {
   try {
     const response = await invidiousFetch(feedUrl)
 
+    traceFetchStatus(FEED, channel.id, { rung: 'invidious-rss', status: response.status, attempt: failedAttempts })
+
     if (response.status === 403 || response.status === 429) {
       return {
         status: FETCH_RATE_LIMITED,
@@ -237,13 +248,18 @@ async function getChannelLiveInvidiousRSS(channel, failedAttempts = 0) {
         method: 'GET'
       })
 
-      if (response2.status === 404) {
-        reportChannelUnavailable(FEED, channel)
+      traceFetchStatus(FEED, channel.id, {
+        rung: 'invidious-rss-channel-probe',
+        status: response2.status,
+        attempt: failedAttempts
+      })
 
-        return {
-          status: FETCH_UNAVAILABLE,
-          entries: []
-        }
+      if (response2.status === 404) {
+        // One instance, asked twice, is still one opinion. See `videos.js`.
+        return await resolveGoneVerdict(FEED, channel, {
+          source: 'invidious-rss',
+          corroborate: () => probeChannelLiveness(channel)
+        })
       }
 
       return {
