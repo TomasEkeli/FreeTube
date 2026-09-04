@@ -39,19 +39,61 @@ if (errors.length > 0) {
  */
 function addErrors(originalData, newData, originalKeys, newKeys, file) {
   newKeys.forEach(newKey => {
-    if (originalKeys.includes(newKey)) {
-      if (typeof originalData[newKey] === 'object') {
-        addErrors(originalData[newKey], newData[newKey], Object.keys(originalData[newKey]), Object.keys(newData[newKey]), file)
-      } else if (isMissingInterpolation(originalData[newKey], newData[newKey], file)) {
-        errors.push({ fileName: file, error: 'value is missing a template or has an extra template', key: newKey, defaultValue: originalData[newKey], value: newData[newKey] })
-      }
-    } else {
+    if (!originalKeys.includes(newKey)) {
       // The key doesn't exist in the en-US file but exists in current yaml file.
       // We should go through this eventually but it's not as important as invalid templates
 
       // errors.push({ fileName: file, error: 'extra key found', key: fdk })
+      return
+    }
+
+    const originalValue = originalData[newKey]
+    const newValue = newData[newKey]
+
+    // A key written with nothing after the colon parses as null, and null is
+    // an object as far as `typeof` is concerned. Descending into one used to
+    // end the whole run on `Object.keys(null)`, so a single malformed entry in
+    // one locale hid every real problem in all the others. It is now reported
+    // as the fault it is, and the walk carries on.
+    if (isSection(originalValue) !== isSection(newValue)) {
+      errors.push({
+        fileName: file,
+        error: isSection(originalValue)
+          ? 'expected a group of translations, found a single value or nothing'
+          : 'expected a single translation, found a group',
+        key: newKey,
+        value: newValue
+      })
+      return
+    }
+
+    if (isSection(originalValue)) {
+      addErrors(originalValue, newValue, Object.keys(originalValue), Object.keys(newValue), file)
+      return
+    }
+
+    if (typeof newValue !== 'string') {
+      errors.push({ fileName: file, error: 'value is empty or is not text', key: newKey, defaultValue: originalValue, value: newValue })
+      return
+    }
+
+    if (isMissingInterpolation(originalValue, newValue, file)) {
+      errors.push({ fileName: file, error: 'value is missing a template or has an extra template', key: newKey, defaultValue: originalValue, value: newValue })
     }
   })
+}
+
+/**
+ * Whether this is a group of translations rather than one translation.
+ *
+ * `typeof null` is `'object'`, so the null a valueless key parses into has to
+ * be excluded by hand.
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isSection(value) {
+  return value !== null && typeof value === 'object'
 }
 
 /**

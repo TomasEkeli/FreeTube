@@ -68,6 +68,7 @@
 import { computed, ref } from 'vue'
 
 import { handleDragAndDrop } from '../../helpers/dragAndDrop'
+import { isUpcomingPremiere } from '../../helpers/subscriptions'
 
 import FtListVideo from '../FtListVideo/FtListVideo.vue'
 import FtListChannel from '../FtListChannel/FtListChannel.vue'
@@ -242,17 +243,7 @@ const showResult = computed(() => {
       return false
     }
 
-    if (hideUpcomingPremieres.value &&
-        // Observed for premieres in Local API Channels.
-        (props.data.premiereDate != null ||
-          // Invidious API
-          // `premiereTimestamp` only available on premiered videos
-          // https://docs.invidious.io/api/common_types/#videoobject
-          props.data.premiereTimestamp != null ||
-          // viewCount is our only method of detecting premieres in RSS
-          // data without sending an additional request.
-          // If we ever get a better flag, use it here instead.
-          (props.data.isRSS && props.data.viewCount === '0'))) {
+    if (hideUpcomingPremieres.value && isUpcomingPremiere(props.data)) {
       // hide upcoming
       return false
     }
