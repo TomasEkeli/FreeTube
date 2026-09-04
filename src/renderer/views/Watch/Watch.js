@@ -1799,11 +1799,19 @@ export default defineComponent({
      *   transport rather than the format, which narrows what is worth trying
      */
     handleActiveFormatUnavailable: function (failedTransport = false) {
-      // Live streams have no legacy formats, so they only switch between DASH
-      // and audio. Everything else loops DASH -> legacy -> audio -> DASH.
+      // What to try instead, best first. Live streams have no legacy formats,
+      // so they only move between DASH and audio.
+      //
+      // Upstream cycles DASH -> legacy -> audio -> DASH, which is a rotation
+      // and says nothing about which alternative is better. Read as an order of
+      // preference it gives the wrong answer for a video with no progressive
+      // formats: someone whose default is legacy asked for video, and audio
+      // throws the picture away when DASH is right there carrying the same
+      // stream. Video formats come first here, and audio is the last resort it
+      // ought to be.
       const alternatives = this.isLive || this.isPostLiveDvr
         ? { dash: ['audio'], legacy: ['dash'], audio: ['dash'] }
-        : { dash: ['legacy', 'audio'], legacy: ['audio', 'dash'], audio: ['dash', 'legacy'] }
+        : { dash: ['legacy', 'audio'], legacy: ['dash', 'audio'], audio: ['dash', 'legacy'] }
 
       if (!this.attemptedFormats.includes(this.activeFormat)) {
         this.attemptedFormats.push(this.activeFormat)
