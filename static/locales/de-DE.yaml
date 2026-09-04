@@ -38,6 +38,7 @@ Global:
     Watching Count: 1 Zuschauer | {count} Zuschauende
     Comment Count: 1 Kommentar | {count} Kommentare
     Like Count: 1 Gefällt mir | {count} Gefällt mir
+    Replies Remaining: "{' '}(1 verbleibend) | {' '}({count} verbleibend)"
 Search / Go to URL: Suchen / URL öffnen
   # In Filter Button
 Search Filters:
@@ -832,6 +833,8 @@ Video:
     'Remaining SABR backoff time: {remindingTimeSeconds}s': 'Verbleibende SABR-Wartezeit: {remindingTimeSeconds}s'
     'Remaining preroll-ad time: {remindingTimeSeconds}s': 'Verbleibende Werbezeit: {remindingTimeSeconds}s'
   Private: Private Videos können in FreeTube nicht angesehen werden, da sie Google-Anmeldung und den Besitz des Videos erfordern.
+  Collapse Playlist: Wiedergabeliste ausblenden
+  Expand Playlist: Wiedergabeliste einblenden
 Playlist:
   #& About
   View Full Playlist: Vollständige Playlist ansehen
@@ -882,7 +885,7 @@ Mini Player: Mini-Video-Player
 Comments:
   Comments: Kommentare
   Click to View Comments: Kommentare anzeigen
-  Hide Comments: Kommentare ausblenden
+  Hide Comments: Kommentar ausblenden | Kommentare ausblenden
   # Context: View 10 Replies, View 1 Reply
   There are no comments available for this video: Keine Kommentare zu diesem Video vorhanden
   Load More Comments: Weitere Kommentare laden
@@ -896,7 +899,7 @@ Comments:
   Hearted: Gefällt mir
   Subscribed: Abonniert
   There are no comments available for this post: Keine Kommentare für diesen Beitrag vorhanden
-  Hide {replyCount} replies: 1 Antwort ausblenden | {replyCount} Antworten ausblenden
+  Hide Replies: Antworten ausblenden
   View 1 reply from {channelName}: 1 Antwort von {channelName} ansehen
   View {replyCount} replies from {channelName} and others: '{replyCount} Antworten von {channelName} und anderen ansehen'
   Loading replies: Antworten laden...
@@ -967,7 +970,7 @@ Version {versionNumber} is now available!  Click for more details: Version {vers
 Tooltips:
   General Settings:
     Thumbnail Preference: Alle Vorschaubilder in FreeTube werden verpixelt, versteckt oder durch ein Einzelbild aus dem Video ersetzt, anstatt das Standard-Vorschaubild anzuzeigen.
-    Invidious Instance: Die Invidious-Instanz, mit der sich FreeTube für API-Aufrufe verbinden wird.
+    Invidious Instance: Die Invidious-Instanz, mit der sich FreeTube für API-Aufrufe verbinden wird. Änderungen an dieser Einstellung gelten nur für das aktuelle Fenster, es sei denn, Sie legen diese Instanz als Standard fest.
     Fallback to Non-Preferred Backend on Failure: Wenn deine bevorzugte API ein Problem hat, wird FreeTube automatisch versuchen, deine nicht-bevorzugte API als Ausweichmethode zu verwenden, wenn sie aktiviert ist.
     Preferred API Backend: Wähle das Backend aus, welches FreeTube zum Laden der Daten nutzen soll. Die lokale API ist ein eingebauter Extrahierer. Die Invidious-API erfordert einen Invidious-Server, zu dem eine Verbindung hergestellt werden muss.
     Region for Trending: Die Trendregion erlaubt es dir auszuwählen, aus welchem Land die Trends angezeigt werden sollen.

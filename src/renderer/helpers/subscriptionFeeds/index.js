@@ -33,6 +33,12 @@ import { postsFeed } from './posts'
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
  * @property {(entries: any[]) => any[]} postProcess filter and sort for display
+ * @property {() => boolean} [isAvailable] whether the feed can be fetched under
+ *   the current settings at all. Distinct from `isEnabled`: a feed switched on
+ *   but unavailable keeps its tab and explains itself, rather than vanishing.
+ * @property {(t: (key: string, values?: object) => string) => string}
+ *   [unavailableMessage] what to say when it cannot be fetched. Handed `t`
+ *   rather than importing one, so it can be written with literal locale keys.
  */
 
 /** @type {Record<string, SubscriptionFeedDescriptor>} */
@@ -61,13 +67,36 @@ export function subscriptionFeedDescriptor(feed) {
 }
 
 /**
- * The feeds the user has switched on. What a refresh covers, and what the tab
- * strip offers.
+ * The feeds the user has switched on. What the tab strip offers.
  *
  * @returns {string[]}
  */
 export function enabledSubscriptionFeeds() {
   return SUBSCRIPTION_FEEDS.filter(feed => DESCRIPTORS[feed].isEnabled())
+}
+
+/**
+ * Whether this feed can be fetched at all under the current settings.
+ *
+ * Being switched on and being fetchable are different questions, and answering
+ * them with one flag is what made the posts tab disappear whenever RSS was
+ * turned on. Vanishing is a poor way to explain anything: the tab now stays and
+ * says why it is empty.
+ *
+ * @param {string} feed
+ * @returns {boolean}
+ */
+export function subscriptionFeedIsAvailable(feed) {
+  return subscriptionFeedDescriptor(feed).isAvailable?.() ?? true
+}
+
+/**
+ * The feeds a refresh should actually fetch: switched on, and possible.
+ *
+ * @returns {string[]}
+ */
+export function fetchableSubscriptionFeeds() {
+  return enabledSubscriptionFeeds().filter(subscriptionFeedIsAvailable)
 }
 
 /**

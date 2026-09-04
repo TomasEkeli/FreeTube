@@ -1006,6 +1006,12 @@ export default defineComponent({
           }
         }
 
+        if (this.activeFormat === 'legacy' && (this.isLive || this.isPostLiveDvr || this.legacyFormats.length === 0)) {
+          // Legacy wanted as default but unavailable
+          showToast(this.t('Change Format.Legacy formats are not available for this video'))
+          this.handleActiveFormatUnavailable()
+        }
+
         this.isLoading = false
         this.updateTitle()
       } catch (err) {
@@ -1429,6 +1435,16 @@ export default defineComponent({
 
       // `playlistId` present
       if (this.selectedUserPlaylist != null) {
+        // If the page is accessed through navigation via router history, 'playlistId' is still specified
+        // but the video could have been removed from the playlist in the meantime
+        if (!this.selectedUserPlaylist.videos.some((video) => video.videoId === this.videoId)) {
+          this.playlistId = ''
+          this.playlistType = ''
+          this.playlistItemId = null
+          this.watchingPlaylist = false
+          return
+        }
+
         // If playlist ID matches a user playlist, it must be user playlist
         this.playlistType = 'user'
         this.watchingPlaylist = true
@@ -1755,16 +1771,6 @@ export default defineComponent({
         }
       }
 
-      // Live streams have no legacy formats, so they only switch between DASH
-      // and audio. Everything else loops DASH -> legacy -> audio -> DASH.
-      const alternatives = this.isLive || this.isPostLiveDvr
-        ? { dash: ['audio'], legacy: ['dash'], audio: ['dash'] }
-        : { dash: ['legacy', 'audio'], legacy: ['audio', 'dash'], audio: ['dash', 'legacy'] }
-
-      if (!this.attemptedFormats.includes(this.activeFormat)) {
-        this.attemptedFormats.push(this.activeFormat)
-      }
-
       // A failure of the SABR transport is not a failure of the formats, and
       // the regulator has already spent everything it has on it by the time
       // one reaches us. DASH and audio are the same session in different
@@ -1775,6 +1781,41 @@ export default defineComponent({
       const failedTransport = error.category === shaka.util.Error.Category.NETWORK &&
         typeof error.data?.[0] === 'string' &&
         error.data[0].startsWith('sabr:')
+
+      this.handleActiveFormatUnavailable(failedTransport)
+    },
+
+    /**
+     * Leave the active format behind, because it has either just failed or
+     * turned out not to exist for this video, and pick the best remaining one.
+     *
+     * Two ways in: a player error, which is the common one, and loading a
+     * video with legacy chosen as the default when the video has no
+     * progressive formats. The second never reaches the player at all, so
+     * without its own way in it used to leave the viewer on a format that
+     * could not play.
+     *
+     * @param {boolean} failedTransport whether what failed was the SABR
+     *   transport rather than the format, which narrows what is worth trying
+     */
+    handleActiveFormatUnavailable: function (failedTransport = false) {
+      // What to try instead, best first. Live streams have no legacy formats,
+      // so they only move between DASH and audio.
+      //
+      // Upstream cycles DASH -> legacy -> audio -> DASH, which is a rotation
+      // and says nothing about which alternative is better. Read as an order of
+      // preference it gives the wrong answer for a video with no progressive
+      // formats: someone whose default is legacy asked for video, and audio
+      // throws the picture away when DASH is right there carrying the same
+      // stream. Video formats come first here, and audio is the last resort it
+      // ought to be.
+      const alternatives = this.isLive || this.isPostLiveDvr
+        ? { dash: ['audio'], legacy: ['dash'], audio: ['dash'] }
+        : { dash: ['legacy', 'audio'], legacy: ['dash', 'audio'], audio: ['dash', 'legacy'] }
+
+      if (!this.attemptedFormats.includes(this.activeFormat)) {
+        this.attemptedFormats.push(this.activeFormat)
+      }
 
       const ring = failedTransport
         ? ['legacy']

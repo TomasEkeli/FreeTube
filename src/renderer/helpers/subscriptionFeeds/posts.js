@@ -31,9 +31,18 @@ export const postsFeed = {
   followsDetailBackfill: false,
   isCommunity: true,
   initialDataLimit: 20,
-  // The community tab is hidden entirely while RSS is on, since there is no RSS
-  // to serve it with
-  isEnabled: () => !store.getters.getHideSubscriptionsCommunity && !store.getters.getUseRssFeeds,
+  isEnabled: () => !store.getters.getHideSubscriptionsCommunity,
+  // YouTube publishes no RSS for posts, so with RSS on there is nothing to
+  // fetch this feed with. The tab stays and says so: it used to disappear, and
+  // a tab that silently goes missing when an unrelated-looking setting is
+  // turned on teaches the user nothing about why.
+  isAvailable: () => !store.getters.getUseRssFeeds,
+  // Written out with literal keys, and given `t` rather than reaching for one,
+  // so the keys stay where lint and the translators can see them
+  unavailableMessage: (t) => t('Subscriptions.Posts.RSS Message', {
+    rssSetting: t('Settings.Subscription Settings.Fetch Feeds from RSS'),
+    hideSetting: t('Settings.Distraction Free Settings.Hide Subscriptions Posts')
+  }),
   fetchChannel: async (channel) => {
     const result = (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious')
       ? await getChannelPostsInvidious(channel)

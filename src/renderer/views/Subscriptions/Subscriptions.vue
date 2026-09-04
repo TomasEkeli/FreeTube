@@ -58,7 +58,7 @@ import { computed, ref, watch } from 'vue'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
-import SubscriptionsTab from '../../components/SubscriptionsTab.vue'
+import SubscriptionsTab from '../../components/SubscriptionsTab/SubscriptionsTab.vue'
 
 import store from '../../store/index'
 
