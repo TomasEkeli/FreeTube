@@ -38,6 +38,7 @@ Global:
     Watching Count: 1 oglądający | {count} oglądających
     Like Count: Jedno polubienie | {count} polubie(ń/nia)
     Comment Count: Jeden komentarz | {count} komentarz(e/y)
+    Replies Remaining: "{' '}(pozostało 1) | {' '}(pozostało {count})"
 Search / Go to URL: 'Szukaj / Przejdź do adresu URL'
   # In Filter Button
 Search Filters:
@@ -97,6 +98,8 @@ Subscriptions:
   Subscriptions Tabs: Karty subskrypcji
   Load More Posts: Załaduj więcej wpisów
   Empty Posts: Zasubskrybowane przez Ciebie kanały nie mają żadnych wpisów.
+  Posts:
+    RSS Message: Serwis YouTube nie udostępnia kanałów RSS dla postów. Wyłącz opcję " {rssSetting}" , aby wyświetlić posty, lub włącz opcję " {hideSetting}" , aby ukryć tę zakładkę.
 Trending:
   Trending: 'Na czasie'
   Trending Tabs: Karty „Na czasie”
@@ -833,6 +836,8 @@ Video:
     'Remaining preroll-ad time: {remindingTimeSeconds}s': 'Do końca reklamy z początku pozostało: {remindingTimeSeconds}s'
     'Remaining SABR backoff time: {remindingTimeSeconds}s': 'SABR – do przeczekania pozostało: {remindingTimeSeconds}s'
   Private: Prywatnych filmów nie można oglądać w serwisie FreeTube, ponieważ do oglądania filmu wymagane jest zalogowanie się przez Google i potwierdzenie, że jest się właścicielem filmu.
+  Collapse Playlist: Zwiń listę odtwarzania
+  Expand Playlist: Rozwiń listę odtwarzania
 Playlist:
   #& About
   View Full Playlist: 'Zobacz całą playlistę'
@@ -897,7 +902,7 @@ Comments:
   View {replyCount} replies: Zobacz 1 odpowiedź | Zobacz {replyCount} odpowiedzi
   Subscribed: Zasubskrybowano
   There are no comments available for this post: Nie ma żadnych komentarzy pod tym wpisem
-  Hide {replyCount} replies: Ukryj 1 odpowiedź | Ukryj {replyCount} odpowiedzi
+  Hide Replies: Ukryj odpowiedź | Ukryj odpowiedzi
   View 1 reply from {channelName}: Zobacz 1 odpowiedź od {channelName}
   View {replyCount} replies from {channelName} and others: Zobacz {replyCount} odpowiedzi od {channelName} i innych
   Loading replies: Wczytywanie odpowiedzi...
@@ -973,7 +978,7 @@ Tooltips:
     Fallback to Non-Preferred Backend on Failure: Po włączeniu, kiedy Twój preferowany API napotka problem, FreeTube automatycznie spróbuje użyć niepreferowanego API jako metody zapasowej.
     Preferred API Backend: Wybierz back-end , który FreeTube użyje do uzyskiwania danych. Lokalne API jest wbudowanym ekstraktorem. API Invidious wymaga połączenia z serwerem Invidious.
     Region for Trending: Obszar filmów „Na czasie” pozwala wybrać kraj, z którego chciałbyś zobaczyć filmy zdobywające popularność.
-    Invidious Instance: Serwer Invidious, którym FreeTube będzie się łączył do wywołań API.
+    Invidious Instance: Serwer Invidious, którym FreeTube będzie się łączył do wywołań API. Zmiana tego ustawienia wpływa tylko na aktywne okno, chyba że instancja zostanie ustawiona jako domyślna.
     Thumbnail Preference: Wszystkie miniaturki na FreeTube zostaną ukryte, rozmazane albo zastąpione klatką z filmu zamiast miniaturki domyślnej.
     External Link Handling: "Wybierz domyślne zachowanie kiedy odnośnik, który nie może zostać otworzony w FreeTube, został kliknięty.\nDomyślnie FreeTube otworzy kliknięty odnośnik w domyślnej przeglądarce.\n"
     Open Deep Links In New Window: Odnośniki URL przekazane do FreeTube (np. przez rozszerzenie przeglądarki, albo argumenty linii komend) są otwierane w nowym oknie.
