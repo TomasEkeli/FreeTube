@@ -23,21 +23,7 @@ export function updateVideoListAfterProcessing(videos) {
   }
 
   if (store.getters.getHideUpcomingPremieres) {
-    videoList = videoList.filter(item => {
-      if (item.isRSS) {
-        // viewCount is our only method of detecting premieres in RSS
-        // data without sending an additional request.
-        // If we ever get a better flag, use it here instead.
-        return item.viewCount !== '0'
-      }
-      // Observed for premieres in Local API Subscriptions.
-      return (item.premiereDate == null ||
-        // Invidious API
-        // `premiereTimestamp` only available on premiered videos
-        // https://docs.invidious.io/api/common_types/#videoobject
-        item.premiereTimestamp == null
-      )
-    })
+    videoList = videoList.filter(item => !isUpcomingPremiere(item))
   }
 
   videoList.sort((a, b) => {
@@ -45,6 +31,38 @@ export function updateVideoListAfterProcessing(videos) {
   })
 
   return videoList
+}
+
+/**
+ * Whether this entry is a premiere that has not aired yet.
+ *
+ * Each source says so in its own way, and RSS does not say so at all: the Atom
+ * feed carries no premiere flag, so a view count of zero is the only hint to be
+ * had without spending a request per video. A feed that omits the view count
+ * says nothing either way, and silence is not evidence.
+ *
+ * One predicate, because there were two, written from the same comment and kept
+ * in step by hand until they stopped being. See the note in the RSS branch.
+ *
+ * @param {object} item a video as the subscription feeds and the list wrapper
+ *   hold it, from RSS, the local API, or Invidious
+ * @returns {boolean}
+ */
+export function isUpcomingPremiere(item) {
+  if (item.isRSS) {
+    // Deliberately compared as a number. This read `viewCount === '0'` from
+    // when the feed's raw attribute was stored as a string, and went on
+    // reading it after #8328 parsed it into a number, at which point it
+    // matched nothing and the setting quietly stopped working. The `!= null`
+    // keeps an absent count out of it, since `Number(null)` is `0`.
+    return item.viewCount != null && Number(item.viewCount) === 0
+  }
+
+  // Observed for premieres from the local API
+  return item.premiereDate != null ||
+    // Invidious sets this only on premieres
+    // https://docs.invidious.io/api/common_types/#videoobject
+    item.premiereTimestamp != null
 }
 
 /**
