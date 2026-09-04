@@ -1,5 +1,12 @@
 <template>
+  <p
+    v-if="unavailableMessage"
+    class="message"
+  >
+    {{ unavailableMessage }}
+  </p>
   <SubscriptionsTabUi
+    v-else
     :is-loading="isLoading"
     :is-refreshing="isRefreshing"
     :video-list="entryList"
@@ -15,12 +22,15 @@
 </template>
 
 <script setup>
-import SubscriptionsTabUi from './SubscriptionsTabUi/SubscriptionsTabUi.vue'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-import { useSubscriptionFeed } from '../composables/useSubscriptionFeed'
-import { useSubscriptionFeedTitle } from '../composables/useSubscriptionFeedTitle'
+import SubscriptionsTabUi from '../SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
-import { subscriptionFeedDescriptor } from '../helpers/subscriptionFeeds'
+import { useSubscriptionFeed } from '../../composables/useSubscriptionFeed'
+import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
+
+import { subscriptionFeedDescriptor, subscriptionFeedIsAvailable } from '../../helpers/subscriptionFeeds'
 
 /**
  * One subscription feed's tab.
@@ -38,11 +48,28 @@ const props = defineProps({
   }
 })
 
+const { t } = useI18n()
+
 const subscriptionFeedTitle = useSubscriptionFeedTitle()
 
 // The feed never changes under one instance: the view keys the component by it,
 // so switching tabs mounts a different one
 const descriptor = subscriptionFeedDescriptor(props.feed)
+
+/**
+ * Why this feed cannot be fetched right now, or empty if it can.
+ *
+ * Computed rather than decided once, because the setting that makes a feed
+ * unavailable can be changed while its tab is open, and the tab is not rebuilt
+ * when it is.
+ *
+ * @type {import('vue').ComputedRef<string>}
+ */
+const unavailableMessage = computed(() => {
+  if (subscriptionFeedIsAvailable(props.feed)) { return '' }
+
+  return descriptor.unavailableMessage?.(t) ?? ''
+})
 
 const {
   isLoading,
@@ -54,3 +81,5 @@ const {
   refresh
 } = useSubscriptionFeed(props.feed)
 </script>
+
+<style scoped src="./SubscriptionsTab.css" />

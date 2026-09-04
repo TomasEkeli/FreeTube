@@ -3,8 +3,9 @@ import { reactive, ref, shallowRef } from 'vue'
 import store from '../store/index'
 
 import {
-  enabledSubscriptionFeeds,
+  fetchableSubscriptionFeeds,
   subscriptionFeedDescriptor,
+  subscriptionFeedIsAvailable,
   subscriptionFeedUsesRss,
   SUBSCRIPTION_FEEDS
 } from './subscriptionFeeds'
@@ -136,7 +137,7 @@ let profileGeneration = 0
 let recoveryChain = Promise.resolve()
 
 /**
- * Refresh every feed the user has switched on.
+ * Refresh every feed the user has switched on and that can be fetched.
  *
  * @param {object} [options]
  * @param {string} [options.preferredFeed] the feed being looked at, which is
@@ -145,7 +146,7 @@ let recoveryChain = Promise.resolve()
  * @returns {Promise<void>}
  */
 export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
-  return refreshSubscriptionFeeds(enabledSubscriptionFeeds(), { preferredFeed, reason })
+  return refreshSubscriptionFeeds(fetchableSubscriptionFeeds(), { preferredFeed, reason })
 }
 
 /**
@@ -164,7 +165,10 @@ export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
  * @returns {Promise<void>}
  */
 export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason } = {}) {
-  const ordered = feeds.slice().sort((a, b) => {
+  // A feed with no way to be fetched under the current settings is dropped
+  // here rather than at every call site, so that no route into a refresh can
+  // spend hundreds of requests discovering there was nothing to ask for
+  const ordered = feeds.filter(subscriptionFeedIsAvailable).sort((a, b) => {
     if (a === preferredFeed) { return -1 }
     if (b === preferredFeed) { return 1 }
 
