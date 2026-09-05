@@ -49,12 +49,20 @@
         :data="data"
         :search-query-text="searchQueryText"
       />
+      <!--
+        A post in a grid is a card among cards; anywhere else it is the whole
+        post, as the channel's community tab and the Post page show it.
+      -->
+      <FtPostCard
+        v-else-if="finalDataType === 'community' && layout === 'grid'"
+        :hide-forbidden-titles="hideForbiddenTitles"
+        :data="data"
+      />
       <FtCommunityPost
         v-else-if="finalDataType === 'community'"
         :hide-forbidden-titles="hideForbiddenTitles"
         :appearance="appearance"
         :data="data"
-        :layout="layout"
       />
       <FtListHashtag
         v-else-if="data.type === 'hashtag'"
@@ -75,6 +83,7 @@ import FtListVideo from '../FtListVideo/FtListVideo.vue'
 import FtListChannel from '../FtListChannel/FtListChannel.vue'
 import FtListPlaylist from '../FtListPlaylist/FtListPlaylist.vue'
 import FtCommunityPost from '../FtCommunityPost/FtCommunityPost.vue'
+import FtPostCard from '../FtPostCard/FtPostCard.vue'
 import FtListHashtag from '../FtListHashtag/FtListHashtag.vue'
 
 import store from '../../store/index'

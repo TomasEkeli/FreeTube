@@ -1,0 +1,94 @@
+/* stylelint-disable property-no-vendor-prefix */
+
+// The footprint, the padding and the thumbnail box are the shared card's, not
+// this file's: a post card is the same object as a video card, and the only way
+// to keep it that way as the cards change is to take the shape from the same
+// place they do.
+@use '../../scss-partials/ft-list-item';
+
+.ft-list-post {
+  box-sizing: border-box;
+}
+
+// A post's picture is whatever shape the poster uploaded. Filling the box and
+// cropping to the centre gives the grid one thumbnail shape instead of many,
+// the way a short's crop does; the selector repeats the shared partial's own so
+// that the later rule wins over the `object-fit: contain` it sets for grids.
+.ft-list-item.grid .videoThumbnail .thumbnailImage {
+  aspect-ratio: 16/9;
+  object-fit: cover;
+}
+
+.thumbnailLink:hover {
+  outline: 3px solid var(--side-nav-hover-color);
+}
+
+.blur {
+  filter: blur(20px);
+}
+
+.postInfo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+
+  // Long unbroken text in a narrow column would otherwise widen the cell
+  min-inline-size: 0;
+}
+
+.markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.postHeader {
+  color: var(--secondary-text-color);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+
+  .channelName {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+.postBody {
+  color: var(--primary-text-color);
+  text-decoration: none;
+}
+
+// Two lines beside a picture, which is what a video card's title gets, because
+// the complaint that put this card here was that a post in the grid was too
+// tall. The post is not being read here; it is being recognised.
+.postSnippet {
+  display: -webkit-box;
+  font-size: 15px;
+  line-height: 1.35;
+  margin-block: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+}
+
+// With no picture the text is the whole card, so it takes the room the
+// thumbnail would have had.
+.noThumbnail .postSnippet {
+  line-clamp: 6;
+  -webkit-line-clamp: 6;
+}
+
+.counts {
+  color: var(--tertiary-text-color);
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+
+  // Pinned to the bottom of the card, so the line sits level across a row
+  margin-block-start: auto;
+  padding-block-start: 6px;
+  user-select: none;
+}
