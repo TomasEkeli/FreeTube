@@ -1,6 +1,7 @@
 <template>
   <div
     :id="id"
+    v-observe-visibility="autoExpandVisibilityOptions"
     class="comment"
   >
     <component
@@ -126,24 +127,25 @@
       class="commentReplies"
     >
       <FtComment
-        v-for="(reply, replyIndex) in replies"
+        v-for="(reply, replyIndex) in displayedReplies"
         :id="id + '-' + replyIndex"
         :key="replyIndex"
         :comment="reply"
         :channel-name="channelName"
         :channel-thumbnail="channelThumbnail"
         :autoload-this-reply-level="!!reply.replyLevel && !autoloadThisReplyLevel"
+        :auto-expand-replies="false"
         :can-fallback-to-invidious="canFallbackToInvidious"
         :get-invidious-comment-replies="getInvidiousCommentReplies"
         @timestamp-event="onTimestamp"
       />
       <div
-        v-if="replyToken && !repliesLoading"
+        v-if="(replyToken || hasUnshownReplies) && !repliesLoading"
         class="showMoreReplies"
         role="button"
         tabindex="0"
-        @click="getCommentReplies"
-        @keydown.enter.space.prevent="getCommentReplies"
+        @click="showMoreReplies"
+        @keydown.enter.space.prevent="showMoreReplies"
       >
         <span>{{ t('Comments.Show More Replies') }}{{ numRepliesRemainingText }}</span>
       </div>
@@ -203,6 +205,14 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  /**
+   * Whether this thread expands itself when it scrolls into view, showing its
+   * replies without being asked.
+   */
+  autoExpandReplies: {
+    type: Boolean,
+    default: false
+  },
   getInvidiousCommentReplies: {
     /** @type {PropType<(replyToken: string) => Promise<{commentData: InvidiousComment[], continuation?: string} | null>>} */
     type: Function,
@@ -222,11 +232,31 @@ function onTimestamp(timestamp) {
   emit('timestamp-event', timestamp)
 }
 
+/**
+ * How many replies a thread shows when it expands itself. Past this the viewer
+ * is opting into a deep thread, so the rest stay behind a click.
+ */
+const AUTO_EXPANDED_REPLIES_SHOWN = 3
+
 const showReplies = ref(false)
 const repliesLoading = ref(false)
 const replyToken = shallowRef(props.comment.replyToken)
 /** @type {ShallowRef<Comment[]>} */
 const replies = shallowRef([])
+
+/**
+ * How many of the loaded replies to show, or null for all of them. Only an
+ * expansion the viewer did not ask for holds anything back.
+ * @type {import('vue').Ref<number | null>}
+ */
+const shownReplyCount = ref(null)
+
+/** @type {ComputedRef<Comment[]>} */
+const displayedReplies = computed(() => {
+  return shownReplyCount.value === null ? replies.value : replies.value.slice(0, shownReplyCount.value)
+})
+
+const hasUnshownReplies = computed(() => displayedReplies.value.length < replies.value.length)
 
 /** @type {ComputedRef<boolean>} */
 const hideCommentLikes = computed(() => {
@@ -256,8 +286,8 @@ function isSubscribedToChannel(channelId) {
 
 const numRepliesRemainingText = computed(() => {
   if (props.comment.numReplies >= 1000) return ''
-  const numLoadedReplies = replies.value.reduce((sum, reply) => sum + 1 + reply.numReplies, 0)
-  const count = props.comment.numReplies - numLoadedReplies
+  const numShownReplies = displayedReplies.value.reduce((sum, reply) => sum + 1 + reply.numReplies, 0)
+  const count = props.comment.numReplies - numShownReplies
   return t('Global.Counts.Replies Remaining', { count }, count)
 })
 
@@ -285,12 +315,49 @@ onMounted(() => {
   toggleCommentReplies()
 })
 
+/**
+ * A thread expands as it scrolls into view, which paces the fetches at reading
+ * speed: twenty threads on a page do not fire twenty requests at once. Local
+ * only, since an Invidious thread still waits to be asked.
+ */
+const autoExpandVisibilityOptions = computed(() => {
+  if (!props.autoExpandReplies || props.comment.dataType !== 'local' || !props.comment.numReplies) {
+    return false
+  }
+
+  return {
+    /**
+     * @param {boolean} isVisible
+     */
+    callback: (isVisible) => {
+      if (!isVisible || showReplies.value || replies.value.length > 0 || repliesLoading.value) { return }
+
+      shownReplyCount.value = AUTO_EXPANDED_REPLIES_SHOWN
+      getCommentReplies()
+    },
+    once: true
+  }
+})
+
 function toggleCommentReplies() {
   if (showReplies.value || replies.value.length > 0) {
     showReplies.value = !showReplies.value
   } else {
     getCommentReplies()
   }
+}
+
+/**
+ * The replies held back by an automatic expansion come first, since they are
+ * already in hand; only once they are all shown does this fetch the next page.
+ */
+function showMoreReplies() {
+  if (hasUnshownReplies.value) {
+    shownReplyCount.value = null
+    return
+  }
+
+  getCommentReplies()
 }
 
 async function getCommentReplies() {
