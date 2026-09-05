@@ -1,0 +1,39 @@
+// One shape for every kind, so that "not a plain video" reads the same
+// wherever a card is shown. Only the live marker breaks out of the palette,
+// because live is the one kind that is time-critical, and it borrows the red
+// the live badge on the thumbnail already uses.
+
+.kindMarker {
+  align-items: center;
+  background-color: var(--secondary-card-bg-color);
+  border-radius: 4px;
+  color: var(--secondary-text-color);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 5px;
+  inline-size: fit-content;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  max-inline-size: 100%;
+  padding-block: 3px;
+  padding-inline: 6px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.kindMarker.live {
+  background-color: #f22;
+  color: #fff;
+}
+
+.kindMarkerIcon {
+  // Keeps the icon from growing with a long label's line box
+  block-size: 1em;
+}
+
+.kindMarkerLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

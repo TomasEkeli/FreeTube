@@ -36,8 +36,45 @@
   aspect-ratio: 16/9 auto;
 }
 
+// A short's thumbnail is 9:16 wherever it has not been letterboxed for us
+// already — DeArrow's always are. Filling the box and cropping to the centre
+// gives the grid one thumbnail shape instead of two; the card's shorts marker
+// is what explains the tight framing.
+//
+// The grid selector repeats the class to outrank the `object-fit: contain` the
+// shared partial sets for grid cards, which exists for exactly the vertical
+// thumbnails we are cropping here.
+.ft-list-item.short .videoThumbnail .thumbnailImage,
+.ft-list-item.grid.short .videoThumbnail .thumbnailImage {
+  aspect-ratio: 16/9;
+  object-fit: cover;
+}
+
 .blur {
   filter: blur(20px);
+}
+
+.heading {
+  grid-area: title;
+
+  // The title link was blockified for free while it was a grid item; now that
+  // this wrapper is the grid item, say so, or an inline anchor stops filling
+  // the column and shrinks the clickable area to the text.
+  .title {
+    display: block;
+  }
+}
+
+.kindMarker {
+  margin-block-end: 5px;
+}
+
+// The sidebar cards on the watch page are small enough that the marker has to
+// be too, or it competes with the title it is introducing.
+.ft-list-item.recommendation .kindMarker,
+.ft-list-item.watchPlaylistItem .kindMarker {
+  font-size: 10px;
+  margin-block-end: 3px;
 }
 
 .videoTagLine {

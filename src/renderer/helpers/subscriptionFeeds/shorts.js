@@ -43,7 +43,25 @@ export const shortsFeed = {
 
     return getChannelShortsLocal(channel, failedAttempts)
   },
-  postProcess: updateVideoListAfterProcessing
+  postProcess: (videos) => updateVideoListAfterProcessing(videos.map(markAsShort))
+}
+
+/**
+ * A short from this feed only knows it is one because the feed asked for
+ * shorts. Nothing on the entry says so: this feed is RSS-only, and an Atom
+ * entry is the same shape whatever it describes, so every short ever cached
+ * is indistinguishable from an upload until it is told.
+ *
+ * Told here rather than when it is fetched, because the cache is full of
+ * entries that were written before anyone asked the question, and this runs on
+ * every rebuild from that cache. A copy, since the entry belongs to the store.
+ *
+ * @param {object} video
+ */
+function markAsShort(video) {
+  if (video.type === 'shortVideo') { return video }
+
+  return { ...video, type: 'shortVideo' }
 }
 
 async function getChannelShortsLocal(channel, failedAttempts = 0) {

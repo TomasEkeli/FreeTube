@@ -198,6 +198,10 @@ export async function getInvidiousChannelShorts(channelId, sortBy, continuation)
     video.isUpcoming = false
     delete video.published
     delete video.premiereTimestamp
+
+    // This tab is nothing but shorts, but Invidious only uses `shortVideo` in
+    // search results, so say it here too and the cards can mark them.
+    video.type = 'shortVideo'
   })
 
   return response

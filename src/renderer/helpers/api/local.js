@@ -1444,6 +1444,11 @@ export function parseLocalChannelVideos(videos, channelId, channelName) {
 }
 
 /**
+ * A short says so in its `type`, so that a card can mark it as one and crop
+ * its thumbnail to the shape every other card uses. `shortVideo` is the type
+ * Invidious already answers with, and every consumer that accepts a `video`
+ * accepts it too.
+ *
  * @param {YTNodes.ReelItem | YTNodes.ShortsLockupView} short
  * @param {string} [channelId]
  * @param {string} [channelName]
@@ -1454,7 +1459,7 @@ export function parseShort(short, channelId, channelName) {
     const reelItem = short
 
     return {
-      type: 'video',
+      type: 'shortVideo',
       videoId: reelItem.id,
       title: reelItem.title.text?.trim(),
       author: channelName,
@@ -1467,7 +1472,7 @@ export function parseShort(short, channelId, channelName) {
     const shortsLockupView = short
 
     return {
-      type: 'video',
+      type: 'shortVideo',
       videoId: shortsLockupView.on_tap_endpoint.payload.videoId,
       title: shortsLockupView.overlay_metadata.primary_text.text?.trim(),
       author: channelName,
@@ -2034,7 +2039,9 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       }
 
       return {
-        type: 'video',
+        // Shorts and videos are read the same way but are not the same thing:
+        // saying which one this is lets the card mark it. See `parseShort`.
+        type: lockupView.content_type === 'SHORT' ? 'shortVideo' : 'video',
         videoId: lockupView.content_id,
         title: lockupView.metadata.title.text?.trim(),
         author,

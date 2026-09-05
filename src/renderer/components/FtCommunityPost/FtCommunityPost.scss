@@ -35,6 +35,11 @@
 .author-div {
   display: flex;
 
+  .kindMarker {
+    align-self: center;
+    margin-inline-end: 8px;
+  }
+
   .authorName {
     font-size: 15px;
     font-weight: bold;
