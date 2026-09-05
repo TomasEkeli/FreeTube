@@ -1,10 +1,17 @@
 <template>
-  <p
-    v-if="unavailableMessage"
-    class="message"
+  <div
+    v-if="showUnavailable"
+    class="unavailable"
   >
-    {{ unavailableMessage }}
-  </p>
+    <p class="message">
+      {{ unavailableMessage }}
+    </p>
+    <FtButton
+      v-if="unavailableActionLabel"
+      :label="unavailableActionLabel"
+      @click="refreshThisFeed"
+    />
+  </div>
   <SubscriptionsTabUi
     v-else
     :is-loading="isLoading"
@@ -25,7 +32,10 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import FtButton from '../FtButton/FtButton.vue'
 import SubscriptionsTabUi from '../SubscriptionsTabUi/SubscriptionsTabUi.vue'
+
+import store from '../../store/index'
 
 import { useSubscriptionFeed } from '../../composables/useSubscriptionFeed'
 import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
@@ -56,6 +66,18 @@ const subscriptionFeedTitle = useSubscriptionFeedTitle()
 // so switching tabs mounts a different one
 const descriptor = subscriptionFeedDescriptor(props.feed)
 
+const {
+  isLoading,
+  isRefreshing,
+  entryList,
+  errorChannels,
+  attemptedFetch,
+  cacheHasAnyEntriesForActiveProfile,
+  lastRefreshTimestamp,
+  refresh,
+  refreshThisFeed
+} = useSubscriptionFeed(props.feed)
+
 /**
  * Why this feed cannot be fetched right now, or empty if it can.
  *
@@ -71,15 +93,56 @@ const unavailableMessage = computed(() => {
   return descriptor.unavailableMessage?.(t) ?? ''
 })
 
-const {
-  isLoading,
-  isRefreshing,
-  entryList,
-  errorChannels,
-  attemptedFetch,
-  lastRefreshTimestamp,
-  refresh
-} = useSubscriptionFeed(props.feed)
+/**
+ * What to put on the button that fetches this feed anyway, or empty when the
+ * feed offers no such button.
+ *
+ * @type {import('vue').ComputedRef<string>}
+ */
+const unavailableActionLabel = computed(() => {
+  if (unavailableMessage.value === '') { return '' }
+
+  return descriptor.unavailableActionLabel?.(t) ?? ''
+})
+
+const activeProfileHasSubscriptions = computed(() => {
+  return store.getters.getActiveProfile.subscriptions.length > 0
+})
+
+/**
+ * Whether to explain the feed instead of showing it.
+ *
+ * Being unavailable is not enough on its own. Posts fetched once are in the
+ * cache and stay there, and a tab holding a readable feed should show it and
+ * its refresh widget rather than an explanation of a setting.
+ *
+ * The cache is asked whether it holds anything, rather than the list being
+ * checked for emptiness. A fetch that succeeded and found no posts caches an
+ * empty array for every channel, which is a real answer and leaves the list
+ * empty; treating that as never-fetched would put the panel back up and make
+ * the button look broken. `SubscriptionsTabUi` has the right words for that
+ * case already.
+ *
+ * A profile with no subscriptions also has the panel taken away from it: a
+ * button that fetches nothing from nobody is worse than the tab's own
+ * empty-list message.
+ *
+ * Loading and refreshing keep it away too, so the loader in
+ * `SubscriptionsTabUi` is what a press of the button produces. A fetch that
+ * fails for every channel caches nothing, so the panel comes back and can be
+ * pressed again; those failures are reported by the toast the refresh already
+ * shows, not by the error-channel bubbles, which live inside the component
+ * this branch replaces.
+ *
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const showUnavailable = computed(() => {
+  return unavailableMessage.value !== '' &&
+    !cacheHasAnyEntriesForActiveProfile.value &&
+    activeProfileHasSubscriptions.value &&
+    !isLoading.value &&
+    !isRefreshing.value
+})
 </script>
 
 <style scoped src="./SubscriptionsTab.css" />
