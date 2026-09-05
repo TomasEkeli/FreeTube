@@ -51,8 +51,9 @@ export function useSubscriptionFeed() {
    * here — see `fetchedSubscriptionFeeds` — so nothing in this file may narrow
    * a fetch down to this list: that is what made a kind switched off go stale.
    *
-   * Reactive because deciding it reads the distraction-free settings out of the
-   * store, and doing that inside a computed is what subscribes to them.
+   * Reactive because deciding it reads the chips out of the store, and doing
+   * that inside a computed is what subscribes to them: a chip pressed is a
+   * setting written, which lands here, which rebuilds the stream.
    *
    * @type {import('vue').ComputedRef<string[]>}
    */
@@ -574,14 +575,15 @@ export function useSubscriptionFeed() {
   })
 
   /**
-   * A kind switched on or off changes the stream, and it changes it now.
+   * A chip pressed changes the stream, and it changes it now.
    *
-   * Rebuilt, and never fetched: what a kind was switched off is no reason not
+   * Rebuilt, and never fetched: that a kind was switched off is no reason not
    * to have fetched it, so what switching it on reveals is as current as the
    * rest of the stream and is already in the cache. Switching a kind on used to
    * start a refresh of it, which is the coupling this is written against — the
    * fetch belongs to the refresh cycle, and asking for one here would put the
-   * decision back in the hands of what is being shown.
+   * decision back in the hands of what is being shown, which is what made a
+   * chip cost half a minute and a spinner.
    */
   watch(feeds, rebuildFromCache)
 

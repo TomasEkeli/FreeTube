@@ -35,7 +35,8 @@ export const shortsFeed = {
   rssMode: 'always',
   // Shorts have no duration from any source, so there is nothing to fill in
   followsDetailBackfill: false,
-  isEnabled: () => !store.getters.getHideSubscriptionsShorts,
+  shownGetter: 'getShowSubscriptionsShorts',
+  shownAction: 'updateShowSubscriptionsShorts',
   fetchChannel: (channel, { failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
       return getChannelShortsInvidious(channel, failedAttempts)

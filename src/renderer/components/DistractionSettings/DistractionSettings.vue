@@ -129,43 +129,6 @@
     <h4
       class="groupTitle"
     >
-      {{ t('Settings.Distraction Free Settings.Sections.Subscriptions Page') }}
-    </h4>
-    <div class="switchColumnGrid">
-      <div class="switchColumn">
-        <FtToggleSwitch
-          :label="t('Settings.Distraction Free Settings.Hide Subscriptions Videos')"
-          :compact="true"
-          :default-value="hideSubscriptionsVideos"
-          @change="updateHideSubscriptionsVideos"
-        />
-        <FtToggleSwitch
-          :label="t('Settings.Distraction Free Settings.Hide Subscriptions Shorts')"
-          :compact="true"
-          :default-value="hideSubscriptionsShorts"
-          @change="updateHideSubscriptionsShorts"
-        />
-      </div>
-      <div class="switchColumn">
-        <FtToggleSwitch
-          :label="t('Settings.Distraction Free Settings.Hide Subscriptions Live')"
-          :compact="true"
-          :disabled="hideLiveStreams"
-          :default-value="hideLiveStreams || hideSubscriptionsLive"
-          :tooltip="hideLiveStreams ? hideSubscriptionsLiveTooltip : ''"
-          v-on="!hideLiveStreams ? { change: updateHideSubscriptionsLive } : {}"
-        />
-        <FtToggleSwitch
-          :label="t('Settings.Distraction Free Settings.Hide Subscriptions Posts')"
-          :compact="true"
-          :default-value="hideSubscriptionsCommunity"
-          @change="updateHideSubscriptionsCommunity"
-        />
-      </div>
-    </div>
-    <h4
-      class="groupTitle"
-    >
       {{ t('Settings.Distraction Free Settings.Sections.Channel Page') }}
     </h4>
     <div class="switchColumnGrid">
@@ -570,54 +533,6 @@ const hideChannelHome = computed(() => store.getters.getHideChannelHome)
  */
 function updateHideChannelHome(value) {
   store.dispatch('updateHideChannelHome', value)
-}
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsVideos = computed(() => store.getters.getHideSubscriptionsVideos)
-
-/**
- * @param {boolean} value
- */
-function updateHideSubscriptionsVideos(value) {
-  store.dispatch('updateHideSubscriptionsVideos', value)
-}
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsShorts = computed(() => store.getters.getHideSubscriptionsShorts)
-
-/**
- * @param {boolean} value
- */
-function updateHideSubscriptionsShorts(value) {
-  store.dispatch('updateHideSubscriptionsShorts', value)
-}
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsLive = computed(() => store.getters.getHideSubscriptionsLive)
-
-const hideSubscriptionsLiveTooltip = computed(() => {
-  return t('Tooltips.Distraction Free Settings.Hide Subscriptions Live', {
-    appWideSetting: t('Settings.Distraction Free Settings.Hide Live Streams'),
-    subsection: t('Settings.Distraction Free Settings.Sections.General'),
-    settingsSection: t('Settings.Distraction Free Settings.Distraction Free Settings')
-  })
-})
-
-/**
- * @param {boolean} value
- */
-function updateHideSubscriptionsLive(value) {
-  store.dispatch('updateHideSubscriptionsLive', value)
-}
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideSubscriptionsCommunity = computed(() => store.getters.getHideSubscriptionsCommunity)
-
-/**
- * @param {boolean} value
- */
-function updateHideSubscriptionsCommunity(value) {
-  store.dispatch('updateHideSubscriptionsCommunity', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

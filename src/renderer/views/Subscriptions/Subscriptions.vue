@@ -8,6 +8,22 @@
         />
         {{ $t("Subscriptions.Subscriptions") }}
       </h2>
+      <div class="controlRow">
+        <div
+          class="chipRow"
+          role="group"
+          :aria-label="$t('Subscriptions.Kinds Shown')"
+        >
+          <FtToggleChip
+            v-for="feed in choosableFeeds"
+            :key="feed"
+            :label="subscriptionFeedTitle(feed)"
+            :icon="FEED_ICONS[feed]"
+            :pressed="subscriptionFeedIsShown(feed)"
+            @toggle="toggleFeed(feed)"
+          />
+        </div>
+      </div>
       <SubscriptionsTabUi
         v-if="anyFeedEnabled"
         :is-loading="isLoading"
@@ -24,10 +40,7 @@
         v-else
         class="message"
       >
-        {{ $t("Subscriptions.All Subscription Kinds Hidden", {
-          subsection: $t('Settings.Distraction Free Settings.Sections.Subscriptions Page'),
-          settingsSection: $t('Settings.Distraction Free Settings.Distraction Free Settings')
-        }) }}
+        {{ $t("Subscriptions.No Kinds Shown") }}
       </p>
     </FtCard>
   </div>
@@ -38,11 +51,18 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed } from 'vue'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtToggleChip from '../../components/FtToggleChip/FtToggleChip.vue'
 import SubscriptionsTabUi from '../../components/SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
 import { useSubscriptionFeed } from '../../composables/useSubscriptionFeed'
+import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
 
-import { enabledSubscriptionFeeds } from '../../helpers/subscriptionFeeds'
+import {
+  choosableSubscriptionFeeds,
+  enabledSubscriptionFeeds,
+  setSubscriptionFeedShown,
+  subscriptionFeedIsShown
+} from '../../helpers/subscriptionFeeds'
 
 /**
  * The subscriptions page: one stream, not four tabs.
@@ -51,10 +71,17 @@ import { enabledSubscriptionFeeds } from '../../helpers/subscriptionFeeds'
  * videos, shorts, live streams and posts was never a thing anyone wanted to do;
  * it was a thing they had to do four times to find out what had happened since
  * yesterday, and choosing wrongly hid the answer. So the four lists are one
- * list, in one order, and what is left here is the page around it.
+ * list, in one order, and over it a row of chips saying which kinds are in it.
  *
- * The session key that remembered which tab was open went with the strip. There
- * is nothing left for it to remember.
+ * A chip is not a tab. A tab asked which one kind to look at; a chip says
+ * whether this kind belongs in what is being read, and the reader may have all
+ * four or none. And a chip is only ever about what is shown: every kind is
+ * fetched every refresh whatever the chips say, so switching one on reveals
+ * something as current as the rest of the stream, out of the cache, without a
+ * request and without a spinner.
+ *
+ * The row is the page's one control row, and it is where the density switch
+ * will stand too.
  */
 
 const {
@@ -69,13 +96,46 @@ const {
 } = useSubscriptionFeed()
 
 /**
- * Whether any kind is switched on at all. Every one of them hidden is a page
- * with nothing on it and no way to tell why, so it is answered rather than
- * shown as an empty stream.
+ * The same icons the cards' kind markers carry, so a kind looks the same
+ * wherever it is met.
+ */
+const FEED_ICONS = {
+  videos: ['fas', 'video'],
+  shorts: ['fas', 'clapperboard'],
+  live: ['fas', 'tower-broadcast'],
+  posts: ['fas', 'message']
+}
+
+const subscriptionFeedTitle = useSubscriptionFeedTitle()
+
+/**
+ * Which kinds get a chip. Everything, unless a setting outside this page has
+ * already hidden one everywhere — the live chip goes away entirely while the
+ * app-wide "hide live streams" holds, rather than standing there unable to do
+ * anything.
+ *
+ * Reactive because deciding it reads that setting out of the store, and doing
+ * so inside a computed is what subscribes to it.
+ *
+ * @type {import('vue').ComputedRef<string[]>}
+ */
+const choosableFeeds = computed(() => choosableSubscriptionFeeds())
+
+/**
+ * Whether any kind is on at all. Every chip off is a page with nothing on it,
+ * which the stream's own "nothing has been published" message would explain
+ * wrongly, so it is answered here.
  *
  * @type {import('vue').ComputedRef<boolean>}
  */
 const anyFeedEnabled = computed(() => enabledSubscriptionFeeds().length > 0)
+
+/**
+ * @param {string} feed
+ */
+function toggleFeed(feed) {
+  setSubscriptionFeedShown(feed, !subscriptionFeedIsShown(feed))
+}
 </script>
 
 <style scoped src="./Subscriptions.css" />

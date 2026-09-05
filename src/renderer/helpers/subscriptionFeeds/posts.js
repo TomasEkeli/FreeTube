@@ -38,7 +38,8 @@ export const postsFeed = {
   // paragraph explaining two settings where a list of posts should have been.
   rssMode: 'never',
   followsDetailBackfill: false,
-  isEnabled: () => !store.getters.getHideSubscriptionsCommunity,
+  shownGetter: 'getShowSubscriptionsPosts',
+  shownAction: 'updateShowSubscriptionsPosts',
   fetchChannel: async (channel) => {
     const result = (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious')
       ? await getChannelPostsInvidious(channel)

@@ -1,0 +1,46 @@
+/*
+ * A pill, filled when it is on and quiet when it is off, so that a row of them
+ * says at a glance which way each one stands. The border is always there and
+ * only ever changes colour, so nothing moves when the pointer crosses it.
+ */
+
+.chip {
+  align-items: center;
+  background-color: var(--secondary-card-bg-color);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  gap: 8px;
+  line-height: 1.2;
+  padding-block: 7px;
+  padding-inline: 14px;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-text-color);
+}
+
+.chipPressed {
+  background-color: var(--primary-color);
+  color: var(--text-with-main-color);
+}
+
+.chipPressed:hover {
+  background-color: var(--primary-color-hover);
+  border-color: transparent;
+  color: var(--text-with-main-color);
+}
+
+.chipIcon {
+  /* Keeps the icon from growing with the label's line box */
+  block-size: 1em;
+}
