@@ -51,8 +51,7 @@ Global:
     Live: Live
     Upcoming: Upcoming
     Post: Post
-  # How much room a card gets on every grid. One global setting, offered both
-  # in the settings and as a switch on the subscriptions page.
+  # How much room a card gets on a grid of them.
   Density:
     Label: Card density
     Tight: Tight

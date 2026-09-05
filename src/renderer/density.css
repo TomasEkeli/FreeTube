@@ -10,17 +10,27 @@
  * grid styles often, and a sync branch should find nothing here to fight over.
  */
 
+/*
+ * The third value is the room a grid item is given before it has rendered
+ * itself. A card is its thumbnail plus a fairly fixed amount of text, and the
+ * thumbnail is the column width at 16:9, so this rises with the column: 264px
+ * was measured against the tight column and the other two follow from it.
+ */
+
 body {
   --ft-grid-min-column: 340px;
   --ft-grid-gap: 16px;
+  --ft-grid-item-min-block-size: 308px;
 }
 
 body[data-density='tight'] {
   --ft-grid-min-column: 262px;
   --ft-grid-gap: 8px;
+  --ft-grid-item-min-block-size: 264px;
 }
 
 body[data-density='spacious'] {
   --ft-grid-min-column: 400px;
   --ft-grid-gap: 20px;
+  --ft-grid-item-min-block-size: 342px;
 }
