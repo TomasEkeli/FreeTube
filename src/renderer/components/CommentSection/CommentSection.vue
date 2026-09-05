@@ -18,7 +18,7 @@
       </span>
     </h3>
     <h4
-      v-if="canPerformInitialCommentLoading"
+      v-if="canPerformInitialCommentLoading && !initialLoadIsAutomatic"
       class="getCommentsTitle"
       role="button"
       tabindex="0"
@@ -58,6 +58,7 @@
         :channel-name="channelName"
         :channel-thumbnail="channelThumbnail"
         :autoload-this-reply-level="false"
+        :auto-expand-replies="autoLoadOnScroll"
         :can-fallback-to-invidious="canFallbackToInvidious"
         :get-invidious-comment-replies="getInvidiousCommentReplies"
         @timestamp-event="onTimestamp"
@@ -80,7 +81,7 @@
       </h3>
     </div>
     <h4
-      v-if="canPerformMoreCommentLoading"
+      v-if="canPerformMoreCommentLoading && !moreLoadingIsAutomatic"
       class="getMoreComments"
       role="button"
       tabindex="0"
@@ -168,6 +169,13 @@ const isMoreCommentsLoading = ref(false)
 const showComments = ref(false)
 const nextPageToken = shallowRef(null)
 
+/**
+ * Which backend the comments in `commentData` actually came from. Not always
+ * the preferred one: a failed Local load falls back to Invidious.
+ * @type {import('vue').Ref<'local' | 'invidious' | null>}
+ */
+const loadedBackend = ref(null)
+
 /** @type {import('vue').ShallowRef<import('../FtComment/FtComment.vue').Comment[]>} */
 const commentData = shallowRef([])
 
@@ -202,11 +210,41 @@ const canPerformMoreCommentLoading = computed(() => {
   return commentData.value.length > 0 && !isLoading.value && showComments.value && !!nextPageToken.value && !isMoreCommentsLoading.value
 })
 
+/** @type {import('vue').ComputedRef<boolean>} */
+const commentAutoLoadEnabled = computed(() => {
+  return store.getters.getCommentAutoLoadEnabled
+})
+
+/**
+ * On Local the comments load themselves as the viewer scrolls to them, and the
+ * threads open themselves. Invidious keeps its click-to-load behaviour, and so
+ * does Local when the viewer switches this off.
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const autoLoadOnScroll = computed(() => {
+  return !!process.env.SUPPORTS_LOCAL_API && backendPreference.value === 'local' && commentAutoLoadEnabled.value
+})
+
+/**
+ * Comment fetches must never race video startup, so nothing is observed until
+ * the player is up. A post has no player to wait for.
+ */
+const readyToObserve = computed(() => props.videoPlayerReady || props.isPostComments)
+
+const initialLoadIsAutomatic = computed(() => autoLoadOnScroll.value && readyToObserve.value)
+
+/**
+ * Paging drives itself only while the loaded comments are the ones the Local
+ * continuation understands. After a fallback to Invidious they are not, so the
+ * viewer asks for the next page again.
+ */
+const moreLoadingIsAutomatic = computed(() => initialLoadIsAutomatic.value && loadedBackend.value === 'local')
+
 const observeVisibilityOptions = computed(() => {
-  if (!generalAutoLoadMorePaginatedItemsEnabled.value) {
+  if (!autoLoadOnScroll.value && !generalAutoLoadMorePaginatedItemsEnabled.value) {
     return false
   }
-  if (!props.videoPlayerReady && !props.isPostComments) { return false }
+  if (!readyToObserve.value) { return false }
 
   return {
     /**
@@ -219,7 +257,7 @@ const observeVisibilityOptions = computed(() => {
       // It's possible the comments are being loaded/already loaded
       if (canPerformInitialCommentLoading.value) {
         getCommentData()
-      } else if (canPerformMoreCommentLoading.value) {
+      } else if (canPerformMoreCommentLoading.value && (moreLoadingIsAutomatic.value || generalAutoLoadMorePaginatedItemsEnabled.value)) {
         getMoreComments()
       }
     },
@@ -325,6 +363,7 @@ async function getCommentDataLocal(more = false) {
     nextPageToken.value = comments.has_continuation ? comments : null
     isLoading.value = false
     showComments.value = true
+    loadedBackend.value = 'local'
   } catch (err) {
     // region No comment detection
     // No comment related info when video info requested earlier in parent component
@@ -336,6 +375,7 @@ async function getCommentDataLocal(more = false) {
       isLoading.value = false
       showComments.value = true
       localCommentsInstance = undefined
+      loadedBackend.value = 'local'
       return
     }
     // endregion No comment detection
@@ -371,6 +411,7 @@ async function getCommentDataInvidious() {
     nextPageToken.value = response.continuation
     isLoading.value = false
     showComments.value = true
+    loadedBackend.value = 'invidious'
   } catch (err) {
     // region No comment detection
     // No comment related info when video info requested earlier in parent component
@@ -381,6 +422,7 @@ async function getCommentDataInvidious() {
       nextPageToken.value = null
       isLoading.value = false
       showComments.value = true
+      loadedBackend.value = 'invidious'
       return
     }
     // endregion No comment detection
@@ -412,6 +454,7 @@ async function getPostCommentsInvidious() {
     nextPageToken.value = response?.continuation ?? continuation
     isLoading.value = false
     showComments.value = true
+    loadedBackend.value = 'invidious'
   } catch (err) {
     console.error(err)
     const errorMessage = t('Invidious API Error (Click to copy)')

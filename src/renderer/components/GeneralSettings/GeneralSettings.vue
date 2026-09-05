@@ -25,6 +25,14 @@
           :tooltip="t('Settings.General Settings.Auto Load Next Page.Tooltip')"
           @change="updateGeneralAutoLoadMorePaginatedItemsEnabled"
         />
+        <FtToggleSwitch
+          v-if="SUPPORTS_LOCAL_API"
+          :label="t('Settings.General Settings.Auto Load Comments.Label')"
+          :default-value="commentAutoLoadEnabled"
+          :compact="true"
+          :tooltip="t('Settings.General Settings.Auto Load Comments.Tooltip')"
+          @change="updateCommentAutoLoadEnabled"
+        />
       </div>
       <div class="switchColumn">
         <FtToggleSwitch
@@ -232,6 +240,18 @@ const generalAutoLoadMorePaginatedItemsEnabled = computed(() => {
  */
 function updateGeneralAutoLoadMorePaginatedItemsEnabled(value) {
   store.dispatch('updateGeneralAutoLoadMorePaginatedItemsEnabled', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const commentAutoLoadEnabled = computed(() => {
+  return store.getters.getCommentAutoLoadEnabled
+})
+
+/**
+ * @param {boolean} value
+ */
+function updateCommentAutoLoadEnabled(value) {
+  store.dispatch('updateCommentAutoLoadEnabled', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

@@ -295,6 +295,10 @@ Settings:
     Auto Load Next Page:
       Label: Auto Load Next Page
       Tooltip: Load additional pages and comments automatically.
+    Auto Load Comments:
+      Label: Auto Load Comments
+      Tooltip: Load comments, the pages after them, and each thread's first few
+        replies as you scroll to them. Local API only.
     Default Landing Page: Default Landing Page
     Locale Preference: Locale Preference
     System Default: System Default
