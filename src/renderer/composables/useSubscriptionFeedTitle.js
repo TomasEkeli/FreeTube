@@ -3,11 +3,9 @@ import { useI18n } from 'vue-i18n'
 /**
  * What each subscription feed is called.
  *
- * Nothing calls this at the moment: the tab strip it labelled is gone, and the
- * chip row that replaces it is the next piece of work. It is left standing
- * rather than deleted and rewritten a week later, and because the reason it is
- * written out longhand is the sort of thing that gets rediscovered the hard
- * way — see below.
+ * It labelled the tab strip, and now it labels the chips that replaced it: the
+ * words a reader chooses a kind by are the same words whatever the control is
+ * shaped like.
  *
  * Kept apart from the feed descriptors, which hold everything else about a feed,
  * because a translation key can only be looked up from a literal: the linter
