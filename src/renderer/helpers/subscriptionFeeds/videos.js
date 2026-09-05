@@ -40,7 +40,8 @@ export const videosFeed = {
   entriesKey: 'videos',
   rssMode: 'setting',
   followsDetailBackfill: true,
-  isEnabled: () => !store.getters.getHideSubscriptionsVideos,
+  shownGetter: 'getShowSubscriptionsVideos',
+  shownAction: 'updateShowSubscriptionsVideos',
   fetchChannel: (channel, { useRss, failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
       return useRss
