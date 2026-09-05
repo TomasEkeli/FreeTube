@@ -137,16 +137,28 @@ let profileGeneration = 0
 let recoveryChain = Promise.resolve()
 
 /**
- * Refresh every feed the user has switched on and that can be fetched.
+ * Refresh every feed the user has switched on and that automatic refreshes
+ * cover, plus one asked for by name.
  *
  * @param {object} [options]
  * @param {string} [options.preferredFeed] the feed being looked at, which is
  *   fetched first so that it finishes soonest
  * @param {string} [options.reason] recorded in the trace
+ * @param {string} [options.requestedFeed] a feed the user asked for by name,
+ *   which is fetched whether or not automatic refreshes cover it
  * @returns {Promise<void>}
  */
-export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
-  return refreshSubscriptionFeeds(fetchableSubscriptionFeeds(), { preferredFeed, reason })
+export function refreshAllSubscriptionFeeds({ preferredFeed, reason, requestedFeed } = {}) {
+  const feeds = fetchableSubscriptionFeeds()
+
+  if (requestedFeed != null && !feeds.includes(requestedFeed)) {
+    // Posts under RSS are the case: automatic refreshes leave the feed alone,
+    // which is what the setting is for, and someone pressing refresh on the
+    // posts tab is not an automatic refresh
+    feeds.push(requestedFeed)
+  }
+
+  return refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed })
 }
 
 /**
@@ -162,18 +174,24 @@ export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
  * @param {object} [options]
  * @param {string} [options.preferredFeed]
  * @param {string} [options.reason] recorded in the trace
+ * @param {string} [options.requestedFeed] the one feed exempt from the
+ *   availability filter, because the user named it
  * @returns {Promise<void>}
  */
-export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason } = {}) {
-  // A feed with no way to be fetched under the current settings is dropped
-  // here rather than at every call site, so that no route into a refresh can
-  // spend hundreds of requests discovering there was nothing to ask for
-  const ordered = feeds.filter(subscriptionFeedIsAvailable).sort((a, b) => {
-    if (a === preferredFeed) { return -1 }
-    if (b === preferredFeed) { return 1 }
+export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed } = {}) {
+  // A feed automatic refreshes do not cover is dropped here rather than at every
+  // call site, so that no route into a refresh can spend hundreds of requests
+  // discovering there was nothing to ask for. The feed the user named is the
+  // exception: unavailable says that nothing fetches it on its own, and says
+  // nothing about whether it can be fetched, which posts can.
+  const ordered = feeds
+    .filter(feed => feed === requestedFeed || subscriptionFeedIsAvailable(feed))
+    .sort((a, b) => {
+      if (a === preferredFeed) { return -1 }
+      if (b === preferredFeed) { return 1 }
 
-    return 0
-  })
+      return 0
+    })
 
   return Promise.all(ordered.map(feed => startFeedRefresh(feed, reason))).then(() => {})
 }

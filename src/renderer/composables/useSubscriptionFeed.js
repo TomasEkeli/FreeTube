@@ -212,6 +212,10 @@ export function useSubscriptionFeed(feed) {
    * it is being brought up to date. Only when there is nothing on screen does
    * the spinner make sense.
    *
+   * The only place `requestedFeed` is passed. It says the feed was asked for by
+   * name, which is what fetches posts while RSS is on: every automatic path
+   * omits it and so keeps skipping the feeds a setting says to skip.
+   *
    * Takes no arguments deliberately: it is bound to a template event, and a
    * payload arriving as an options object would quietly change what it does.
    */
@@ -221,10 +225,10 @@ export function useSubscriptionFeed(feed) {
     }
 
     if (fetchSubscriptionsAutomatically.value) {
-      return refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'button' })
+      return refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'button', requestedFeed: feed })
     }
 
-    return refreshSubscriptionFeeds([feed], { reason: 'button' })
+    return refreshSubscriptionFeeds([feed], { reason: 'button', requestedFeed: feed })
   }
 
   watch(state.revision, rebuildFromCache)
