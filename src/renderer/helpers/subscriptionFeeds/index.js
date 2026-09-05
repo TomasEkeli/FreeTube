@@ -22,27 +22,18 @@ import { postsFeed } from './posts'
  * @property {string} cacheGetter store getter holding this feed's cache
  * @property {string} updateAction store action that writes one channel's entries
  * @property {'videos' | 'posts'} entriesKey field name inside a cache entry
- * @property {'setting' | 'always' | 'never'} rssMode where RSS use is decided
+ * @property {'setting' | 'always' | 'never'} rssMode where RSS use is decided.
+ *   `never` is not a preference but a fact about what YouTube publishes: with
+ *   no RSS to read there is nothing lighter to read, whatever the setting says.
  * @property {boolean} followsDetailBackfill whether this feed's entries can be
  *   filled in in the background, and so needs rebuilding when they are
- * @property {() => boolean} isEnabled whether the user has this feed switched on
+ * @property {() => boolean} isEnabled whether the user has this feed switched
+ *   on, which decides whether it is shown and nothing else. What is fetched is
+ *   a separate question with a separate answer: every feed, every time.
  * @property {(channel: object, context: { useRss: boolean, failedAttempts?: number }) => Promise<{
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
  * @property {(entries: any[]) => any[]} postProcess filter and sort for display
- * @property {() => boolean} [isAvailable] whether an automatic refresh fetches
- *   this feed under the current settings. Distinct from `isEnabled`: a feed
- *   switched on but unavailable still contributes whatever the cache holds to
- *   the stream, and is offered a fetch of its own. It does not say the feed
- *   cannot be fetched: posts under RSS fetch perfectly well when someone asks
- *   for them by name.
- * @property {(t: (key: string, values?: object) => string) => string}
- *   [unavailableMessage] what to say when no automatic refresh will fetch it.
- *   Handed `t` rather than importing one, so it can be written with literal
- *   locale keys.
- * @property {(t: (key: string, values?: object) => string) => string}
- *   [unavailableActionLabel] the label on the button that fetches it anyway.
- *   Absent for feeds with no unavailable state.
  */
 
 /** @type {Record<string, SubscriptionFeedDescriptor>} */
@@ -75,7 +66,8 @@ export function subscriptionFeedDescriptor(feed) {
 }
 
 /**
- * The feeds the user has switched on. What the stream is assembled from.
+ * The feeds the user has switched on. What the stream is assembled from, and
+ * the answer to that question only.
  *
  * @returns {string[]}
  */
@@ -84,32 +76,23 @@ export function enabledSubscriptionFeeds() {
 }
 
 /**
- * Whether an automatic refresh fetches this feed under the current settings.
+ * The feeds a refresh fetches: every one of them, whatever is switched on.
  *
- * Being switched on and being fetched on a schedule are different questions,
- * and answering them with one flag is what made the posts tab disappear
- * whenever RSS was turned on. Vanishing is a poor way to explain anything, and
- * so is a paragraph with nothing to press: whatever posts the cache holds stay
- * in the stream, and a button next to it offers to fetch more.
+ * Deliberately not `enabledSubscriptionFeeds()` filtered down, and deliberately
+ * a function of its own rather than a list read off the one above. What is
+ * shown and what is fetched were the same list once, and the cost of that was a
+ * kind switched off going stale: switching it back on showed yesterday, and
+ * then a spinner. Switching a kind on is meant to be instant, and it can only
+ * be instant if what it was hiding had been fetched anyway.
  *
- * What this does not decide is whether the feed can be fetched. A request the
- * user made by name is exempt, as `requestedFeed` in `subscriptionRefresh`.
- *
- * @param {string} feed
- * @returns {boolean}
- */
-export function subscriptionFeedIsAvailable(feed) {
-  return subscriptionFeedDescriptor(feed).isAvailable?.() ?? true
-}
-
-/**
- * The feeds an automatic refresh fetches: switched on, and not held back by a
- * setting.
+ * Fetching four kinds where one was fetched costs roughly double, mostly posts,
+ * which are the one kind RSS cannot serve. That was weighed and accepted: the
+ * request manager's budget and lanes pace it, and nothing here throttles.
  *
  * @returns {string[]}
  */
-export function fetchableSubscriptionFeeds() {
-  return enabledSubscriptionFeeds().filter(subscriptionFeedIsAvailable)
+export function fetchedSubscriptionFeeds() {
+  return SUBSCRIPTION_FEEDS.slice()
 }
 
 /**

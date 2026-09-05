@@ -5,7 +5,6 @@ import store from '../store/index'
 import {
   enabledSubscriptionFeeds,
   subscriptionFeedDescriptor,
-  subscriptionFeedIsAvailable,
   SUBSCRIPTION_FEEDS
 } from '../helpers/subscriptionFeeds'
 import {
@@ -48,6 +47,10 @@ export function useSubscriptionFeed() {
   /**
    * The kinds the user has switched on, in stream-assembly order.
    *
+   * What is shown, and only that. Every kind is fetched whether or not it is in
+   * here — see `fetchedSubscriptionFeeds` — so nothing in this file may narrow
+   * a fetch down to this list: that is what made a kind switched off go stale.
+   *
    * Reactive because deciding it reads the distraction-free settings out of the
    * store, and doing that inside a computed is what subscribes to them.
    *
@@ -89,13 +92,20 @@ export function useSubscriptionFeed() {
 
   const activeSubscriptionList = computed(() => store.getters.getActiveProfile.subscriptions)
 
-  const activeProfileHasSubscriptions = computed(() => activeSubscriptionList.value.length > 0)
-
   /**
    * A refresh is in flight for at least one of the kinds on screen.
    *
    * Any rather than all, because the stream is one thing: a refresh that is
    * still fetching posts is still a refresh of what is being read.
+   *
+   * The kinds on screen, though, and not every kind the refresh covers. This is
+   * what the widget spins on and what the loader waits for, and both are about
+   * the stream: once every kind in it is fetched, nothing more is going to
+   * appear, and spinning through another half minute of a kind the reader
+   * switched off would be announcing work they asked not to see. The progress
+   * bar counts the whole cycle and still says the machine is busy. Switching
+   * that kind on mid-refresh brings this back to true, which is the honest
+   * answer to a stream that is about to grow.
    *
    * @type {import('vue').ComputedRef<boolean>}
    */
@@ -141,13 +151,18 @@ export function useSubscriptionFeed() {
   /**
    * The active profile's cache entries, per kind.
    *
+   * Every kind, not only the ones on screen. A refresh fetches all four, so the
+   * questions asked of this — whether that kind is complete, when it was last
+   * fetched — are asked about kinds nobody is looking at as well. Assembly
+   * picks the shown ones out of it.
+   *
    * @type {import('vue').ComputedRef<Map<string, object[]>>}
    */
   const cacheEntriesByFeed = computed(() => {
     /** @type {Map<string, object[]>} */
     const byFeed = new Map()
 
-    for (const feed of feeds.value) {
+    for (const feed of SUBSCRIPTION_FEEDS) {
       const cache = store.getters[subscriptionFeedDescriptor(feed).cacheGetter]
       const entries = []
 
@@ -190,11 +205,9 @@ export function useSubscriptionFeed() {
   /**
    * Whether the cache holds anything of one kind for the active profile.
    *
-   * The looser neighbour of `feedIsComplete`, and the right question when
-   * deciding whether to explain a kind instead of showing it: a fetch that
-   * reached 597 of 600 channels leaves that kind incomplete for good, and
-   * covering those 597 channels' posts with an explanation of a setting would be
-   * a strange answer to the button that fetched them.
+   * The looser neighbour of `feedIsComplete`: a fetch that reached 597 of 600
+   * channels leaves that kind incomplete for good, and those 597 channels'
+   * posts are still posts.
    *
    * An empty array is a real answer and counts, which is how a profile whose
    * channels have posted nothing is told from one nobody has fetched.
@@ -208,8 +221,14 @@ export function useSubscriptionFeed() {
     return (cacheEntriesByFeed.value.get(feed) ?? []).some(cacheEntry => cacheEntry[entriesKey] != null)
   }
 
-  /** The kinds the cache cannot supply in full for this profile. */
-  const incompleteFeeds = computed(() => feeds.value.filter(feed => !feedIsComplete(feed)))
+  /**
+   * The kinds the cache cannot supply in full for this profile.
+   *
+   * Every kind, again, not the shown ones: this is what a fetch is decided
+   * from, and a kind is no less missing for being hidden. A chip that narrowed
+   * this would be a chip that stopped a fetch.
+   */
+  const incompleteFeeds = computed(() => SUBSCRIPTION_FEEDS.filter(feed => !feedIsComplete(feed)))
 
   /**
    * Which kinds the cache holds anything of, as one string.
@@ -227,33 +246,6 @@ export function useSubscriptionFeed() {
    * @type {import('vue').ComputedRef<string>}
    */
   const feedsWithAnyEntries = computed(() => feeds.value.filter(feedHasAnyEntries).join())
-
-  /**
-   * Kinds that are switched on, that no automatic refresh will fetch, and that
-   * the cache has nothing of — so there is nothing to show and nothing coming.
-   *
-   * Posts under RSS are the only case: YouTube publishes no RSS for them, so an
-   * automatic refresh has nothing lighter to fetch them with, which is the whole
-   * point of the setting. The scraper still works, so this is offered as a
-   * button rather than printed as a limitation.
-   *
-   * Loading and refreshing keep it away, so the loader is what a press of that
-   * button produces; a profile with no subscriptions is spared it too, since a
-   * button that fetches nothing from nobody is worse than the empty-stream
-   * message.
-   *
-   * @type {import('vue').ComputedRef<string[]>}
-   */
-  const unavailableFeeds = computed(() => {
-    if (isLoading.value || isRefreshing.value || !activeProfileHasSubscriptions.value) { return [] }
-
-    return feeds.value.filter((feed) => {
-      if (subscriptionFeedIsAvailable(feed)) { return false }
-      if (subscriptionFeedDescriptor(feed).unavailableMessage == null) { return false }
-
-      return !feedHasAnyEntries(feed)
-    })
-  })
 
   /**
    * How old the stream is, as the oldest of the kinds in it.
@@ -398,22 +390,19 @@ export function useSubscriptionFeed() {
       return
     }
 
-    const fetchable = incompleteFeeds.value.filter(subscriptionFeedIsAvailable)
-
-    if (fetchable.length === 0) {
-      // Nothing automatic will fetch what is missing, so what the cache holds is
-      // the whole answer until someone asks for a kind by name.
-      return
-    }
-
     // A profile switch invalidates every kind, so every kind is fetched. A cache
     // that merely cannot supply one of them is about that one: starting a whole
     // cycle for it would mean navigating back to the subscriptions page could
     // re-fetch six hundred channels three times over.
+    //
+    // The kinds asked for here are the incomplete ones whether or not they are
+    // being shown — a kind is fetched so that switching it on shows something
+    // current, which it cannot do if being switched off is what kept it out of
+    // the fetch.
     if (reason === 'profile') {
       refreshBehindLoader(() => refreshAllSubscriptionFeeds({ reason }))
     } else {
-      refreshBehindLoader(() => refreshSubscriptionFeeds(fetchable, { reason }))
+      refreshBehindLoader(() => refreshSubscriptionFeeds(incompleteFeeds.value, { reason }))
     }
   }
 
@@ -435,10 +424,10 @@ export function useSubscriptionFeed() {
     // and replaces it in one go, rather than growing the list underneath whoever
     // is reading it.
     if (!showCacheIfPresent() && subscriptionCacheReady.value) {
-      // Not every kind is complete — a few channels failed last time, or posts
-      // are held back by RSS — but incomplete is not unreadable, and merging
-      // four kinds makes "one of them is short of a channel" four times as
-      // likely as it was per tab. Put up what there is.
+      // Not every kind is complete — a few channels failed last time, or a kind
+      // has never been fetched at all — but incomplete is not unreadable, and
+      // merging four kinds makes "one of them is short of a channel" four times
+      // as likely as it was per tab. Put up what there is.
       rebuildFromCache()
     }
 
@@ -473,11 +462,11 @@ export function useSubscriptionFeed() {
    * it down again.
    *
    * The loader normally comes down when `isRefreshing` falls. A refresh that
-   * fetches nothing at all never raises it, so that fall never happens: with
-   * every enabled kind held back by a setting — posts alone, under RSS — the
-   * spinner stayed up over a page that was never going to change, and it hid
-   * the button that would have fixed it. Per tab this could not arise, because
-   * the tab's own refresh always named its own feed.
+   * fetches nothing at all never raises it, so that fall never happens, and the
+   * spinner stays up over a page that is never going to change. Now that every
+   * kind is fetched every time, the case left is a profile with no channels in
+   * it: there is nothing to ask anyone for, so each kind finishes before it
+   * starts.
    *
    * So the promise is the signal instead. It resolves when the refresh is over,
    * including when the refresh was nothing at all, and there is no longer any
@@ -499,46 +488,16 @@ export function useSubscriptionFeed() {
   /**
    * Refresh because someone asked for one, from the widget over the stream.
    *
-   * With automatic fetching on that means every kind an automatic refresh
-   * covers; with it off, only the kinds actually on screen, because the user is
-   * deliberately economising on requests.
-   *
-   * Kinds no automatic refresh reaches stay out of it either way. This is the
-   * whole stream's button and says nothing about any one kind, where the button
-   * `refreshFeed` is bound to names one.
+   * Every kind, including the ones switched off, and including when automatic
+   * fetching is off. This is the whole stream's button and names no kind; a
+   * kind hidden now is one a chip can reveal a moment later, and fetching only
+   * what happens to be on screen is what made that reveal show yesterday.
    *
    * Takes no arguments deliberately: it is bound to a template event, and a
    * payload arriving as an options object would quietly change what it does.
    */
   function refresh() {
-    return refreshBehindLoader(() => {
-      if (fetchSubscriptionsAutomatically.value) {
-        return refreshAllSubscriptionFeeds({ reason: 'button' })
-      }
-
-      return refreshSubscriptionFeeds(feeds.value, { reason: 'button' })
-    })
-  }
-
-  /**
-   * Fetch one kind, and only that kind, because that kind is what was asked for.
-   *
-   * What `unavailableFeeds` offers a button for. Narrow on purpose: the setting
-   * holding that kind back was set by someone asking for fewer requests, and
-   * fetching the other three because they pressed the one that says posts would
-   * be the opposite of what they asked for.
-   *
-   * What it cannot keep to itself is the recovery: `startFeedRefresh` treats any
-   * refresh as superseding the one global recovery escalation, so pressing this
-   * while another kind is retrying its unreachable channels abandons that retry.
-   * One kind's worth of channels is still the smaller cost.
-   *
-   * @param {string} feed
-   */
-  function refreshFeed(feed) {
-    return refreshBehindLoader(() => {
-      return refreshSubscriptionFeeds([feed], { reason: 'load', requestedFeed: feed })
-    })
+    return refreshBehindLoader(() => refreshAllSubscriptionFeeds({ reason: 'button' }))
   }
 
   /**
@@ -583,16 +542,13 @@ export function useSubscriptionFeed() {
   /**
    * A cache write from an other window arrives here as a store mutation, with
    * none of the revision bump that the same write in this window would have
-   * carried, so nothing rebuilds. The page reads the cache to decide whether to
-   * explain itself and reads the list to fill itself in, and those two coming
-   * apart is what leaves a window saying the channels have no posts while the
-   * cache in front of it holds some.
+   * carried, so nothing rebuilds: this window goes on showing a stream with no
+   * posts in it while the cache in front of it holds some.
    *
-   * Rebuilding when a kind the cache had nothing of stops being empty puts them
-   * back together, which is exactly the condition the explanation is keyed to.
-   * It does not follow every later write: one window's stream lagging another's
-   * is how this has always worked, and rebuilding on each of six hundred
-   * channels would be a poor way to fix it.
+   * Rebuilding when a kind the cache had nothing of stops being empty puts the
+   * two back together. It does not follow every later write: one window's
+   * stream lagging another's is how this has always worked, and rebuilding on
+   * each of six hundred channels would be a poor way to fix it.
    *
    * Not while this window is refreshing, because then the revision bump is
    * already coming, and it is what replaces the stream in one go rather than
@@ -620,26 +576,14 @@ export function useSubscriptionFeed() {
   /**
    * A kind switched on or off changes the stream, and it changes it now.
    *
-   * Rebuilt rather than reloaded: everything already fetched is still in the
-   * cache, so hiding a kind and showing it again costs nothing and blanks
-   * nothing. A kind switched on that has never been fetched is fetched behind
-   * the stream, which stays up meanwhile — there is no honest reason to replace
-   * six hundred readable entries with a spinner because a fourth kind was asked
-   * for. Only a stream that is empty anyway gets the loader.
+   * Rebuilt, and never fetched: what a kind was switched off is no reason not
+   * to have fetched it, so what switching it on reveals is as current as the
+   * rest of the stream and is already in the cache. Switching a kind on used to
+   * start a refresh of it, which is the coupling this is written against — the
+   * fetch belongs to the refresh cycle, and asking for one here would put the
+   * decision back in the hands of what is being shown.
    */
-  watch(feeds, (current, previous) => {
-    rebuildFromCache()
-
-    if (!fetchSubscriptionsAutomatically.value || isRefreshing.value) { return }
-
-    const wanted = current.filter((feed) => {
-      return !previous.includes(feed) && !feedIsComplete(feed) && subscriptionFeedIsAvailable(feed)
-    })
-
-    if (wanted.length > 0) {
-      refreshBehindLoader(() => refreshSubscriptionFeeds(wanted, { reason: 'cache-miss' }))
-    }
-  })
+  watch(feeds, rebuildFromCache)
 
   /**
    * The back-fill writes straight into the entry objects this stream already
@@ -723,10 +667,8 @@ export function useSubscriptionFeed() {
     entryList,
     errorChannels,
     attemptedFetch,
-    unavailableFeeds,
     lastRefreshTimestamp,
     noteVisibleEntries,
-    refresh,
-    refreshFeed
+    refresh
   }
 }

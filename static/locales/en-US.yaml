@@ -153,9 +153,6 @@ Subscriptions:
   All Subscription Kinds Hidden: 'Videos, shorts, live streams and posts are all hidden. To see content here, please unhide some of them in the "{subsection}" section in "{settingsSection}".'
   Subscriptions Tabs: Subscriptions Tabs
   All Subscription Tabs Hidden: 'All subscription tabs are hidden. To see content here, please unhide some tabs in the "{subsection}" section in "{settingsSection}".'
-  Posts:
-    RSS Message: YouTube publishes no RSS for posts, so they are not fetched automatically while "{rssSetting}" is on.
-    Load Posts: Load posts
 More: More
 Channels:
   Channels: Channels
