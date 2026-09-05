@@ -5,7 +5,8 @@
       list: effectiveListTypeIsList,
       grid: !effectiveListTypeIsList,
       [appearance]: true,
-      watched: addWatchedStyle
+      watched: addWatchedStyle,
+      short: isShort
     }"
   >
     <div
@@ -133,18 +134,30 @@
       draggable="true"
       @dragstart="onDragStart"
     >
-      <RouterLink
-        class="title"
-        :to="watchVideoRouterLink"
-        @click="handleWatchPageLinkClick"
-      >
-        <h3
-          class="h3Title"
-          dir="auto"
+      <!--
+        The marker shares the title's grid area rather than claiming a row of
+        its own, so that the areas stay exactly as the shared card layout
+        defines them: components that let a child auto-place into `.info`
+        would have it land in a new row instead of where they left it.
+      -->
+      <div class="heading">
+        <FtKindMarker
+          v-if="kind !== null"
+          :kind="kind"
+        />
+        <RouterLink
+          class="title"
+          :to="watchVideoRouterLink"
+          @click="handleWatchPageLinkClick"
         >
-          {{ displayTitle }}
-        </h3>
-      </RouterLink>
+          <h3
+            class="h3Title"
+            dir="auto"
+          >
+            {{ displayTitle }}
+          </h3>
+        </RouterLink>
+      </div>
       <div class="infoLine">
         <component
           :is="disableChannelLinks ? 'span' : 'router-link'"
@@ -283,6 +296,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
 import FtIconButton from '../FtIconButton/FtIconButton.vue'
+import FtKindMarker from '../FtKindMarker/FtKindMarker.vue'
 import { vSaferHtml } from '../../directives/vSaferHtml.js'
 
 import store from '../../store/index'
@@ -417,6 +431,26 @@ const hideViews = ref(false)
 const deArrowTogglePinned = ref(false)
 const showDeArrowTitle = ref(false)
 const showDeArrowThumbnail = ref(false)
+
+const isShort = computed(() => props.data.type === 'shortVideo')
+
+/**
+ * The kind this card is marked as, or `null` when it is a plain video and so
+ * carries no marker at all.
+ *
+ * A premiere is an upcoming thing before it is a live thing, and a short that
+ * is somehow also live is a live stream first, so the order here is the order
+ * of the answers.
+ *
+ * @type {import('vue').ComputedRef<'shorts' | 'live' | 'upcoming' | null>}
+ */
+const kind = computed(() => {
+  if (isUpcoming.value) { return 'upcoming' }
+  if (isLive.value) { return 'live' }
+  if (isShort.value) { return 'shorts' }
+
+  return null
+})
 
 const historyEntry = computed(() => store.getters.getHistoryCacheById[id.value])
 

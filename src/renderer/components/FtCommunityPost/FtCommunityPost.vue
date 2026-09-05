@@ -7,6 +7,16 @@
     <div
       class="author-div"
     >
+      <!--
+        The marker leads the header rather than sitting on a line of its own,
+        because the card's children are auto-placed into the shared list
+        layout's columns: one more child at the top level would shift every
+        other one into the next cell.
+      -->
+      <FtKindMarker
+        v-if="!singlePost"
+        kind="post"
+      />
       <template
         v-if="authorThumbnail"
       >
@@ -178,6 +188,7 @@ import { computed, onMounted, useTemplateRef } from 'vue'
 import FtListVideo from '../FtListVideo/FtListVideo.vue'
 import FtListPlaylist from '../FtListPlaylist/FtListPlaylist.vue'
 import FtCommunityPoll from '../FtCommunityPoll/FtCommunityPoll.vue'
+import FtKindMarker from '../FtKindMarker/FtKindMarker.vue'
 import FtShareButton from '../FtShareButton/FtShareButton.vue'
 import { vSaferHtml } from '../../directives/vSaferHtml.js'
 

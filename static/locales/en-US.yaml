@@ -44,6 +44,13 @@ Global:
   Live: Live
   Posts: Posts
   Sort By: Sort By
+  # The marker a card carries when it is not a plain video. One card, one item,
+  # so these are singular, unlike the plural names of the feeds above.
+  Kind Marker:
+    Short: Short
+    Live: Live
+    Upcoming: Upcoming
+    Post: Post
   Counts:
     Video Count: 1 video | {count} videos
     Channel Count: 1 channel | {count} channels
