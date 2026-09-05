@@ -80,8 +80,9 @@ function resetProgress() {
  * @property {object[]} channels the ones the refresh could not reach
  * @property {(channel: object) => Promise<{ status: string, entries: any[] | null }>} fetchChannel
  *   expected to have its retry ladder suppressed
- * @property {(results: { channel: object, result: object }[]) => void} onRecovered
- *   called after each group with whatever that group managed to get
+ * @property {(results: { channel: object, result: object }[]) => void | Promise<void>} onRecovered
+ *   called after each group with whatever that group managed to get, and
+ *   awaited, because it writes the cache the feed is then rebuilt from
  */
 
 /**
@@ -118,7 +119,7 @@ export async function recoverUnresolvedChannels({ feed, channels, fetchChannel, 
     progress.remaining = Math.max(0, progress.remaining - succeeded.length)
 
     if (succeeded.length > 0) {
-      onRecovered(succeeded)
+      await onRecovered(succeeded)
     }
   }
 
