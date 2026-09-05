@@ -1,14 +1,19 @@
 /*
- * One track holding three stops, filled at the stop that is chosen. Deliberately
- * not the pill shape of the chips next to it: the chips are four independent
- * switches and this is one choice out of three, and controls that behave
- * differently should not look the same.
+ * Three stops with the chosen one filled in, sitting straight on the card the
+ * way the chips beside it do. A track behind them looks tidier and costs too
+ * much: it puts the filled stop on a background of its own, and hotPink, where
+ * the primary colour is black and the secondary card background is nearly
+ * black, then shows no chosen stop at all.
+ *
+ * Both rows wrap, because the app may be 340px wide and a label followed by
+ * three words is more than fits on one line there.
  */
 
 .densitySwitch {
   align-items: center;
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
 
 .densityLabel {
@@ -18,10 +23,9 @@
 }
 
 .densityOptions {
-  background-color: var(--secondary-card-bg-color);
-  border-radius: 999px;
   display: flex;
-  padding: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .densityOption {

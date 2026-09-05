@@ -54,8 +54,7 @@ import { useI18n } from 'vue-i18n'
 
 import store from '../../store/index'
 
-/** Narrowest first, so the row reads as a scale. */
-const DENSITY_MODES = ['tight', 'standard', 'spacious']
+import { DENSITY_MODES, useDensityModeNames } from '../../composables/useDensityModes'
 
 const { t } = useI18n()
 
@@ -65,15 +64,12 @@ const labelId = useId()
 // six radios, and choosing in either would clear the other.
 const groupName = useId()
 
-const modeNames = computed(() => ({
-  tight: t('Global.Density.Tight'),
-  standard: t('Global.Density.Standard'),
-  spacious: t('Global.Density.Spacious')
-}))
+const modeNames = useDensityModeNames()
 
 /**
  * Reading and writing the one global setting, which is all the state there is
- * here. Writing it persists it, and every grid follows within the frame.
+ * here. Writing it persists it, and every grid in the app follows as soon as
+ * the write lands.
  *
  * @type {import('vue').WritableComputedRef<'tight' | 'standard' | 'spacious'>}
  */

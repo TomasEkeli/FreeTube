@@ -88,7 +88,7 @@
         :placeholder="t('Global.Density.Label')"
         :value="listDensity"
         :select-names="densityNames"
-        :select-values="DENSITY_VALUES"
+        :select-values="DENSITY_MODES"
         :icon="['fas', 'expand']"
         @change="updateListDensity"
       />
@@ -195,6 +195,8 @@ import FtFlexBox from '../ft-flex-box/ft-flex-box.vue'
 import FtButton from '../FtButton/FtButton.vue'
 
 import store from '../../store/index'
+
+import { DENSITY_MODES, useDensityModeNames } from '../../composables/useDensityModes'
 
 import allLocales from '../../../../static/locales/activeLocales.json'
 import { randomArrayItem, showToast } from '../../helpers/utils'
@@ -390,13 +392,11 @@ function updateListType(value) {
   store.dispatch('updateListType', value)
 }
 
-const DENSITY_VALUES = ['tight', 'standard', 'spacious']
+// Names in the modes' own order, so this dropdown and the switch on the
+// subscriptions page always offer the same three things in the same sequence.
+const densityModeNames = useDensityModeNames()
 
-const densityNames = computed(() => [
-  t('Global.Density.Tight'),
-  t('Global.Density.Standard'),
-  t('Global.Density.Spacious')
-])
+const densityNames = computed(() => DENSITY_MODES.map((mode) => densityModeNames.value[mode]))
 
 /** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious'>} */
 const listDensity = computed(() => store.getters.getListDensity)

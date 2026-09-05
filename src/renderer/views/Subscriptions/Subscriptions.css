@@ -10,8 +10,9 @@
 
 /*
  * The page's one control row: which kinds are shown at one end, how much room
- * each of them gets at the other. Both sides wrap onto their own line when the
- * window is too narrow to hold them side by side.
+ * each of them gets at the other. The two sides break onto separate lines when
+ * the window is too narrow to hold them side by side, and each of them wraps
+ * within itself after that.
  */
 .controlRow {
   align-items: center;
