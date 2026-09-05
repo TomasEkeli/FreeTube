@@ -98,15 +98,3 @@
   user-select: none;
 }
 
-// The comment count is a link only on a card that leads to an attachment, where
-// it is the way back to the post. It stays quiet until it is pointed at.
-.countLink {
-  color: inherit;
-  text-decoration: none;
-
-  &:hover,
-  &:focus-visible {
-    color: var(--primary-text-color);
-    text-decoration: underline;
-  }
-}

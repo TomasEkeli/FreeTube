@@ -46,8 +46,16 @@
       </div>
     </div>
     <div class="postInfo">
+      <!--
+        The post marker is the way to the post, whether or not the card leads
+        there itself: one place, always the same place, so it is worth learning.
+      -->
       <div class="markers">
-        <FtKindMarker kind="post" />
+        <FtKindMarker
+          kind="post"
+          :to="postLink"
+          :title="postLink ? $t('Channel.Posts.View Full Post') : undefined"
+        />
         <FtKindMarker
           v-if="attachmentKind !== null"
           :kind="attachmentKind"
@@ -92,12 +100,9 @@
           />
           {{ formattedVoteCount }}
         </span>
-        <component
-          :is="postCommentsLink ? 'RouterLink' : 'span'"
+        <span
           v-if="commentCount != null"
           class="count"
-          :class="{ countLink: postCommentsLink }"
-          :to="postCommentsLink"
           :title="$t('Global.Counts.Comment Count', { count: formattedCommentCount }, commentCount)"
           :aria-label="$t('Global.Counts.Comment Count', { count: formattedCommentCount }, commentCount)"
         >
@@ -106,7 +111,7 @@
             aria-hidden="true"
           />
           {{ formattedCommentCount }}
-        </component>
+        </span>
       </div>
     </div>
   </div>
@@ -226,12 +231,6 @@ const attachmentLink = computed(() => {
 })
 
 const cardLink = computed(() => attachmentLink.value ?? postLink.value)
-
-/**
- * When the card leads to the attachment, the post is still one click away, on
- * its comment count — which is where `FtCommunityPost` has always put it.
- */
-const postCommentsLink = computed(() => (attachmentLink.value ? postLink.value : undefined))
 
 /**
  * A post whose video has been watched greys out like the video card it now

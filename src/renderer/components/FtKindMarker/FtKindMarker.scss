@@ -37,3 +37,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+// A marker that leads somewhere looks like a marker until it is pointed at,
+// because it is still primarily a label. The underline answers hover and
+// keyboard focus alike, so the affordance is not a mouse's alone.
+.kindMarkerLink {
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--primary-text-color);
+
+    .kindMarkerLabel {
+      text-decoration: underline;
+    }
+  }
+}

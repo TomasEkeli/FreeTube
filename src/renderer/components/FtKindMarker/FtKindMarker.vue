@@ -6,9 +6,11 @@
   icon alone would not, hence icon *and* text.
 -->
 <template>
-  <div
+  <component
+    :is="to ? 'RouterLink' : 'div'"
     class="kindMarker"
-    :class="kind"
+    :class="[kind, { kindMarkerLink: to }]"
+    :to="to"
   >
     <FontAwesomeIcon
       class="kindMarkerIcon"
@@ -16,7 +18,7 @@
       aria-hidden="true"
     />
     <span class="kindMarkerLabel">{{ label }}</span>
-  </div>
+  </component>
 </template>
 
 <script setup>
@@ -32,6 +34,20 @@ const props = defineProps({
     // Spelled out rather than read off the map below, because `defineProps` is
     // compiled away and may not reach for anything declared in this block.
     validator: (value) => ['shorts', 'live', 'upcoming', 'post', 'poll', 'quiz', 'video', 'playlist'].includes(value)
+  },
+  /**
+   * Where the marker leads, if anywhere.
+   *
+   * A marker is a label, and stays one by default. It becomes a link where the
+   * card it sits on leads somewhere else: a post card carrying a video opens
+   * the video, and then the word POST is the way to the post. The word names
+   * the destination, which is the whole reason it is the right thing to click.
+   *
+   * @type {import('vue').PropType<import('vue-router').RouteLocationRaw?>}
+   */
+  to: {
+    type: [Object, String],
+    default: undefined
   }
 })
 
