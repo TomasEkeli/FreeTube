@@ -85,6 +85,14 @@
         @change="updateListType"
       />
       <FtSelect
+        :placeholder="t('Global.Density.Label')"
+        :value="listDensity"
+        :select-names="densityNames"
+        :select-values="DENSITY_VALUES"
+        :icon="['fas', 'expand']"
+        @change="updateListDensity"
+      />
+      <FtSelect
         :placeholder="t('Settings.General Settings.Thumbnail Preference.Thumbnail Preference')"
         :value="thumbnailPreference"
         :select-names="thumbnailTypeNames"
@@ -380,6 +388,24 @@ const listType = computed(() => store.getters.getListType)
  */
 function updateListType(value) {
   store.dispatch('updateListType', value)
+}
+
+const DENSITY_VALUES = ['tight', 'standard', 'spacious']
+
+const densityNames = computed(() => [
+  t('Global.Density.Tight'),
+  t('Global.Density.Standard'),
+  t('Global.Density.Spacious')
+])
+
+/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious'>} */
+const listDensity = computed(() => store.getters.getListDensity)
+
+/**
+ * @param {'tight' | 'standard' | 'spacious'} value
+ */
+function updateListDensity(value) {
+  store.dispatch('updateListDensity', value)
 }
 
 const THUMBNAIL_TYPE_VALUES = ['', 'start', 'middle', 'end', 'hidden', 'blur']

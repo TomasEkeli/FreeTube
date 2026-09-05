@@ -51,6 +51,13 @@ Global:
     Live: Live
     Upcoming: Upcoming
     Post: Post
+  # How much room a card gets on every grid. One global setting, offered both
+  # in the settings and as a switch on the subscriptions page.
+  Density:
+    Label: Card density
+    Tight: Tight
+    Standard: Standard
+    Spacious: Spacious
   Counts:
     Video Count: 1 video | {count} videos
     Channel Count: 1 channel | {count} channels

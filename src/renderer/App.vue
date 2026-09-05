@@ -244,6 +244,21 @@ function updateTheme() {
 
 updateTheme()
 
+/** @type {import('vue').ComputedRef<string>} */
+const listDensity = computed(() => store.getters.getListDensity)
+
+watch(listDensity, updateDensity)
+
+/**
+ * Puts the density mode where the stylesheets can see it. It rides on its own
+ * attribute rather than the theme's class list so that the two never collide.
+ */
+function updateDensity() {
+  document.body.dataset.density = listDensity.value || 'standard'
+}
+
+updateDensity()
+
 const showUpdatesBanner = ref(false)
 const latestVersionNumber = ref('')
 const showReleaseNotes = ref(false)
@@ -725,4 +740,5 @@ function handleDragStart(event) {
 </script>
 
 <style src="./themes.css" />
+<style src="./density.css" />
 <style scoped src="./App.css" />
