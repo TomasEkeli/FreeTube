@@ -200,6 +200,15 @@ export function useSubscriptionFeed(feed) {
         // starts never takes the loader down again. The branch underneath, for
         // automatic fetching off, settles by itself and is left alone.
         settleWithoutRefresh()
+
+        // The other feeds still want the refresh a profile switch calls for.
+        // This tab is the only one mounted, so if it says nothing on their
+        // behalf nobody does, and they are each left to discover the new
+        // profile whenever they are next looked at.
+        if (reason === 'profile') {
+          refreshAllSubscriptionFeeds({ preferredFeed: feed, reason })
+        }
+
         return
       }
 
