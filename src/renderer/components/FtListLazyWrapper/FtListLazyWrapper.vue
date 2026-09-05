@@ -54,6 +54,7 @@
         :hide-forbidden-titles="hideForbiddenTitles"
         :appearance="appearance"
         :data="data"
+        :layout="layout"
       />
       <FtListHashtag
         v-else-if="data.type === 'hashtag'"

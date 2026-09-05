@@ -13,10 +13,9 @@ import { postsFeed } from './posts'
  * differing only in which store keys and fetch functions they named. The
  * composable took the shared behaviour; this takes what genuinely differs.
  *
- * It is module scope rather than a prop of the tab because a refresh now
- * refreshes every feed, including the three whose tabs are not mounted. A
- * descriptor that only exists while its tab is on screen cannot be used to
- * fetch that feed, which is the flaw the whole manager is here to fix.
+ * The tabs are gone now — one stream shows every kind at once — and what is
+ * left of a feed is exactly this: where its entries are cached, how they are
+ * fetched, and how they are filtered before assembly.
  *
  * @typedef {object} SubscriptionFeedDescriptor
  * @property {string} feed identifier used for tracing, caching and error collection
@@ -27,17 +26,16 @@ import { postsFeed } from './posts'
  * @property {boolean} followsDetailBackfill whether this feed's entries can be
  *   filled in in the background, and so needs rebuilding when they are
  * @property {() => boolean} isEnabled whether the user has this feed switched on
- * @property {boolean} [isCommunity] posts are rendered as a list, not a grid
- * @property {number} [initialDataLimit]
  * @property {(channel: object, context: { useRss: boolean, failedAttempts?: number }) => Promise<{
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
  * @property {(entries: any[]) => any[]} postProcess filter and sort for display
  * @property {() => boolean} [isAvailable] whether an automatic refresh fetches
  *   this feed under the current settings. Distinct from `isEnabled`: a feed
- *   switched on but unavailable keeps its tab, which shows what the cache holds
- *   and offers a fetch. It does not say the feed cannot be fetched: posts under
- *   RSS fetch perfectly well when someone asks for them by name.
+ *   switched on but unavailable still contributes whatever the cache holds to
+ *   the stream, and is offered a fetch of its own. It does not say the feed
+ *   cannot be fetched: posts under RSS fetch perfectly well when someone asks
+ *   for them by name.
  * @property {(t: (key: string, values?: object) => string) => string}
  *   [unavailableMessage] what to say when no automatic refresh will fetch it.
  *   Handed `t` rather than importing one, so it can be written with literal
@@ -55,7 +53,11 @@ const DESCRIPTORS = {
   posts: postsFeed
 }
 
-/** The order feeds are shown in, and refreshed in when nothing is preferred. */
+/**
+ * The order feeds are refreshed in, and the order they are assembled into the
+ * stream in — which decides only which kind an entry two feeds both claim is
+ * counted as, since the stream itself is sorted by date.
+ */
 export const SUBSCRIPTION_FEEDS = ['videos', 'shorts', 'live', 'posts']
 
 /**
@@ -73,7 +75,7 @@ export function subscriptionFeedDescriptor(feed) {
 }
 
 /**
- * The feeds the user has switched on. What the tab strip offers.
+ * The feeds the user has switched on. What the stream is assembled from.
  *
  * @returns {string[]}
  */
@@ -87,8 +89,8 @@ export function enabledSubscriptionFeeds() {
  * Being switched on and being fetched on a schedule are different questions,
  * and answering them with one flag is what made the posts tab disappear
  * whenever RSS was turned on. Vanishing is a poor way to explain anything, and
- * so is a paragraph with nothing to press: the tab now stays, shows what the
- * cache holds, and offers a fetch.
+ * so is a paragraph with nothing to press: whatever posts the cache holds stay
+ * in the stream, and a button next to it offers to fetch more.
  *
  * What this does not decide is whether the feed can be fetched. A request the
  * user made by name is exempt, as `requestedFeed` in `subscriptionRefresh`.

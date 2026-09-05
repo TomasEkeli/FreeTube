@@ -29,18 +29,18 @@ export const postsFeed = {
   // Community posts are not published as RSS at all
   rssMode: 'never',
   followsDetailBackfill: false,
-  isCommunity: true,
-  initialDataLimit: 20,
   isEnabled: () => !store.getters.getHideSubscriptionsCommunity,
   // YouTube publishes no RSS for posts, so with RSS on an automatic refresh has
   // nothing lighter to fetch this feed with, and lighter is the whole point of
   // the setting. The scraper still works: what is unavailable is the automatic
-  // fetch, so the tab stays, shows what the cache holds and offers to fetch.
+  // fetch, so whatever posts the cache holds stay in the stream and a button
+  // over it offers to fetch more.
   //
-  // It used to disappear, and then it printed a paragraph pointing at two
-  // settings. A tab that goes missing when an unrelated-looking setting is
-  // turned on teaches the user nothing about why, and a tab with nothing to
-  // press sends someone who wants posts to Settings to get them.
+  // The tab this used to have disappeared instead, and then printed a paragraph
+  // pointing at two settings. A tab that goes missing when an unrelated-looking
+  // setting is turned on teaches the user nothing about why, and a paragraph
+  // with nothing to press sends someone who wants posts to Settings to get
+  // them.
   isAvailable: () => !store.getters.getUseRssFeeds,
   // Written out with literal keys, and given `t` rather than reaching for one,
   // so the keys stay where lint and the translators can see them.
