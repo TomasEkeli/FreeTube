@@ -36,22 +36,21 @@
         v-else
         class="message"
       >
-        {{ isCommunity ? $t("Subscriptions.Empty Posts") : $t("Subscriptions.Empty Channels") }}
+        {{ $t("Subscriptions.Empty Channels") }}
       </p>
     </FtFlexBox>
     <FtElementList
       v-if="!isLoading && activeVideoList.length > 0"
       :data="activeVideoList"
       :use-channels-hidden-preference="false"
-      :display="isCommunity ? 'list' : ''"
     />
     <FtAutoLoadNextPageWrapper
-      v-if="!isLoading && videoList.length > dataLimit"
+      v-if="!isLoading && filteredVideoList.length > dataLimit"
       @load-next-page="increaseLimit"
     >
       <FtFlexBox>
         <FtButton
-          :label="isCommunity ? $t('Subscriptions.Load More Posts') : $t('Subscriptions.Load More Videos')"
+          :label="$t('Subscriptions.Load More')"
           background-color="var(--primary-color)"
           text-color="var(--text-with-main-color)"
           @click="increaseLimit"
@@ -87,11 +86,21 @@ import store from '../../store/index'
 
 import { useSubscriptionActivity } from '../../composables/useSubscriptionActivity'
 
-import { backfillDetailsForVisibleVideos } from '../../helpers/subscriptionDetailBackfill'
 import { debounce } from '../../helpers/utils'
 
 import { KeyboardShortcuts } from '../../../constants'
 
+/**
+ * The subscriptions stream, as a list on a page.
+ *
+ * Named for the tabs it used to be one of; it now renders the one merged stream
+ * of videos, shorts, live streams and posts. The name is left alone because
+ * upstream carries this file too and a rename buys nothing but merge conflicts.
+ *
+ * Everything here is about display: which slice is on screen, which of the
+ * viewing preferences hide entries, and the widget over the top. What the
+ * entries are and where they came from is the composable's business.
+ */
 const props = defineProps({
   isLoading: {
     type: Boolean,
@@ -106,10 +115,6 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  isCommunity: {
-    type: Boolean,
-    default: false
-  },
   errorChannels: {
     type: Array,
     default: () => []
@@ -117,19 +122,6 @@ const props = defineProps({
   attemptedFetch: {
     type: Boolean,
     default: false
-  },
-  initialDataLimit: {
-    type: Number,
-    default: 100
-  },
-  /**
-   * Which feed to fill in missing details for, or empty for feeds where there
-   * is nothing to fill in: shorts have no duration from any source, and posts
-   * are not videos at all.
-   */
-  backfillFeed: {
-    type: String,
-    default: ''
   },
   lastRefreshTimestamp: {
     type: String,
@@ -141,7 +133,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['refresh'])
+const emit = defineEmits(['refresh', 'visible-entries'])
 
 const {
   label: activityLabel,
@@ -150,9 +142,19 @@ const {
   stop: stopActivity
 } = useSubscriptionActivity({ isRefreshing: toRef(props, 'isRefreshing') })
 
+/**
+ * How much of the stream is rendered at once, and how much each "load more"
+ * adds.
+ *
+ * A prop until the four feeds became one, so that posts could be paged twenty
+ * at a time where videos went a hundred. There is one stream now, so there is
+ * one page size.
+ */
+const PAGE_SIZE = 100
+
 const subscriptionLimit = sessionStorage.getItem('subscriptionLimit')
 
-const dataLimit = ref(subscriptionLimit !== null ? parseInt(subscriptionLimit) : props.initialDataLimit)
+const dataLimit = ref(subscriptionLimit !== null ? parseInt(subscriptionLimit) : PAGE_SIZE)
 
 const activeVideoList = computed(() => {
   if (filteredVideoList.value.length < dataLimit.value) {
@@ -188,10 +190,6 @@ const onlyShowLatestFromChannelNumber = computed(() => {
 })
 
 const filteredVideoList = computed(() => {
-  if (props.isCommunity) {
-    return props.videoList
-  }
-
   let videoList = props.videoList
 
   if (hideWatchedSubs.value) {
@@ -227,21 +225,23 @@ const filteredVideoList = computed(() => {
 })
 
 function increaseLimit() {
-  dataLimit.value += props.initialDataLimit
+  dataLimit.value += PAGE_SIZE
   sessionStorage.setItem('subscriptionLimit', dataLimit.value.toFixed(0))
 }
 
 // This component is the only place that knows which part of the feed is actually
-// on screen, so it is the place that decides what is worth filling in. Debounced
-// because the visible slice changes on every refresh, profile switch and "load
-// more", and often several times in quick succession.
-const queueDetailBackfill = debounce(() => {
-  if (!props.backfillFeed || props.isLoading) { return }
+// on screen, so it is the place that says what it is. What that is worth doing
+// about is not its business: the entries no longer say which kind they are, and
+// the composable that assembled them is what knows. Debounced because the
+// visible slice changes on every refresh, profile switch and "load more", and
+// often several times in quick succession.
+const reportVisibleEntries = debounce(() => {
+  if (props.isLoading) { return }
 
-  backfillDetailsForVisibleVideos(activeVideoList.value, props.backfillFeed)
+  emit('visible-entries', activeVideoList.value)
 }, 500)
 
-watch(activeVideoList, queueDetailBackfill)
+watch(activeVideoList, reportVisibleEntries)
 
 /**
  * @param {KeyboardEvent} event

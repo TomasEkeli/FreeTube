@@ -8,42 +8,37 @@
         />
         {{ $t("Subscriptions.Subscriptions") }}
       </h2>
-      <FtFlexBox
-        class="tabs"
-        role="tablist"
-        :aria-label="$t('Subscriptions.Subscriptions Tabs')"
+      <div
+        v-for="feed in unavailableFeeds"
+        :key="feed"
+        class="unavailable"
       >
-        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
-        <div
-          v-for="(feed, index) in visibleFeeds"
-          :key="feed"
-          :ref="element => { tabElements[index] = element }"
-          class="tab"
-          role="tab"
-          :aria-selected="currentFeed === feed"
-          aria-controls="subscriptionsPanel"
-          :tabindex="currentFeed === feed ? 0 : -1"
-          :class="{ selectedTab: currentFeed === feed }"
-          @click="changeTab(feed)"
-          @keydown.space.enter.prevent="changeTab(feed)"
-          @keydown.left.right="focusTab($event, feed)"
-        >
-          <FontAwesomeIcon
-            :icon="FEED_ICONS[feed]"
-            class="subscriptionIcon"
-          />
-          {{ subscriptionFeedTitle(feed) }}
-        </div>
-      </FtFlexBox>
-      <SubscriptionsTab
-        v-if="currentFeed !== null"
-        id="subscriptionsPanel"
-        :key="currentFeed"
-        :feed="currentFeed"
-        role="tabpanel"
+        <p class="message">
+          {{ unavailableMessage(feed) }}
+        </p>
+        <FtButton
+          v-if="unavailableActionLabel(feed)"
+          :label="unavailableActionLabel(feed)"
+          @click="refreshFeed(feed)"
+        />
+      </div>
+      <SubscriptionsTabUi
+        v-if="anyFeedEnabled"
+        :is-loading="isLoading"
+        :is-refreshing="isRefreshing"
+        :video-list="entryList"
+        :error-channels="errorChannels"
+        :attempted-fetch="attemptedFetch"
+        :last-refresh-timestamp="lastRefreshTimestamp"
+        :title="$t('Subscriptions.Subscriptions')"
+        @refresh="refresh"
+        @visible-entries="noteVisibleEntries"
       />
-      <p v-else>
-        {{ $t("Subscriptions.All Subscription Tabs Hidden", {
+      <p
+        v-else
+        class="message"
+      >
+        {{ $t("Subscriptions.All Subscription Kinds Hidden", {
           subsection: $t('Settings.Distraction Free Settings.Sections.Subscriptions Page'),
           settingsSection: $t('Settings.Distraction Free Settings.Distraction Free Settings')
         }) }}
@@ -54,125 +49,77 @@
 
 <script setup>
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
-import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
-import SubscriptionsTab from '../../components/SubscriptionsTab/SubscriptionsTab.vue'
+import SubscriptionsTabUi from '../../components/SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
-import store from '../../store/index'
+import { useSubscriptionFeed } from '../../composables/useSubscriptionFeed'
 
-import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
-
-import { enabledSubscriptionFeeds } from '../../helpers/subscriptionFeeds'
+import { enabledSubscriptionFeeds, subscriptionFeedDescriptor } from '../../helpers/subscriptionFeeds'
 
 /**
- * Which feeds exist, and whether each is switched on, is the registry's
- * business now: the same answer decides what the tab strip offers and what a
- * refresh covers, and those two disagreeing would mean refreshing a feed nobody
- * can see, or showing a tab nothing fetches.
+ * The subscriptions page: one stream, not four tabs.
  *
- * What stays here is what is genuinely about the strip: the icons, and which
- * tab is selected.
- */
-const FEED_ICONS = {
-  videos: ['fa', 'video'],
-  shorts: ['fa', 'clapperboard'],
-  live: ['fa', 'tower-broadcast'],
-  posts: ['fa', 'message']
-}
-
-const subscriptionFeedTitle = useSubscriptionFeedTitle()
-
-/**
- * The feeds switched on, in tab order. Reactive because deciding it reads the
- * distraction-free settings out of the store, and doing that inside a computed
- * is what subscribes to them.
+ * The strip is gone, and with it the question it kept asking. Choosing between
+ * videos, shorts, live streams and posts was never a thing anyone wanted to do;
+ * it was a thing they had to do four times to find out what had happened since
+ * yesterday, and choosing wrongly hid the answer. So the four lists are one
+ * list, in one order, and what is left here is the page around it.
  *
- * @type {import('vue').ComputedRef<string[]>}
+ * The session key that remembered which tab was open went with the strip. There
+ * is nothing left for it to remember.
  */
-const visibleFeeds = computed(() => enabledSubscriptionFeeds())
 
-/** @type {import('vue').Ref<'videos' | 'shorts' | 'live' | 'posts' | null>} */
-const currentFeed = ref(visibleFeeds.value[0] ?? null)
+const { t } = useI18n()
 
-// Restore the tab last used, from before this view was navigated away from
-const remembered = sessionStorage.getItem('Subscriptions/currentTab')
-
-if (remembered !== null && visibleFeeds.value.includes(remembered)) {
-  currentFeed.value = remembered
-}
-
-watch(currentFeed, (value) => {
-  if (value !== null) {
-    sessionStorage.setItem('Subscriptions/currentTab', value)
-  } else {
-    sessionStorage.removeItem('Subscriptions/currentTab')
-  }
-})
-
-watch(visibleFeeds, (value) => {
-  if (value.length === 0) {
-    currentFeed.value = null
-  } else if (!value.includes(currentFeed.value)) {
-    currentFeed.value = value[0]
-  }
-})
+const {
+  isLoading,
+  isRefreshing,
+  entryList,
+  errorChannels,
+  attemptedFetch,
+  unavailableFeeds,
+  lastRefreshTimestamp,
+  noteVisibleEntries,
+  refresh,
+  refreshFeed
+} = useSubscriptionFeed()
 
 /**
+ * Whether any kind is switched on at all. Every one of them hidden is a page
+ * with nothing on it and no way to tell why, so it is answered rather than
+ * shown as an empty stream.
+ *
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const anyFeedEnabled = computed(() => enabledSubscriptionFeeds().length > 0)
+
+/**
+ * Why nothing automatic will fetch a kind that is switched on.
+ *
+ * Written by the feed descriptor and handed `t` rather than reaching for one,
+ * so the locale keys stay written out where lint and the translators can see
+ * them.
+ *
  * @param {string} feed
+ * @returns {string}
  */
-function changeTab(feed) {
-  if (feed === currentFeed.value) {
-    return
-  }
-
-  if (visibleFeeds.value.includes(feed)) {
-    currentFeed.value = feed
-  } else {
-    // First visible tab or no tab
-    currentFeed.value = visibleFeeds.value.length > 0 ? visibleFeeds.value[0] : null
-  }
+function unavailableMessage(feed) {
+  return subscriptionFeedDescriptor(feed).unavailableMessage?.(t) ?? ''
 }
 
-/** @type {HTMLElement[]} */
-const tabElements = ref([])
-
 /**
- * @param {KeyboardEvent} event
- * @param {string} focusedFeed
+ * What to put on the button that fetches it anyway, or empty for a kind that
+ * offers no such button.
+ *
+ * @param {string} feed
+ * @returns {string}
  */
-function focusTab(event, focusedFeed) {
-  if (event.altKey) {
-    return
-  }
-
-  event.preventDefault()
-
-  const feeds = visibleFeeds.value
-
-  if (feeds.length === 1) {
-    store.commit('setOutlinesHidden', false)
-    return
-  }
-
-  let index = feeds.indexOf(focusedFeed)
-
-  if (event.key === 'ArrowLeft') {
-    index--
-  } else {
-    index++
-  }
-
-  if (index < 0) {
-    index = feeds.length - 1
-  } else if (index > feeds.length - 1) {
-    index = 0
-  }
-
-  tabElements.value[index]?.focus()
-
-  store.commit('setOutlinesHidden', false)
+function unavailableActionLabel(feed) {
+  return subscriptionFeedDescriptor(feed).unavailableActionLabel?.(t) ?? ''
 }
 </script>
 
