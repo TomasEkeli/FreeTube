@@ -210,13 +210,19 @@ const canPerformMoreCommentLoading = computed(() => {
   return commentData.value.length > 0 && !isLoading.value && showComments.value && !!nextPageToken.value && !isMoreCommentsLoading.value
 })
 
+/** @type {import('vue').ComputedRef<boolean>} */
+const commentAutoLoadEnabled = computed(() => {
+  return store.getters.getCommentAutoLoadEnabled
+})
+
 /**
  * On Local the comments load themselves as the viewer scrolls to them, and the
- * threads open themselves. Invidious keeps its click-to-load behaviour.
+ * threads open themselves. Invidious keeps its click-to-load behaviour, and so
+ * does Local when the viewer switches this off.
  * @type {import('vue').ComputedRef<boolean>}
  */
 const autoLoadOnScroll = computed(() => {
-  return !!process.env.SUPPORTS_LOCAL_API && backendPreference.value === 'local'
+  return !!process.env.SUPPORTS_LOCAL_API && backendPreference.value === 'local' && commentAutoLoadEnabled.value
 })
 
 /**
