@@ -1,7 +1,11 @@
+/* The two custom properties are the density mode; see density.css. */
 .grid {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(262px, 1fr));
+  gap: var(--ft-grid-gap);
+
+  /* The min() keeps a single column inside a window narrower than the mode's
+     own column width, which the app's 340px minimum width allows. */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--ft-grid-min-column), 100%), 1fr));
   justify-content: space-evenly;
 }
 
