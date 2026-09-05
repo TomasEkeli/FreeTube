@@ -2,7 +2,7 @@ import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 
 import store from '../store/index'
 
-import { subscriptionFeedDescriptor } from '../helpers/subscriptionFeeds'
+import { subscriptionFeedDescriptor, subscriptionFeedIsAvailable } from '../helpers/subscriptionFeeds'
 import {
   cancelSubscriptionRefresh,
   refreshAllSubscriptionFeeds,
@@ -63,6 +63,13 @@ export function useSubscriptionFeed(feed) {
     return entries
   })
 
+  /**
+   * Whether the cache can supply this feed for the whole active profile.
+   *
+   * False for a feed nobody has fetched, and false again when a fetch left any
+   * channel out, so it answers whether this feed is complete rather than
+   * whether anyone has tried.
+   */
   const cacheForAllActiveProfileChannelsPresent = computed(() => {
     if (
       cacheEntriesForAllActiveProfileChannels.value.length === 0 ||
@@ -75,6 +82,36 @@ export function useSubscriptionFeed(feed) {
       return cacheEntry[entriesKey] != null
     })
   })
+
+  /**
+   * Whether the cache holds this feed for any of the active profile's channels.
+   *
+   * What the tab asks before offering to fetch a feed that nothing fetches on
+   * its own. `cacheForAllActiveProfileChannelsPresent` is the stricter
+   * neighbour and answers whether the feed is complete, which is the wrong
+   * question here: a fetch that reached 597 of 600 channels leaves the feed
+   * incomplete for good, and covering those 597 channels' posts with an
+   * explanation of a setting would be a strange answer to the button that
+   * fetched them.
+   *
+   * An empty array is a real answer and counts, which is how a profile whose
+   * channels have posted nothing is told from one nobody has fetched.
+   */
+  const cacheHasAnyEntriesForActiveProfile = computed(() => {
+    return cacheEntriesForAllActiveProfileChannels.value.some((cacheEntry) => {
+      return cacheEntry[entriesKey] != null
+    })
+  })
+
+  /**
+   * Whether a refresh started now would fetch this feed at all.
+   *
+   * Computed so that every reader gets the setting as it stands, rather than as
+   * it stood when the tab was mounted.
+   *
+   * @type {import('vue').ComputedRef<boolean>}
+   */
+  const refreshWouldFetchThisFeed = computed(() => subscriptionFeedIsAvailable(feed))
 
   const lastRefreshTimestamp = computed(() => {
     // Cache is not ready when data is just loaded from remote
@@ -127,6 +164,19 @@ export function useSubscriptionFeed(feed) {
   }
 
   /**
+   * Show what the cache holds and stop waiting, because nothing is coming.
+   *
+   * The loader starts up and comes down when `isRefreshing` falls. For a feed
+   * every refresh skips, that fall never happens, because it never rose: the
+   * refresh drops the feed inside `refreshSubscriptionFeeds`, and nothing of
+   * this feed's state changes at all. Whatever the cache holds, including
+   * nothing, is the whole answer until someone asks for a fetch by name.
+   */
+  function settleWithoutRefresh() {
+    rebuildFromCache()
+  }
+
+  /**
    * @param {object} options
    * @param {'profile' | 'cache-miss'} options.reason why this is being asked,
    *   which decides how much gets fetched if anything must be
@@ -145,6 +195,14 @@ export function useSubscriptionFeed(feed) {
     }
 
     if (fetchSubscriptionsAutomatically.value) {
+      if (!refreshWouldFetchThisFeed.value) {
+        // The refresh below would drop this feed, and a refresh that never
+        // starts never takes the loader down again. The branch underneath, for
+        // automatic fetching off, settles by itself and is left alone.
+        settleWithoutRefresh()
+        return
+      }
+
       // Deliberately not keeping what is on screen, unlike a refresh or the
       // first load. Getting here means the cache cannot supply this profile, so
       // whatever is displayed belongs to a different set of channels and leaving
@@ -189,7 +247,18 @@ export function useSubscriptionFeed(feed) {
     // and replaces it in one go, rather than growing the list underneath whoever
     // is reading it.
     if (!showCacheIfPresent()) {
-      isLoading.value = true
+      if (refreshWouldFetchThisFeed.value) {
+        isLoading.value = true
+      } else if (subscriptionCacheReady.value) {
+        // The refresh below covers the other feeds and not this one. `isLoading`
+        // starts true, so saying nothing here leaves the loader up for good.
+        settleWithoutRefresh()
+      }
+
+      // A cache that is merely still loading is the other reason
+      // `showCacheIfPresent` says no, and then the loader is honest: the watch
+      // on `subscriptionCacheReady` settles it once there is something to
+      // settle with.
     }
 
     store.commit('setSubscriptionsFirstAutoFetchRun')
@@ -320,6 +389,15 @@ export function useSubscriptionFeed(feed) {
         return
       }
 
+      if (!refreshWouldFetchThisFeed.value) {
+        // The cache arriving is the last thing that was going to happen to this
+        // feed, so it is the whole answer, complete or not. A profile switched
+        // while the cache was still loading gets here too, having left the
+        // loader up on its way past.
+        settleWithoutRefresh()
+        return
+      }
+
       // The cache finishes loading after this view is mounted, so the automatic
       // refresh on startup begins before there is anything to show. As soon as
       // there is, put it up: waiting for the refresh means half a minute of
@@ -340,6 +418,11 @@ export function useSubscriptionFeed(feed) {
     entryList,
     errorChannels,
     attemptedFetch: state.attemptedFetch,
+    // How the tab tells a feed with nothing behind it from one that was
+    // fetched and found nothing. An empty list cannot: it would put the
+    // explanation back up after a successful fetch of a profile whose channels
+    // have posted nothing, and look like the button did nothing.
+    cacheHasAnyEntriesForActiveProfile,
     lastRefreshTimestamp,
     refresh,
     refreshThisFeed
