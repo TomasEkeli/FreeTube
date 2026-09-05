@@ -137,16 +137,30 @@ let profileGeneration = 0
 let recoveryChain = Promise.resolve()
 
 /**
- * Refresh every feed the user has switched on and that can be fetched.
+ * Refresh every feed the user has switched on and that automatic refreshes
+ * cover, plus one asked for by name.
  *
  * @param {object} [options]
  * @param {string} [options.preferredFeed] the feed being looked at, which is
  *   fetched first so that it finishes soonest
  * @param {string} [options.reason] recorded in the trace
+ * @param {string} [options.requestedFeed] a feed the user asked for by name,
+ *   which is fetched whether or not automatic refreshes cover it. Trusted to be
+ *   a feed the user has switched on, because only a mounted tab can name one,
+ *   and a tab only exists for an enabled feed.
  * @returns {Promise<void>}
  */
-export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
-  return refreshSubscriptionFeeds(fetchableSubscriptionFeeds(), { preferredFeed, reason })
+export function refreshAllSubscriptionFeeds({ preferredFeed, reason, requestedFeed } = {}) {
+  const feeds = fetchableSubscriptionFeeds()
+
+  if (requestedFeed != null && !feeds.includes(requestedFeed)) {
+    // Posts under RSS are the case: automatic refreshes leave the feed alone,
+    // which is what the setting is for, and someone pressing refresh on the
+    // posts tab is not an automatic refresh
+    feeds.push(requestedFeed)
+  }
+
+  return refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed })
 }
 
 /**
@@ -162,18 +176,24 @@ export function refreshAllSubscriptionFeeds({ preferredFeed, reason } = {}) {
  * @param {object} [options]
  * @param {string} [options.preferredFeed]
  * @param {string} [options.reason] recorded in the trace
+ * @param {string} [options.requestedFeed] the one feed exempt from the
+ *   availability filter, because the user named it
  * @returns {Promise<void>}
  */
-export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason } = {}) {
-  // A feed with no way to be fetched under the current settings is dropped
-  // here rather than at every call site, so that no route into a refresh can
-  // spend hundreds of requests discovering there was nothing to ask for
-  const ordered = feeds.filter(subscriptionFeedIsAvailable).sort((a, b) => {
-    if (a === preferredFeed) { return -1 }
-    if (b === preferredFeed) { return 1 }
+export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed } = {}) {
+  // A feed automatic refreshes do not cover is dropped here rather than at every
+  // call site, so that no route into an automatic refresh has to remember which
+  // settings hold which feed back. The feed the user named is the
+  // exception: unavailable says that nothing fetches it on its own, and says
+  // nothing about whether it can be fetched, which posts can.
+  const ordered = feeds
+    .filter(feed => feed === requestedFeed || subscriptionFeedIsAvailable(feed))
+    .sort((a, b) => {
+      if (a === preferredFeed) { return -1 }
+      if (b === preferredFeed) { return 1 }
 
-    return 0
-  })
+      return 0
+    })
 
   return Promise.all(ordered.map(feed => startFeedRefresh(feed, reason))).then(() => {})
 }
@@ -314,7 +334,7 @@ async function fetchOneChannel(feed, descriptor, channel, context) {
       context.unresolved.push(channel)
     }
 
-    cacheChannelResult(descriptor, channel, result, context.subscriptionUpdates)
+    await cacheChannelResult(descriptor, channel, result, context.subscriptionUpdates)
 
     if (descriptor.followsDetailBackfill) {
       // Offered now rather than when the refresh commits: the entries are in
@@ -332,16 +352,24 @@ async function fetchOneChannel(feed, descriptor, channel, context) {
  * avatar. Shared by the refresh and by the recovery, so that a channel recovered
  * later is stored exactly as one fetched first time would have been.
  *
+ * Awaited, and awaited by both callers, because the cache is what the screen is
+ * built from. The store action writes the datastore before it commits, so a
+ * result that is merely dispatched is not in the cache yet, and the revision
+ * bump that rebuilds the feed can beat it there. Over six hundred channels that
+ * loses the last one or two from the first render; over one channel it loses
+ * everything, and a refresh that fetched a post says there are none.
+ *
  * @param {import('./subscriptionFeeds').SubscriptionFeedDescriptor} descriptor
  * @param {object} channel
  * @param {{ entries: any[] | null, name?: string, thumbnailUrl?: string }} result
  * @param {object[]} subscriptionUpdates collected, to be dispatched in one go
+ * @returns {Promise<void>}
  */
-function cacheChannelResult(descriptor, channel, { entries, name, thumbnailUrl }, subscriptionUpdates) {
+async function cacheChannelResult(descriptor, channel, { entries, name, thumbnailUrl }, subscriptionUpdates) {
   // null means the fetch failed, so leave whatever we already had alone.
   // An empty array is a real answer and is worth caching.
   if (entries != null) {
-    store.dispatch(descriptor.updateAction, {
+    await store.dispatch(descriptor.updateAction, {
       channelId: channel.id,
       [descriptor.entriesKey]: entries
     })
@@ -467,9 +495,9 @@ function startRecoveryIfNeeded(feed, context, collector) {
       // refused is exactly the wrong response to being refused.
       fetchChannel: channel => injectedFetchFailure() ??
         descriptor.fetchChannel(channel, { useRss: context.useRss, failedAttempts: NO_RETRY_ATTEMPTS }),
-      onRecovered: (results) => {
+      onRecovered: async (results) => {
         for (const { channel, result } of results) {
-          cacheChannelResult(descriptor, channel, result, subscriptionUpdates)
+          await cacheChannelResult(descriptor, channel, result, subscriptionUpdates)
 
           state.unresolvedChannels.value = state.unresolvedChannels.value
             .filter(unresolved => unresolved.id !== channel.id)

@@ -33,12 +33,18 @@ import { postsFeed } from './posts'
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
  * @property {(entries: any[]) => any[]} postProcess filter and sort for display
- * @property {() => boolean} [isAvailable] whether the feed can be fetched under
- *   the current settings at all. Distinct from `isEnabled`: a feed switched on
- *   but unavailable keeps its tab and explains itself, rather than vanishing.
+ * @property {() => boolean} [isAvailable] whether an automatic refresh fetches
+ *   this feed under the current settings. Distinct from `isEnabled`: a feed
+ *   switched on but unavailable keeps its tab, which shows what the cache holds
+ *   and offers a fetch. It does not say the feed cannot be fetched: posts under
+ *   RSS fetch perfectly well when someone asks for them by name.
  * @property {(t: (key: string, values?: object) => string) => string}
- *   [unavailableMessage] what to say when it cannot be fetched. Handed `t`
- *   rather than importing one, so it can be written with literal locale keys.
+ *   [unavailableMessage] what to say when no automatic refresh will fetch it.
+ *   Handed `t` rather than importing one, so it can be written with literal
+ *   locale keys.
+ * @property {(t: (key: string, values?: object) => string) => string}
+ *   [unavailableActionLabel] the label on the button that fetches it anyway.
+ *   Absent for feeds with no unavailable state.
  */
 
 /** @type {Record<string, SubscriptionFeedDescriptor>} */
@@ -76,12 +82,16 @@ export function enabledSubscriptionFeeds() {
 }
 
 /**
- * Whether this feed can be fetched at all under the current settings.
+ * Whether an automatic refresh fetches this feed under the current settings.
  *
- * Being switched on and being fetchable are different questions, and answering
- * them with one flag is what made the posts tab disappear whenever RSS was
- * turned on. Vanishing is a poor way to explain anything: the tab now stays and
- * says why it is empty.
+ * Being switched on and being fetched on a schedule are different questions,
+ * and answering them with one flag is what made the posts tab disappear
+ * whenever RSS was turned on. Vanishing is a poor way to explain anything, and
+ * so is a paragraph with nothing to press: the tab now stays, shows what the
+ * cache holds, and offers a fetch.
+ *
+ * What this does not decide is whether the feed can be fetched. A request the
+ * user made by name is exempt, as `requestedFeed` in `subscriptionRefresh`.
  *
  * @param {string} feed
  * @returns {boolean}
@@ -91,7 +101,8 @@ export function subscriptionFeedIsAvailable(feed) {
 }
 
 /**
- * The feeds a refresh should actually fetch: switched on, and possible.
+ * The feeds an automatic refresh fetches: switched on, and not held back by a
+ * setting.
  *
  * @returns {string[]}
  */

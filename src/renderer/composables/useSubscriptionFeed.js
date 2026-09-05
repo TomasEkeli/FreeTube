@@ -2,7 +2,7 @@ import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 
 import store from '../store/index'
 
-import { subscriptionFeedDescriptor } from '../helpers/subscriptionFeeds'
+import { subscriptionFeedDescriptor, subscriptionFeedIsAvailable } from '../helpers/subscriptionFeeds'
 import {
   cancelSubscriptionRefresh,
   refreshAllSubscriptionFeeds,
@@ -63,6 +63,13 @@ export function useSubscriptionFeed(feed) {
     return entries
   })
 
+  /**
+   * Whether the cache can supply this feed for the whole active profile.
+   *
+   * False for a feed nobody has fetched, and false again when a fetch left any
+   * channel out, so it answers whether this feed is complete rather than
+   * whether anyone has tried.
+   */
   const cacheForAllActiveProfileChannelsPresent = computed(() => {
     if (
       cacheEntriesForAllActiveProfileChannels.value.length === 0 ||
@@ -75,6 +82,38 @@ export function useSubscriptionFeed(feed) {
       return cacheEntry[entriesKey] != null
     })
   })
+
+  /**
+   * Whether the cache holds this feed for any of the active profile's channels.
+   *
+   * What the tab asks before offering to fetch a feed that nothing fetches on
+   * its own. `cacheForAllActiveProfileChannelsPresent` is the stricter
+   * neighbour and answers whether the feed is complete, which is the wrong
+   * question here: a fetch that reached 597 of 600 channels leaves the feed
+   * incomplete for good, and covering those 597 channels' posts with an
+   * explanation of a setting would be a strange answer to the button that
+   * fetched them.
+   *
+   * An empty array is a real answer and counts, which is how a profile whose
+   * channels have posted nothing is told from one nobody has fetched.
+   */
+  const cacheHasAnyEntriesForActiveProfile = computed(() => {
+    return cacheEntriesForAllActiveProfileChannels.value.some((cacheEntry) => {
+      return cacheEntry[entriesKey] != null
+    })
+  })
+
+  /**
+   * Whether an automatic refresh started now would fetch this feed. A request
+   * naming the feed is exempt, and is how this one is ever fetched at all while
+   * the setting behind it is on.
+   *
+   * Computed so that every reader gets the setting as it stands, rather than as
+   * it stood when the tab was mounted.
+   *
+   * @type {import('vue').ComputedRef<boolean>}
+   */
+  const refreshWouldFetchThisFeed = computed(() => subscriptionFeedIsAvailable(feed))
 
   const lastRefreshTimestamp = computed(() => {
     // Cache is not ready when data is just loaded from remote
@@ -127,6 +166,19 @@ export function useSubscriptionFeed(feed) {
   }
 
   /**
+   * Show what the cache holds and stop waiting, because nothing is coming.
+   *
+   * The loader starts up and comes down when `isRefreshing` falls. For a feed
+   * every refresh skips, that fall never happens, because it never rose: the
+   * refresh drops the feed inside `refreshSubscriptionFeeds`, and nothing of
+   * this feed's state changes at all. Whatever the cache holds, including
+   * nothing, is the whole answer until someone asks for a fetch by name.
+   */
+  function settleWithoutRefresh() {
+    rebuildFromCache()
+  }
+
+  /**
    * @param {object} options
    * @param {'profile' | 'cache-miss'} options.reason why this is being asked,
    *   which decides how much gets fetched if anything must be
@@ -145,6 +197,23 @@ export function useSubscriptionFeed(feed) {
     }
 
     if (fetchSubscriptionsAutomatically.value) {
+      if (!refreshWouldFetchThisFeed.value) {
+        // The refresh below would drop this feed, and a refresh that never
+        // starts never takes the loader down again. The branch underneath, for
+        // automatic fetching off, settles by itself and is left alone.
+        settleWithoutRefresh()
+
+        // The other feeds still want the refresh a profile switch calls for.
+        // This tab is the only one mounted, so if it says nothing on their
+        // behalf nobody does, and they are each left to discover the new
+        // profile whenever they are next looked at.
+        if (reason === 'profile') {
+          refreshAllSubscriptionFeeds({ preferredFeed: feed, reason })
+        }
+
+        return
+      }
+
       // Deliberately not keeping what is on screen, unlike a refresh or the
       // first load. Getting here means the cache cannot supply this profile, so
       // whatever is displayed belongs to a different set of channels and leaving
@@ -189,7 +258,18 @@ export function useSubscriptionFeed(feed) {
     // and replaces it in one go, rather than growing the list underneath whoever
     // is reading it.
     if (!showCacheIfPresent()) {
-      isLoading.value = true
+      if (refreshWouldFetchThisFeed.value) {
+        isLoading.value = true
+      } else if (subscriptionCacheReady.value) {
+        // The refresh below covers the other feeds and not this one. `isLoading`
+        // starts true, so saying nothing here leaves the loader up for good.
+        settleWithoutRefresh()
+      }
+
+      // A cache that is merely still loading is the other reason
+      // `showCacheIfPresent` says no, and then the loader is honest: the watch
+      // on `subscriptionCacheReady` settles it once there is something to
+      // settle with.
     }
 
     store.commit('setSubscriptionsFirstAutoFetchRun')
@@ -197,7 +277,23 @@ export function useSubscriptionFeed(feed) {
   }
 
   /**
-   * Refresh because someone asked for one.
+   * Put the spinner up before a fetch, but only when there is nothing behind
+   * it.
+   *
+   * The feed already on screen is for this same profile and is still perfectly
+   * readable, so it stays up while the refresh runs behind it, exactly as it
+   * does on startup. Replacing it with a spinner for the half minute that six
+   * hundred channels take hides the thing being read in order to announce that
+   * it is being brought up to date.
+   */
+  function showLoaderIfEmpty() {
+    if (entryList.value.length === 0) {
+      isLoading.value = true
+    }
+  }
+
+  /**
+   * Refresh because someone asked for one, from the widget over the feed.
    *
    * With automatic fetching on, that means every feed: they are all going to be
    * fetched this window anyway, and the one being looked at is fetched first so
@@ -205,29 +301,75 @@ export function useSubscriptionFeed(feed) {
    * is deliberately economising on requests, so a refresh buys exactly the feed
    * that was asked for.
    *
-   * The feed already on screen is for this same profile and is still perfectly
-   * readable, so it stays up while the refresh runs behind it, exactly as it
-   * does on startup. Replacing it with a spinner for the half minute that six
-   * hundred channels take hides the thing being read in order to announce that
-   * it is being brought up to date. Only when there is nothing on screen does
-   * the spinner make sense.
+   * `requestedFeed` says the feed was named by hand, which is what refetches
+   * posts while RSS is on. Every automatic path omits it, and so goes on
+   * skipping the feeds a setting says to skip.
    *
    * Takes no arguments deliberately: it is bound to a template event, and a
    * payload arriving as an options object would quietly change what it does.
    */
   function refresh() {
-    if (entryList.value.length === 0) {
-      isLoading.value = true
-    }
+    showLoaderIfEmpty()
 
     if (fetchSubscriptionsAutomatically.value) {
-      return refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'button' })
+      return refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'button', requestedFeed: feed })
     }
 
-    return refreshSubscriptionFeeds([feed], { reason: 'button' })
+    return refreshSubscriptionFeeds([feed], { reason: 'button', requestedFeed: feed })
+  }
+
+  /**
+   * Fetch this feed, and only this feed, because this feed is what was asked
+   * for.
+   *
+   * The sister of `refresh()`, and narrower on purpose. A refresh widget sits
+   * over a feed that automatic refreshes keep up to date, so with automatic
+   * fetching on it may as well bring the other three along. The button this is
+   * for appears when a setting is holding one feed back, and the user who set
+   * that setting asked for fewer requests: fetching the other three because
+   * they pressed the one that says posts would be the opposite of what they
+   * asked for.
+   *
+   * What it cannot keep to itself is the recovery: `startFeedRefresh` treats
+   * any refresh as superseding the one global recovery escalation, so pressing
+   * this while another feed is retrying its unreachable channels abandons that
+   * retry. One feed's worth of channels is still the smaller cost.
+   *
+   * Takes no arguments, for the same reason `refresh()` does not: it is bound
+   * to a template event, and a payload arriving as an options object would
+   * quietly change what it does.
+   */
+  function refreshThisFeed() {
+    showLoaderIfEmpty()
+
+    return refreshSubscriptionFeeds([feed], { reason: 'load', requestedFeed: feed })
   }
 
   watch(state.revision, rebuildFromCache)
+
+  /**
+   * A cache write from an other window arrives here as a store mutation, with
+   * none of the revision bump that the same write in this window would have
+   * carried, so nothing rebuilds. The tab reads the cache to decide whether to
+   * explain itself and reads the list to fill itself in, and those two coming
+   * apart is what leaves a window saying the channels have no posts while the
+   * cache in front of it holds some.
+   *
+   * Rebuilding when the cache stops being empty puts them back together, which
+   * is exactly the condition the explanation is keyed to. It does not follow
+   * every later write: one window's feed lagging another's is how this has
+   * always worked, and rebuilding on each of six hundred channels would be a
+   * poor way to fix it.
+   *
+   * Not while this window is refreshing, because then the revision bump is
+   * already coming, and it is what replaces the feed in one go rather than
+   * growing it underneath whoever is reading.
+   */
+  watch(cacheHasAnyEntriesForActiveProfile, (present) => {
+    if (!present || state.isRefreshing.value) { return }
+
+    rebuildFromCache()
+  })
 
   watch(state.isRefreshing, (refreshing) => {
     // A refresh that ends without committing — cancelled, or superseded by a
@@ -282,6 +424,15 @@ export function useSubscriptionFeed(feed) {
         return
       }
 
+      if (!refreshWouldFetchThisFeed.value) {
+        // The cache arriving is the last thing that was going to happen to this
+        // feed, so it is the whole answer, complete or not. A profile switched
+        // while the cache was still loading gets here too, having left the
+        // loader up on its way past.
+        settleWithoutRefresh()
+        return
+      }
+
       // The cache finishes loading after this view is mounted, so the automatic
       // refresh on startup begins before there is anything to show. As soon as
       // there is, put it up: waiting for the refresh means half a minute of
@@ -302,7 +453,13 @@ export function useSubscriptionFeed(feed) {
     entryList,
     errorChannels,
     attemptedFetch: state.attemptedFetch,
+    // How the tab tells a feed with nothing behind it from one that was
+    // fetched and found nothing. An empty list cannot: it would put the
+    // explanation back up after a successful fetch of a profile whose channels
+    // have posted nothing, and look like the button did nothing.
+    cacheHasAnyEntriesForActiveProfile,
     lastRefreshTimestamp,
-    refresh
+    refresh,
+    refreshThisFeed
   }
 }
