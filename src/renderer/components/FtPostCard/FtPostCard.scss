@@ -44,7 +44,8 @@
 }
 
 .postHeader {
-  color: var(--secondary-text-color);
+  @include ft-list-item.low-contrast-when-watched(var(--secondary-text-color));
+
   font-size: 13px;
   overflow-wrap: anywhere;
 
@@ -55,14 +56,18 @@
 }
 
 .postBody {
-  color: var(--primary-text-color);
   text-decoration: none;
 }
 
 // Two lines beside a picture, which is what a video card's title gets, because
 // the complaint that put this card here was that a post in the grid was too
 // tall. The post is not being read here; it is being recognised.
+//
+// The mixin is the shared card's, so a watched post fades exactly as a watched
+// video's title does.
 .postSnippet {
+  @include ft-list-item.low-contrast-when-watched(var(--primary-text-color));
+
   display: -webkit-box;
   font-size: 15px;
   line-height: 1.35;
@@ -91,4 +96,17 @@
   margin-block-start: auto;
   padding-block-start: 6px;
   user-select: none;
+}
+
+// The comment count is a link only on a card that leads to an attachment, where
+// it is the way back to the post. It stays quiet until it is pointed at.
+.countLink {
+  color: inherit;
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--primary-text-color);
+    text-decoration: underline;
+  }
 }

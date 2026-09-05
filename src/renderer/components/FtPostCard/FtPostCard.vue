@@ -10,7 +10,7 @@
 <template>
   <div
     class="ft-list-post ft-list-item grid"
-    :class="{ noThumbnail: thumbnail === '' }"
+    :class="{ noThumbnail: thumbnail === '', watched }"
   >
     <div
       v-if="thumbnail !== ''"
@@ -23,9 +23,9 @@
         and then this is the link.
       -->
       <component
-        :is="postLink ? 'RouterLink' : 'div'"
+        :is="cardLink ? 'RouterLink' : 'div'"
         class="thumbnailLink"
-        :to="postLink"
+        :to="cardLink"
         :tabindex="bodyText === '' ? undefined : -1"
         :aria-hidden="bodyText === '' ? undefined : 'true'"
         :aria-label="bodyText === '' ? $t('Channel.Posts.View Full Post') : undefined"
@@ -38,6 +38,12 @@
           loading="lazy"
         >
       </component>
+      <div
+        v-if="watched"
+        class="videoWatched"
+      >
+        {{ $t('Video.Watched') }}
+      </div>
     </div>
     <div class="postInfo">
       <div class="markers">
@@ -62,10 +68,10 @@
         </span>
       </div>
       <component
-        :is="postLink ? 'RouterLink' : 'div'"
+        :is="cardLink ? 'RouterLink' : 'div'"
         v-if="bodyText !== ''"
         class="postBody"
-        :to="postLink"
+        :to="cardLink"
       >
         <p
           class="postSnippet"
@@ -86,9 +92,12 @@
           />
           {{ formattedVoteCount }}
         </span>
-        <span
+        <component
+          :is="postCommentsLink ? 'RouterLink' : 'span'"
           v-if="commentCount != null"
           class="count"
+          :class="{ countLink: postCommentsLink }"
+          :to="postCommentsLink"
           :title="$t('Global.Counts.Comment Count', { count: formattedCommentCount }, commentCount)"
           :aria-label="$t('Global.Counts.Comment Count', { count: formattedCommentCount }, commentCount)"
         >
@@ -97,7 +106,7 @@
             aria-hidden="true"
           />
           {{ formattedCommentCount }}
-        </span>
+        </component>
       </div>
     </div>
   </div>
@@ -113,6 +122,7 @@ import FtKindMarker from '../FtKindMarker/FtKindMarker.vue'
 import store from '../../store/index'
 
 import { formatNumber, getRelativeTimeFromDate } from '../../helpers/utils'
+import { entryVideoId } from '../../helpers/subscriptions'
 import { youtubeImageUrlToInvidious } from '../../helpers/api/invidious'
 
 import thumbnailPlaceholder from '../../assets/img/thumbnail_placeholder.svg'
@@ -185,6 +195,53 @@ const postLink = computed(() => {
     path: `/post/${props.data.postId}`,
     query: authorId.value ? { authorId: authorId.value } : undefined
   }
+})
+
+// The same rule the feed's hide-watched filter uses, so the card and the filter
+// cannot disagree about which video a post leads to.
+const attachmentVideoId = computed(() => entryVideoId(props.data) ?? '')
+
+/**
+ * A post carrying a video or a playlist is a channel handing you one, so the
+ * card goes where the post points rather than landing you on the post to click
+ * again. The attachment's marker is what says where that is.
+ */
+const attachmentLink = computed(() => {
+  if (attachmentHidden.value) { return undefined }
+
+  if (attachmentVideoId.value !== '') {
+    return { path: `/watch/${attachmentVideoId.value}` }
+  }
+
+  const attachment = props.data.postContent
+
+  if (attachment?.type === 'playlist' && attachment.content?.playlistId) {
+    return {
+      path: `/playlist/${attachment.content.playlistId}`,
+      query: { playlistType: '' }
+    }
+  }
+
+  return undefined
+})
+
+const cardLink = computed(() => attachmentLink.value ?? postLink.value)
+
+/**
+ * When the card leads to the attachment, the post is still one click away, on
+ * its comment count — which is where `FtCommunityPost` has always put it.
+ */
+const postCommentsLink = computed(() => (attachmentLink.value ? postLink.value : undefined))
+
+/**
+ * A post whose video has been watched greys out like the video card it now
+ * leads to, read from the same history. A post that leads to itself has no
+ * such record to read: FreeTube remembers videos, not posts.
+ */
+const watched = computed(() => {
+  if (attachmentVideoId.value === '' || attachmentHidden.value) { return false }
+
+  return store.getters.getHistoryCacheById[attachmentVideoId.value] !== undefined
 })
 
 /** @type {import('vue').ComputedRef<string?>} */
