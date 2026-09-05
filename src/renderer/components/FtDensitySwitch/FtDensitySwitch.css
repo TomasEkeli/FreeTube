@@ -1,0 +1,69 @@
+/*
+ * One track holding three stops, filled at the stop that is chosen. Deliberately
+ * not the pill shape of the chips next to it: the chips are four independent
+ * switches and this is one choice out of three, and controls that behave
+ * differently should not look the same.
+ */
+
+.densitySwitch {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.densityLabel {
+  color: var(--tertiary-text-color);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.densityOptions {
+  background-color: var(--secondary-card-bg-color);
+  border-radius: 999px;
+  display: flex;
+  padding: 2px;
+}
+
+.densityOption {
+  cursor: pointer;
+}
+
+/*
+ * Out of sight and still in the tab order, so the group keeps the keyboard
+ * behaviour a set of radios has.
+ */
+.densityInput {
+  block-size: 0;
+  inline-size: 0;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+.densityText {
+  border-radius: 999px;
+  color: var(--secondary-text-color);
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  padding-block: 6px;
+  padding-inline: 12px;
+  transition: background-color 0.2s, color 0.2s;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.densityOption:hover .densityText {
+  color: var(--primary-text-color);
+}
+
+.densityTextChosen,
+.densityOption:hover .densityTextChosen {
+  background-color: var(--primary-color);
+  color: var(--text-with-main-color);
+}
+
+.densityInput:focus-visible + .densityText {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}

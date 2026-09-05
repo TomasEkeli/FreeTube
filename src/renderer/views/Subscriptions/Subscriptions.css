@@ -9,9 +9,9 @@
 }
 
 /*
- * The page's one control row. The chips are the whole of it for now; the
- * density switch joins them at the far end, which is why this is a row with
- * two sides rather than the chips laid out on their own.
+ * The page's one control row: which kinds are shown at one end, how much room
+ * each of them gets at the other. Both sides wrap onto their own line when the
+ * window is too narrow to hold them side by side.
  */
 .controlRow {
   align-items: center;

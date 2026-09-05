@@ -23,6 +23,7 @@
             @toggle="toggleFeed(feed)"
           />
         </div>
+        <FtDensitySwitch />
       </div>
       <SubscriptionsTabUi
         v-if="anyFeedEnabled"
@@ -51,6 +52,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed } from 'vue'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtToggleChip from '../../components/FtToggleChip/FtToggleChip.vue'
 import SubscriptionsTabUi from '../../components/SubscriptionsTabUi/SubscriptionsTabUi.vue'
 
@@ -80,8 +82,9 @@ import {
  * something as current as the rest of the stream, out of the cache, without a
  * request and without a spinner.
  *
- * The row is the page's one control row, and it is where the density switch
- * will stand too.
+ * The row is the page's one control row: the chips at one end and the density
+ * switch at the other, since a second row of controls over a single stream is
+ * the sort of thing this page was rebuilt to be rid of.
  */
 
 const {
