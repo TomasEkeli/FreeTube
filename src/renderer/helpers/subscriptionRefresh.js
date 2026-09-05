@@ -145,7 +145,9 @@ let recoveryChain = Promise.resolve()
  *   fetched first so that it finishes soonest
  * @param {string} [options.reason] recorded in the trace
  * @param {string} [options.requestedFeed] a feed the user asked for by name,
- *   which is fetched whether or not automatic refreshes cover it
+ *   which is fetched whether or not automatic refreshes cover it. Trusted to be
+ *   a feed the user has switched on, because only a mounted tab can name one,
+ *   and a tab only exists for an enabled feed.
  * @returns {Promise<void>}
  */
 export function refreshAllSubscriptionFeeds({ preferredFeed, reason, requestedFeed } = {}) {
@@ -180,8 +182,8 @@ export function refreshAllSubscriptionFeeds({ preferredFeed, reason, requestedFe
  */
 export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed } = {}) {
   // A feed automatic refreshes do not cover is dropped here rather than at every
-  // call site, so that no route into a refresh can spend hundreds of requests
-  // discovering there was nothing to ask for. The feed the user named is the
+  // call site, so that no route into an automatic refresh has to remember which
+  // settings hold which feed back. The feed the user named is the
   // exception: unavailable says that nothing fetches it on its own, and says
   // nothing about whether it can be fetched, which posts can.
   const ordered = feeds

@@ -197,7 +197,23 @@ export function useSubscriptionFeed(feed) {
   }
 
   /**
-   * Refresh because someone asked for one.
+   * Put the spinner up before a fetch, but only when there is nothing behind
+   * it.
+   *
+   * The feed already on screen is for this same profile and is still perfectly
+   * readable, so it stays up while the refresh runs behind it, exactly as it
+   * does on startup. Replacing it with a spinner for the half minute that six
+   * hundred channels take hides the thing being read in order to announce that
+   * it is being brought up to date.
+   */
+  function showLoaderIfEmpty() {
+    if (entryList.value.length === 0) {
+      isLoading.value = true
+    }
+  }
+
+  /**
+   * Refresh because someone asked for one, from the widget over the feed.
    *
    * With automatic fetching on, that means every feed: they are all going to be
    * fetched this window anyway, and the one being looked at is fetched first so
@@ -205,30 +221,48 @@ export function useSubscriptionFeed(feed) {
    * is deliberately economising on requests, so a refresh buys exactly the feed
    * that was asked for.
    *
-   * The feed already on screen is for this same profile and is still perfectly
-   * readable, so it stays up while the refresh runs behind it, exactly as it
-   * does on startup. Replacing it with a spinner for the half minute that six
-   * hundred channels take hides the thing being read in order to announce that
-   * it is being brought up to date. Only when there is nothing on screen does
-   * the spinner make sense.
-   *
-   * The only place `requestedFeed` is passed. It says the feed was asked for by
-   * name, which is what fetches posts while RSS is on: every automatic path
-   * omits it and so keeps skipping the feeds a setting says to skip.
+   * `requestedFeed` says the feed was named by hand, which is what refetches
+   * posts while RSS is on. Every automatic path omits it, and so goes on
+   * skipping the feeds a setting says to skip.
    *
    * Takes no arguments deliberately: it is bound to a template event, and a
    * payload arriving as an options object would quietly change what it does.
    */
   function refresh() {
-    if (entryList.value.length === 0) {
-      isLoading.value = true
-    }
+    showLoaderIfEmpty()
 
     if (fetchSubscriptionsAutomatically.value) {
       return refreshAllSubscriptionFeeds({ preferredFeed: feed, reason: 'button', requestedFeed: feed })
     }
 
     return refreshSubscriptionFeeds([feed], { reason: 'button', requestedFeed: feed })
+  }
+
+  /**
+   * Fetch this feed, and only this feed, because this feed is what was asked
+   * for.
+   *
+   * The sister of `refresh()`, and narrower on purpose. A refresh widget sits
+   * over a feed that automatic refreshes keep up to date, so with automatic
+   * fetching on it may as well bring the other three along. The button this is
+   * for appears when a setting is holding one feed back, and the user who set
+   * that setting asked for fewer requests: fetching the other three because
+   * they pressed the one that says posts would be the opposite of what they
+   * asked for.
+   *
+   * What it cannot keep to itself is the recovery: `startFeedRefresh` treats
+   * any refresh as superseding the one global recovery escalation, so pressing
+   * this while another feed is retrying its unreachable channels abandons that
+   * retry. One feed's worth of channels is still the smaller cost.
+   *
+   * Takes no arguments, for the same reason `refresh()` does not: it is bound
+   * to a template event, and a payload arriving as an options object would
+   * quietly change what it does.
+   */
+  function refreshThisFeed() {
+    showLoaderIfEmpty()
+
+    return refreshSubscriptionFeeds([feed], { reason: 'load', requestedFeed: feed })
   }
 
   watch(state.revision, rebuildFromCache)
@@ -307,6 +341,7 @@ export function useSubscriptionFeed(feed) {
     errorChannels,
     attemptedFetch: state.attemptedFetch,
     lastRefreshTimestamp,
-    refresh
+    refresh,
+    refreshThisFeed
   }
 }
