@@ -33,7 +33,12 @@ export const liveFeed = {
   entriesKey: 'videos',
   rssMode: 'setting',
   followsDetailBackfill: true,
-  isEnabled: () => !store.getters.getHideLiveStreams && !store.getters.getHideSubscriptionsLive,
+  shownGetter: 'getShowSubscriptionsLive',
+  shownAction: 'updateShowSubscriptionsLive',
+  // The one kind with a setting above its chip: someone who has hidden live
+  // streams across the whole app has said something larger than this stream,
+  // and is not offered a chip here that would contradict it.
+  isHiddenAppWide: () => store.getters.getHideLiveStreams,
   fetchChannel: (channel, { useRss, failedAttempts = 0 }) => {
     if (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious') {
       return useRss

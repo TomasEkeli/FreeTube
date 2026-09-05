@@ -27,9 +27,15 @@ import { postsFeed } from './posts'
  *   no RSS to read there is nothing lighter to read, whatever the setting says.
  * @property {boolean} followsDetailBackfill whether this feed's entries can be
  *   filled in in the background, and so needs rebuilding when they are
- * @property {() => boolean} isEnabled whether the user has this feed switched
- *   on, which decides whether it is shown and nothing else. What is fetched is
- *   a separate question with a separate answer: every feed, every time.
+ * @property {string} shownGetter store getter holding this feed's chip: whether
+ *   the reader has it switched on. Only ever about what is shown. What is
+ *   fetched is a separate question with a separate answer: every feed, every
+ *   time.
+ * @property {string} shownAction store action the chip writes through
+ * @property {(() => boolean) | undefined} isHiddenAppWide whether a setting
+ *   outside this page hides this kind everywhere. It overrules the chip, and
+ *   the chip is not offered while it holds — there is no sense in a control
+ *   that cannot do anything. Only live has one.
  * @property {(channel: object, context: { useRss: boolean, failedAttempts?: number }) => Promise<{
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
@@ -69,10 +75,64 @@ export function subscriptionFeedDescriptor(feed) {
  * The feeds the user has switched on. What the stream is assembled from, and
  * the answer to that question only.
  *
+ * Two things decide it: the chip, which is the reader's choice for this stream,
+ * and the app-wide hide setting, which is their choice for the whole app and
+ * wins.
+ *
  * @returns {string[]}
  */
 export function enabledSubscriptionFeeds() {
-  return SUBSCRIPTION_FEEDS.filter(feed => DESCRIPTORS[feed].isEnabled())
+  return SUBSCRIPTION_FEEDS.filter(feed => {
+    return !subscriptionFeedIsHiddenAppWide(feed) && subscriptionFeedIsShown(feed)
+  })
+}
+
+/**
+ * The feeds worth offering a chip for.
+ *
+ * Everything except a kind already hidden across the whole app: a chip that
+ * could not change what is on screen would be a lie about who is in charge.
+ *
+ * @returns {string[]}
+ */
+export function choosableSubscriptionFeeds() {
+  return SUBSCRIPTION_FEEDS.filter(feed => !subscriptionFeedIsHiddenAppWide(feed))
+}
+
+/**
+ * Whether the reader has this feed's chip switched on.
+ *
+ * Their choice as they made it, which is not the same as what the stream ends
+ * up showing — `enabledSubscriptionFeeds` is where the two are put together.
+ * The chip must go on saying what it was left saying.
+ *
+ * @param {string} feed
+ * @returns {boolean}
+ */
+export function subscriptionFeedIsShown(feed) {
+  return store.getters[subscriptionFeedDescriptor(feed).shownGetter]
+}
+
+/**
+ * Switch a feed's chip on or off. Persisted, because it is a standing
+ * preference and not a mood.
+ *
+ * @param {string} feed
+ * @param {boolean} shown
+ * @returns {Promise<void>}
+ */
+export function setSubscriptionFeedShown(feed, shown) {
+  return store.dispatch(subscriptionFeedDescriptor(feed).shownAction, shown)
+}
+
+/**
+ * @param {string} feed
+ * @returns {boolean}
+ */
+function subscriptionFeedIsHiddenAppWide(feed) {
+  const { isHiddenAppWide } = subscriptionFeedDescriptor(feed)
+
+  return isHiddenAppWide != null && isHiddenAppWide()
 }
 
 /**
