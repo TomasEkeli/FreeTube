@@ -79,11 +79,11 @@ const {
 } = useSubscriptionFeed(props.feed)
 
 /**
- * Why this feed cannot be fetched right now, or empty if it can.
+ * Why no automatic refresh will fetch this feed right now, or empty when they
+ * will. Not why it cannot be fetched: the button below says otherwise.
  *
  * Computed rather than decided once, because the setting that makes a feed
- * unavailable can be changed while its tab is open, and the tab is not rebuilt
- * when it is.
+ * unavailable can be changed while its tab is open, from an other window.
  *
  * @type {import('vue').ComputedRef<string>}
  */

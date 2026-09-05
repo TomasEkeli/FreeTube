@@ -104,7 +104,9 @@ export function useSubscriptionFeed(feed) {
   })
 
   /**
-   * Whether a refresh started now would fetch this feed at all.
+   * Whether an automatic refresh started now would fetch this feed. A request
+   * naming the feed is exempt, and is how this one is ever fetched at all while
+   * the setting behind it is on.
    *
    * Computed so that every reader gets the setting as it stands, rather than as
    * it stood when the tab was mounted.
@@ -344,6 +346,30 @@ export function useSubscriptionFeed(feed) {
   }
 
   watch(state.revision, rebuildFromCache)
+
+  /**
+   * A cache write from an other window arrives here as a store mutation, with
+   * none of the revision bump that the same write in this window would have
+   * carried, so nothing rebuilds. The tab reads the cache to decide whether to
+   * explain itself and reads the list to fill itself in, and those two coming
+   * apart is what leaves a window saying the channels have no posts while the
+   * cache in front of it holds some.
+   *
+   * Rebuilding when the cache stops being empty puts them back together, which
+   * is exactly the condition the explanation is keyed to. It does not follow
+   * every later write: one window's feed lagging another's is how this has
+   * always worked, and rebuilding on each of six hundred channels would be a
+   * poor way to fix it.
+   *
+   * Not while this window is refreshing, because then the revision bump is
+   * already coming, and it is what replaces the feed in one go rather than
+   * growing it underneath whoever is reading.
+   */
+  watch(cacheHasAnyEntriesForActiveProfile, (present) => {
+    if (!present || state.isRefreshing.value) { return }
+
+    rebuildFromCache()
+  })
 
   watch(state.isRefreshing, (refreshing) => {
     // A refresh that ends without committing — cancelled, or superseded by a
