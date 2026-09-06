@@ -45,8 +45,13 @@
           control that reappeared in a slightly different place on every tab
           would read as a different control each time.
 
-          Not on the about tab, which is the one tab with no grid under it —
-          and the one where this row renders below the panel rather than above.
+          Not on the about tab, which has no card grid at all and which is also
+          the one tab this row renders below rather than above.
+
+          It does stay on the community tab, whose posts are forced to a list
+          layout and so do not answer to it. The switch is inert there in
+          exactly the way it is inert wherever the list layout is chosen, and
+          that is a question about the layout setting, not about this row.
         -->
         <FtDensitySwitch
           v-if="currentTab !== 'about'"
