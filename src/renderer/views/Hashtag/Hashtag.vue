@@ -8,14 +8,17 @@
       v-else
       class="card"
     >
-      <h2>
-        <font-awesome-icon
-          :icon="['fas', 'hashtag']"
-          aria-hidden="false"
-          class="headingIcon"
-        />
-        <bdi>{{ hashtag }}</bdi>
-      </h2>
+      <div class="headingRow">
+        <h2>
+          <font-awesome-icon
+            :icon="['fas', 'hashtag']"
+            aria-hidden="false"
+            class="headingIcon"
+          />
+          <bdi>{{ hashtag }}</bdi>
+        </h2>
+        <FtDensitySwitch />
+      </div>
       <FtElementList
         v-if="videos.length > 0"
         :data="videos"
@@ -51,6 +54,7 @@
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtElementList from '../../components/FtElementList/FtElementList.vue'
 import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
 import FtLoader from '../../components/FtLoader/FtLoader.vue'
