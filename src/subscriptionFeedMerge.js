@@ -7,6 +7,11 @@
  * shorts and live streams carry `published`, posts carry `publishedTime`. Both
  * are milliseconds since the epoch. Normalising that is nearly the whole job.
  *
+ * The rest of it is taking the future back out again: premieres and scheduled
+ * live streams carry their premiere date as their publish time, so one order by
+ * publish time would open the stream with things nobody can watch yet. They are
+ * split off here and shown as a schedule instead.
+ *
  * This lives outside the renderer helpers, next to `subscriptionVideoDetails`,
  * because it touches neither the store nor the DOM and the checks in
  * `_scripts/checkSubscriptionFeedMerge.mjs` need to be able to import it.
@@ -70,4 +75,104 @@ export function mergeSubscriptionFeedEntries(lists) {
   }
 
   return merged.sort((a, b) => subscriptionEntryPublishedAt(b) - subscriptionEntryPublishedAt(a))
+}
+
+/**
+ * Whether this entry is something that has not happened yet: a premiere or a
+ * scheduled live stream.
+ *
+ * Answered from the flags the sources set, and deliberately not from the
+ * publish time being in the future. The two agree today only because a premiere
+ * is given its premiere date as its publish time — which is the very defect the
+ * shelf exists to undo, and a shelf that depended on it would be built on the
+ * thing it is meant to correct.
+ *
+ * Not `isUpcomingPremiere`, which this file's renderer neighbour uses for the
+ * hide-premieres setting. That predicate falls back to "an RSS entry with no
+ * views is probably a premiere", a guess that is fine for a filter the reader
+ * asked for and wrong for this: it would take every genuinely new upload out of
+ * the stream for as long as nobody had watched it. An RSS entry says nothing
+ * about premieres, so it stays in the stream until the detail back-fill fetches
+ * the channel page and learns better, at which point the next rebuild moves it.
+ *
+ * @param {object} entry
+ * @returns {boolean}
+ */
+export function subscriptionEntryIsUpcoming(entry) {
+  return entry.isUpcoming === true ||
+    entry.premiere === true ||
+    entry.premiereDate != null ||
+    entry.premiereTimestamp != null
+}
+
+/**
+ * When an upcoming entry is scheduled for, or null when nothing says.
+ *
+ * The premiere date is preferred over the publish time even though they are
+ * meant to hold the same instant, because the premiere date is the one the
+ * source actually stated and the publish time is derived from it.
+ *
+ * `premiereDate` arrives as a `Date` from the scrapers and as a string once it
+ * has been through the cache, since that is JSON on disk.
+ *
+ * @param {object} entry
+ * @returns {number | null} milliseconds since the epoch
+ */
+export function subscriptionEntryScheduledAt(entry) {
+  if (entry.premiereDate != null) {
+    const at = entry.premiereDate instanceof Date
+      ? entry.premiereDate.getTime()
+      : Date.parse(entry.premiereDate)
+
+    if (Number.isFinite(at)) { return at }
+  }
+
+  if (entry.premiereTimestamp != null) {
+    const at = Number(entry.premiereTimestamp) * 1000
+
+    if (Number.isFinite(at)) { return at }
+  }
+
+  const published = subscriptionEntryPublishedAt(entry)
+
+  return published === 0 ? null : published
+}
+
+/**
+ * Take the future out of the stream.
+ *
+ * The stream is what has been published, so a premiere three days out has no
+ * business in it at all — least of all at the top, which is where its publish
+ * time puts it and where it displaces the newest thing anyone can actually
+ * watch. The two lists are read differently and so are ordered differently:
+ * the stream is history, newest first, and the shelf is a schedule, soonest
+ * first.
+ *
+ * The stream keeps the order it arrived in, which is the merge's. Only the
+ * shelf is sorted here.
+ *
+ * An upcoming entry that nothing dates goes to the end of the shelf: it is
+ * still scheduled, and "when" is the one thing the shelf is sorted by, so
+ * placing an unknown time anywhere among the known ones would be a claim.
+ *
+ * @param {any[]} entries the merged stream, newest first
+ * @returns {{ stream: any[], upcoming: any[] }}
+ */
+export function splitUpcomingEntries(entries) {
+  const stream = []
+  const upcoming = []
+
+  for (const entry of entries) {
+    if (subscriptionEntryIsUpcoming(entry)) {
+      upcoming.push(entry)
+    } else {
+      stream.push(entry)
+    }
+  }
+
+  upcoming.sort((a, b) => {
+    return (subscriptionEntryScheduledAt(a) ?? Infinity) - (subscriptionEntryScheduledAt(b) ?? Infinity)
+  })
+
+  return { stream, upcoming }
 }

@@ -1,0 +1,59 @@
+/*
+ * Set apart from the stream, quietly. The shelf has to read as a different
+ * thing from the list under it — that is its entire job — but it is not the
+ * thing anyone came to the page for, so it gets a tint and a rule and no
+ * colour of its own.
+ */
+
+.upcomingShelf {
+  background-color: var(--secondary-card-bg-color);
+  border-radius: 8px;
+  margin-block-end: 16px;
+  padding-block: 4px;
+  padding-inline: 8px;
+}
+
+/*
+ * The whole line is the control, not a chevron somewhere on it: folded away
+ * this line is the shelf, and a target the width of the card is one nobody has
+ * to aim at.
+ */
+.shelfHeader {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--secondary-text-color);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  gap: 10px;
+  inline-size: 100%;
+  padding-block: 10px;
+  padding-inline: 4px;
+  text-align: start;
+}
+
+.shelfHeader:hover {
+  color: var(--primary-text-color);
+}
+
+.shelfIcon {
+  /* Keeps the icon from growing with the label's line box */
+  block-size: 1em;
+  color: var(--primary-color);
+}
+
+/* Pushes the chevron to the far end, wherever that is in this writing mode */
+.shelfCount {
+  flex-grow: 1;
+}
+
+.shelfChevron {
+  block-size: 1em;
+}
+
+.shelfList {
+  padding-block-end: 8px;
+}
