@@ -39,6 +39,19 @@
         :related-channels="relatedChannels"
       />
       <div class="select-container">
+        <!--
+          One switch for the whole channel, not one per tab: the tabs share a
+          header and a card, the setting they write is global anyway, and a
+          control that reappeared in a slightly different place on every tab
+          would read as a different control each time.
+
+          Not on the about tab, which is the one tab with no grid under it —
+          and the one where this row renders below the panel rather than above.
+        -->
+        <FtDensitySwitch
+          v-if="currentTab !== 'about'"
+          class="channelDensity"
+        />
         <FtButton
           v-if="showViewAllButton"
           style="margin-top: 33px;"
@@ -281,6 +294,7 @@ import ChannelHome from '../../components/ChannelHome/ChannelHome.vue'
 import FtAgeRestricted from '../../components/FtAgeRestricted/FtAgeRestricted.vue'
 import FtAutoLoadNextPageWrapper from '../../components/FtAutoLoadNextPageWrapper.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtElementList from '../../components/FtElementList/FtElementList.vue'
 import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
 import FtLoader from '../../components/FtLoader/FtLoader.vue'

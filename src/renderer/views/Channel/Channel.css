@@ -13,11 +13,21 @@
 
 .select-container {
   display: flex;
-  flex-direction: row;
+  flex-flow: row wrap;
   justify-content: flex-end;
   align-items: baseline;
   gap: 10px;
   margin-block-end: 10px;
+}
+
+/*
+ * The density switch takes the free end of the row the sorts already occupy,
+ * so the channel gains no row of controls. The auto margin, not a first
+ * position in a flex-end row, because flex-end would have huddled it against
+ * the sorts and left the space on the wrong side.
+ */
+.channelDensity {
+  margin-inline-end: auto;
 }
 
 .elementListLoading {
