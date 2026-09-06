@@ -46,15 +46,13 @@
           would read as a different control each time.
 
           Not on the about tab, which has no card grid at all and which is also
-          the one tab this row renders below rather than above.
-
-          It does stay on the community tab, whose posts are forced to a list
-          layout and so do not answer to it. The switch is inert there in
-          exactly the way it is inert wherever the list layout is chosen, and
-          that is a question about the layout setting, not about this row.
+          the one tab this row renders below rather than above. And not on the
+          community tab, whose posts are forced to a list layout: a switch that
+          visibly does nothing is a broken control to the person clicking it,
+          however sound the reason it does nothing.
         -->
         <FtDensitySwitch
-          v-if="currentTab !== 'about'"
+          v-if="currentTab !== 'about' && currentTab !== 'community'"
           class="channelDensity"
         />
         <FtButton
