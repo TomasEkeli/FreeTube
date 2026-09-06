@@ -4,6 +4,17 @@
   margin-inline: auto;
 }
 
+/* The heading carries the density switch, because the tab row below it is a
+   three column grid of tabs and no page grows a row of controls to hold the
+   switch; see FtDensitySwitch.vue. */
+.headingRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  justify-content: space-between;
+}
+
 .trendingInfoTabs {
   inline-size: 100%;
   display: grid;

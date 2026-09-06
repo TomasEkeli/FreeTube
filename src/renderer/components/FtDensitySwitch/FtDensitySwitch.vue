@@ -9,8 +9,25 @@
 
   Radio buttons under the paint, because exactly one mode is on at a time and
   the keyboard should say so: arrow keys move between them, as they do in any
-  other group of radios. The chips beside it are buttons instead, and rightly
-  so, since any number of them may be pressed at once.
+  other group of radios. The subscription chips beside it are buttons instead,
+  and rightly so, since any number of them may be pressed at once.
+
+  Where it goes, on every grid surface that has one:
+
+  - A page that already has a row of controls puts the switch in it. That is
+    subscriptions with its chips, history and your playlists with their search
+    options, and a channel with its sorts.
+  - A page with no such row puts the switch at the far end of its heading.
+    That is trending, most popular, search results and a hashtag.
+
+  No page grows a second row to hold it, which is the rule the placements
+  answer to: the switch is worth a corner of a row that exists and is not worth
+  a band of its own above every grid in the app.
+
+  One size, not a compact variant for the tighter headings. The three words are
+  the control — a variant that shortened or dropped them would be a second
+  control to learn, and the switch already wraps under the heading when a
+  narrow window leaves no room beside it.
 -->
 <template>
   <div class="densitySwitch">
