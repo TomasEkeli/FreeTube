@@ -54,14 +54,14 @@
         v-if="SUPPORTS_LOCAL_API && !hideTrendingVideos && (backendFallback || backendPreference === 'local')"
         class="navOption mobileHidden"
         role="button"
-        to="/trending"
-        :title="$t('Trending.Trending')"
+        to="/explore"
+        :title="$t('Explore.Explore')"
       >
         <div
           class="thumbnailContainer"
         >
           <FontAwesomeIcon
-            :icon="['fas', 'fire']"
+            :icon="['fas', 'compass']"
             class="navIcon"
             :class="applyNavIconExpand"
           />
@@ -69,7 +69,7 @@
         <p
           class="navLabel"
         >
-          {{ $t("Trending.Trending") }}
+          {{ $t("Explore.Explore") }}
         </p>
       </router-link>
       <router-link

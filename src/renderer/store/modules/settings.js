@@ -259,6 +259,14 @@ const state = {
   proxyProtocol: 'socks5',
   proxyVideos: !process.env.SUPPORTS_LOCAL_API,
   region: 'US',
+  // The Explore destinations the reader has switched off, by id. What is off
+  // rather than what is on, so that a destination the app learns about later
+  // arrives switched on: the page is there to show what YouTube is pushing, and
+  // a new chart nobody has an opinion about yet belongs in the stream.
+  //
+  // A standing preference rather than a session's, like the subscriptions
+  // chips: whoever has no use for sport today has none tomorrow either.
+  exploreCategoriesHidden: [],
   rememberHistory: true,
   rememberSearchHistory: true,
   // 'auto', 'semi-auto', 'never'

@@ -153,4 +153,5 @@ function toggleFeed(feed) {
 }
 </script>
 
+<style scoped src="../../components/FtToggleChip/chipRow.css" />
 <style scoped src="./Subscriptions.css" />

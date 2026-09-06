@@ -15,10 +15,10 @@
   Where it goes, on every grid surface that has one:
 
   - A page that already has a row of controls puts the switch in it. That is
-    subscriptions with its chips, history and your playlists with their search
-    options, and a channel with its sorts.
+    subscriptions and explore with their chips, history and your playlists with
+    their search options, and a channel with its sorts.
   - A page with no such row puts the switch at the far end of its heading.
-    That is trending, most popular, search results and a hashtag.
+    That is most popular, search results and a hashtag.
 
   No page grows a second row to hold it, which is the rule the placements
   answer to: the switch is worth a corner of a row that exists and is not worth

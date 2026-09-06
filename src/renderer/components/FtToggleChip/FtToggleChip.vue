@@ -3,7 +3,7 @@
 
   Generic rather than the subscriptions page's own: a chip is a labelled toggle
   that looks like what it controls, and that has nothing to do with feeds. The
-  same row is wanted over trending later.
+  explore page's categories use the same row.
 
   A button with `aria-pressed`, and not a checkbox: it acts the moment it is
   pressed, and there is no form here to submit. Icon *and* label, for the same

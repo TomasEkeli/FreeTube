@@ -1,0 +1,32 @@
+/*
+ * A row of chips, and the row of controls it sits in.
+ *
+ * Here rather than on either page that uses it: the subscriptions stream and
+ * the explore stream are the same shape — one list, a row of chips saying what
+ * is in it, and the density switch at the far end — and two copies of that
+ * would drift apart the first time one of them was adjusted.
+ *
+ * Loaded as a scoped stylesheet by each page, so the classes only reach that
+ * page's own markup.
+ */
+
+/*
+ * The page's one control row: which kinds are shown at one end, how much room
+ * each of them gets at the other. The two sides break onto separate lines when
+ * the window is too narrow to hold them side by side, and each of them wraps
+ * within itself after that.
+ */
+.controlRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  justify-content: space-between;
+  margin-block: 4px 16px;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

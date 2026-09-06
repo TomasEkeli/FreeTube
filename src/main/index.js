@@ -2564,9 +2564,9 @@ function runApp() {
             type: 'normal'
           },
           (!hideTrendingVideos && (backendFallback || backendPreference === 'local')) && {
-            label: 'Trending',
+            label: 'Explore',
             click: (_menuItem, browserWindow, _event) => {
-              navigateTo('/trending', browserWindow)
+              navigateTo('/explore', browserWindow)
             },
             type: 'normal'
           },
