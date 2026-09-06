@@ -276,6 +276,12 @@ const state = {
   showSubscriptionsShorts: true,
   showSubscriptionsLive: true,
   showSubscriptionsPosts: true,
+  // Whether the shelf of scheduled premieres and live streams over the
+  // subscriptions stream is open. Here rather than in `sessionStorage` because
+  // whoever folded it away meant it, and meant it tomorrow as well. Open to
+  // begin with: a shelf nobody has ever seen open is a shelf nobody knows is
+  // there.
+  upcomingShelfExpanded: true,
   sponsorBlockShowSkippedToast: true,
   sponsorBlockUrl: 'https://sponsor.ajay.app',
   sponsorBlockSponsor: {
