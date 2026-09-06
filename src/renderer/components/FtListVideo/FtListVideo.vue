@@ -37,6 +37,7 @@
           :class="{ blur: blurThumbnails }"
           alt=""
           @error="onThumbnailError"
+          @load="onThumbnailLoad"
         >
       </RouterLink>
       <div
@@ -815,12 +816,42 @@ const wantsLargeThumbnail = computed(() => {
  * Set when the large thumbnail did not arrive, so that the card can ask for
  * the small one instead.
  *
- * A video uploaded below 720p has no 1280px thumbnail — two of forty in a
+ * A video uploaded below 720p has no 1280px thumbnail — three of sixty in a
  * sample of a real subscription feed — and there is nothing to ask beforehand:
  * requesting it is the only way to find out. The card only ever holds one
  * video, so the answer holds for as long as the card does.
  */
 const largeThumbnailMissing = ref(false)
+
+/** Whether the URL the card is currently showing is the large thumbnail. */
+const largeThumbnailRequested = computed(() => {
+  if (thumbnailPreference.value === 'hidden') { return false }
+
+  if (showDeArrowThumbnail.value && deArrowCache.value?.thumbnail != null) {
+    return false
+  }
+
+  return wantsLargeThumbnail.value && !largeThumbnailMissing.value
+})
+
+/**
+ * A missing large thumbnail does not fail, which is why this reads the size.
+ *
+ * Asked for a thumbnail a video has not got, i.ytimg.com answers 404 and sends
+ * a 120x90 grey placeholder in the body anyway. A browser renders a 404 that
+ * carries a decodable image, so the picture loads, no error is raised, and the
+ * card stretches a 120px placeholder across 900px of column. The size it came
+ * back at is the only honest answer: the real one is 1280 wide.
+ *
+ * @param {Event} event
+ */
+function onThumbnailLoad(event) {
+  if (!largeThumbnailRequested.value) { return }
+
+  if (event.target.naturalWidth < 640) {
+    largeThumbnailMissing.value = true
+  }
+}
 
 function onThumbnailError() {
   largeThumbnailMissing.value = true
@@ -843,7 +874,7 @@ const thumbnail = computed(() => {
   }
 
   // The same four frames at two sizes: mq* is 320px wide, hq720* is 1280px.
-  const large = wantsLargeThumbnail.value && !largeThumbnailMissing.value
+  const large = largeThumbnailRequested.value
 
   switch (thumbnailPreference.value) {
     case 'start':
