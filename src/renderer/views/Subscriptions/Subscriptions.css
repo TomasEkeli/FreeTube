@@ -8,30 +8,25 @@
   color: var(--tertiary-text-color);
 }
 
-.tabs {
-  inline-size: 100%;
-  margin-block: -3px 10px;
-  color: var(--tertiary-text-color);
+/*
+ * The page's one control row: which kinds are shown at one end, how much room
+ * each of them gets at the other. The two sides break onto separate lines when
+ * the window is too narrow to hold them side by side, and each of them wraps
+ * within itself after that.
+ */
+.controlRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  justify-content: space-between;
+  margin-block: 4px 16px;
 }
 
-.selectedTab {
-  border-block-end: 3px solid var(--primary-color);
-  color: var(--primary-text-color);
-  font-weight: bold;
-  box-sizing: border-box;
-  margin-block-end: -3px;
-}
-
-.tab {
-  text-align: center;
-  padding: 15px;
-  font-size: 1.1em;
-  cursor: pointer;
-  align-self: flex-end;
-}
-
-.tab:hover {
-  font-weight: bold;
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .subscriptionIcon {

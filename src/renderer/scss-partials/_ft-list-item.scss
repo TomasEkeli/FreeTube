@@ -392,6 +392,45 @@ $watched-transition-duration: 0.5s;
       margin-block-start: 8px;
     }
 
+    // The snippet's slot is reserved whether or not there is a snippet in it.
+    // A description reaches a video minutes after its card is already on
+    // screen, when the back-fill gets round to that channel, and a card that
+    // grew at that moment would push every card below it down the page. So the
+    // slot is as tall as the mode's line count, always, and the text is
+    // clamped to fit rather than the box grown to fit the text.
+    //
+    // `1.4em` is `line-height` written out, so that the reserve is exactly the
+    // number of lines it claims to be. Zero lines collapses the slot and its
+    // gap together, which is how the tight mode drops the snippet; the numbers
+    // are all in density.css.
+    .description {
+      block-size: calc(var(--ft-card-description-lines) * 1.4em);
+      display: -webkit-box;
+      font-size: 13px;
+      line-height: 1.4;
+      margin-block: var(--ft-card-description-gap) 0;
+
+      // The list mode's 50px ceiling would crop the spacious mode's third line
+      max-block-size: none;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+
+      // The watched styling fades this text out, and does it by setting a
+      // duration and no property, which means every property. Left at that the
+      // slot would animate its own height for half a second each time the
+      // density changed, and a card that resizes gradually is the jumping
+      // interface this whole slot exists to prevent. Only the colour was ever
+      // meant to move.
+      transition-property: color;
+
+      /* stylelint-disable-next-line property-no-vendor-prefix */
+      -webkit-box-orient: vertical;
+      line-clamp: var(--ft-card-description-lines);
+
+      /* stylelint-disable-next-line property-no-vendor-prefix */
+      -webkit-line-clamp: var(--ft-card-description-lines);
+    }
+
     .restArea {
       display: none;
     }

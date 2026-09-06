@@ -3,9 +3,8 @@ import { reactive, ref, shallowRef } from 'vue'
 import store from '../store/index'
 
 import {
-  fetchableSubscriptionFeeds,
+  fetchedSubscriptionFeeds,
   subscriptionFeedDescriptor,
-  subscriptionFeedIsAvailable,
   subscriptionFeedUsesRss,
   SUBSCRIPTION_FEEDS
 } from './subscriptionFeeds'
@@ -53,11 +52,11 @@ import {
  * screen.
  *
  * So the refresh moved out here, where the things it affects already live. One
- * refresh covers every enabled feed; it is single-flight per feed, so a second
+ * refresh covers every feed there is; it is single-flight per feed, so a second
  * request joins the one in flight rather than doubling the requests; and it
- * commits by bumping a per-feed revision, which whichever tab is mounted watches
- * in order to rebuild itself from the cache. A refresh finishing while its tab
- * is unmounted is simply picked up on remount.
+ * commits by bumping a per-feed revision, which the subscriptions page watches
+ * in order to rebuild its stream from the cache. A refresh finishing while that
+ * page is elsewhere is simply picked up when it comes back.
  */
 
 /**
@@ -137,65 +136,42 @@ let profileGeneration = 0
 let recoveryChain = Promise.resolve()
 
 /**
- * Refresh every feed the user has switched on and that automatic refreshes
- * cover, plus one asked for by name.
+ * Refresh every feed there is, whatever the user has switched on.
+ *
+ * A refresh cycle is not asked what is on screen. Which kinds are shown is the
+ * page's question and it can change between one refresh and the next; a kind
+ * fetched only while it was being looked at would be stale the moment it was
+ * looked at again.
  *
  * @param {object} [options]
- * @param {string} [options.preferredFeed] the feed being looked at, which is
- *   fetched first so that it finishes soonest
  * @param {string} [options.reason] recorded in the trace
- * @param {string} [options.requestedFeed] a feed the user asked for by name,
- *   which is fetched whether or not automatic refreshes cover it. Trusted to be
- *   a feed the user has switched on, because only a mounted tab can name one,
- *   and a tab only exists for an enabled feed.
  * @returns {Promise<void>}
  */
-export function refreshAllSubscriptionFeeds({ preferredFeed, reason, requestedFeed } = {}) {
-  const feeds = fetchableSubscriptionFeeds()
-
-  if (requestedFeed != null && !feeds.includes(requestedFeed)) {
-    // Posts under RSS are the case: automatic refreshes leave the feed alone,
-    // which is what the setting is for, and someone pressing refresh on the
-    // posts tab is not an automatic refresh
-    feeds.push(requestedFeed)
-  }
-
-  return refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed })
+export function refreshAllSubscriptionFeeds({ reason } = {}) {
+  return refreshSubscriptionFeeds(fetchedSubscriptionFeeds(), { reason })
 }
 
 /**
  * Refresh a chosen set of feeds. Feeds already refreshing are joined rather than
- * started again, so a refresh button held down, or a tab switched back and
- * forth, costs nothing.
+ * started again, so a refresh button held down, or the page navigated away from
+ * and back, costs nothing.
  *
- * Feeds are queued whole, one after another, rather than interleaved: the point
- * of preferring the visible feed is that it lands at the speed it used to,
- * which sharing the budget three ways would undo.
+ * Feeds are queued whole, one after another, rather than interleaved, and in the
+ * order given — which is the order they appear in `SUBSCRIPTION_FEEDS`, videos
+ * first. Sharing the budget four ways would mean nothing landed until
+ * everything had.
+ *
+ * Every feed named is fetched. There is no setting left that holds one back, so
+ * a caller that names a feed gets it, and the only reason to name a subset is
+ * that the rest of the cache is already current.
  *
  * @param {string[]} feeds
  * @param {object} [options]
- * @param {string} [options.preferredFeed]
  * @param {string} [options.reason] recorded in the trace
- * @param {string} [options.requestedFeed] the one feed exempt from the
- *   availability filter, because the user named it
  * @returns {Promise<void>}
  */
-export function refreshSubscriptionFeeds(feeds, { preferredFeed, reason, requestedFeed } = {}) {
-  // A feed automatic refreshes do not cover is dropped here rather than at every
-  // call site, so that no route into an automatic refresh has to remember which
-  // settings hold which feed back. The feed the user named is the
-  // exception: unavailable says that nothing fetches it on its own, and says
-  // nothing about whether it can be fetched, which posts can.
-  const ordered = feeds
-    .filter(feed => feed === requestedFeed || subscriptionFeedIsAvailable(feed))
-    .sort((a, b) => {
-      if (a === preferredFeed) { return -1 }
-      if (b === preferredFeed) { return 1 }
-
-      return 0
-    })
-
-  return Promise.all(ordered.map(feed => startFeedRefresh(feed, reason))).then(() => {})
+export function refreshSubscriptionFeeds(feeds, { reason } = {}) {
+  return Promise.all(feeds.map(feed => startFeedRefresh(feed, reason))).then(() => {})
 }
 
 /**
@@ -447,8 +423,8 @@ function finishFeedRefresh(feed, context, { cancelled = false } = {}) {
     state.unresolvedChannels.value = context.unresolved
     state.lastSuccessAt.value = Date.now()
 
-    // What puts the refresh on screen: whichever tab is mounted for this feed
-    // watches this and rebuilds itself from the cache
+    // What puts the refresh on screen: the subscriptions page watches this and
+    // rebuilds its stream from the cache
     state.revision.value++
 
     if (context.subscriptionUpdates.length > 0) {

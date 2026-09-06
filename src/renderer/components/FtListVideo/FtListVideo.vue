@@ -5,7 +5,8 @@
       list: effectiveListTypeIsList,
       grid: !effectiveListTypeIsList,
       [appearance]: true,
-      watched: addWatchedStyle
+      watched: addWatchedStyle,
+      short: isShort
     }"
   >
     <div
@@ -35,6 +36,8 @@
           class="thumbnailImage"
           :class="{ blur: blurThumbnails }"
           alt=""
+          @error="onThumbnailError"
+          @load="onThumbnailLoad"
         >
       </RouterLink>
       <div
@@ -133,18 +136,30 @@
       draggable="true"
       @dragstart="onDragStart"
     >
-      <RouterLink
-        class="title"
-        :to="watchVideoRouterLink"
-        @click="handleWatchPageLinkClick"
-      >
-        <h3
-          class="h3Title"
-          dir="auto"
+      <!--
+        The marker shares the title's grid area rather than claiming a row of
+        its own, so that the areas stay exactly as the shared card layout
+        defines them: components that let a child auto-place into `.info`
+        would have it land in a new row instead of where they left it.
+      -->
+      <div class="heading">
+        <FtKindMarker
+          v-if="kind !== null"
+          :kind="kind"
+        />
+        <RouterLink
+          class="title"
+          :to="watchVideoRouterLink"
+          @click="handleWatchPageLinkClick"
         >
-          {{ displayTitle }}
-        </h3>
-      </RouterLink>
+          <h3
+            class="h3Title"
+            dir="auto"
+          >
+            {{ displayTitle }}
+          </h3>
+        </RouterLink>
+      </div>
       <div class="infoLine">
         <component
           :is="disableChannelLinks ? 'span' : 'router-link'"
@@ -165,8 +180,14 @@
           <template v-if="channelId !== null || channelName !== null"> • </template>
           {{ t('Global.Counts.View Count', { count: parsedViewCount }, viewCount) }}
         </span>
+        <!--
+          A live stream has no publish time worth showing: it is on now. A
+          scheduled one does, and it is the whole point of the card, so an entry
+          that is somehow both still shows when it starts — the same order of
+          answers the kind marker gives.
+        -->
         <span
-          v-if="uploadedTime !== '' && !isLive"
+          v-if="uploadedTime !== '' && (!isLive || isUpcoming)"
           class="uploadedTime"
         > • {{ uploadedTime }}</span>
         <span
@@ -261,8 +282,8 @@
         </button>
       </div>
       <p
-        v-if="description && effectiveListTypeIsList && appearance === 'result'"
-        v-safer-html="description"
+        v-if="showsDescriptionSlot"
+        v-safer-html="descriptionSnippet"
         class="description"
         dir="auto"
       />
@@ -283,6 +304,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
 import FtIconButton from '../FtIconButton/FtIconButton.vue'
+import FtKindMarker from '../FtKindMarker/FtKindMarker.vue'
 import { vSaferHtml } from '../../directives/vSaferHtml.js'
 
 import store from '../../store/index'
@@ -291,6 +313,7 @@ import {
   copyToClipboard,
   formatDurationAsTimestamp,
   formatNumber,
+  formatScheduledTime,
   getRelativeTimeFromDate,
   openExternalLink,
   showToast,
@@ -418,6 +441,26 @@ const deArrowTogglePinned = ref(false)
 const showDeArrowTitle = ref(false)
 const showDeArrowThumbnail = ref(false)
 
+const isShort = computed(() => props.data.type === 'shortVideo')
+
+/**
+ * The kind this card is marked as, or `null` when it is a plain video and so
+ * carries no marker at all.
+ *
+ * A premiere is an upcoming thing before it is a live thing, and a short that
+ * is somehow also live is a live stream first, so the order here is the order
+ * of the answers.
+ *
+ * @type {import('vue').ComputedRef<'shorts' | 'live' | 'upcoming' | null>}
+ */
+const kind = computed(() => {
+  if (isUpcoming.value) { return 'upcoming' }
+  if (isLive.value) { return 'live' }
+  if (isShort.value) { return 'shorts' }
+
+  return null
+})
+
 const historyEntry = computed(() => store.getters.getHistoryCacheById[id.value])
 
 const historyEntryExists = computed(() => historyEntry.value !== undefined)
@@ -438,8 +481,53 @@ const effectiveListTypeIsList = computed(() => {
     props.forceListType !== 'grid'
 })
 
+/**
+ * The description this card shows, empty when it has none to show.
+ *
+ * A short is empty deliberately rather than by omission. The back-fill that
+ * teaches an entry its description never runs for shorts, so on the
+ * subscriptions feed a shorts card has nothing either way; showing one on the
+ * surfaces where a backend happens to supply it would make the shorts that do
+ * and the shorts that do not look like different kinds of thing.
+ *
+ * Read from the props rather than from the ref beside them, which is filled
+ * once and never again: the whole point of reserving the space is that a
+ * description can appear in a card that is already on screen, and it cannot do
+ * that if the card stopped listening when it mounted.
+ *
+ * @type {import('vue').ComputedRef<string>}
+ */
+const descriptionSnippet = computed(() => {
+  if (isShort.value) { return '' }
+
+  return props.data.description ?? ''
+})
+
+/**
+ * Whether the card carries a description slot at all.
+ *
+ * A list shows the snippet only when there is one, as it always has. A grid
+ * card keeps the slot either way, empty when it has nothing: the description
+ * arrives minutes after the card is on screen, and a card that grew at that
+ * moment would push every card below it down the page. How tall the empty slot
+ * is, and whether the density mode has one at all, is decided in CSS.
+ *
+ * The appearance keeps the slot away from the watch page's sidebar cards,
+ * which is where the list rule has always kept the snippet too.
+ *
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const showsDescriptionSlot = computed(() => {
+  if (props.appearance !== 'result') { return false }
+
+  return !effectiveListTypeIsList.value || descriptionSnippet.value !== ''
+})
+
 /** @type {import('vue').ComputedRef<'' | 'start' | 'middle' | 'end' | 'hidden' | 'blur'>} */
 const thumbnailPreference = computed(() => store.getters.getThumbnailPreference)
+
+/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious'>} */
+const listDensity = computed(() => store.getters.getListDensity)
 
 /** @type {import('vue').ComputedRef<boolean>} */
 const blurThumbnails = computed(() => store.getters.getBlurThumbnails)
@@ -708,6 +796,67 @@ function handleOptionsClick(option) {
   }
 }
 
+/**
+ * Whether this card is big enough to be worth the large thumbnail.
+ *
+ * A grid column stretches, so a card is not its mode's minimum: a standard one
+ * runs from 400 to 816px wide and a spacious one from 610 to 1240, and a 320px
+ * image spread over either of those is the soft, blocky thing it looks like.
+ * Tight tops out at 530px and is the mode that puts the most cards on screen at
+ * once, so it is the one that can least afford eight times the bytes, and a
+ * list card's thumbnail is 336px whatever the mode.
+ *
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const wantsLargeThumbnail = computed(() => {
+  return !effectiveListTypeIsList.value && listDensity.value !== 'tight'
+})
+
+/**
+ * Set when the large thumbnail did not arrive, so that the card can ask for
+ * the small one instead.
+ *
+ * A video uploaded below 720p has no 1280px thumbnail — three of sixty in a
+ * sample of a real subscription feed — and there is nothing to ask beforehand:
+ * requesting it is the only way to find out. The card only ever holds one
+ * video, so the answer holds for as long as the card does.
+ */
+const largeThumbnailMissing = ref(false)
+
+/** Whether the URL the card is currently showing is the large thumbnail. */
+const largeThumbnailRequested = computed(() => {
+  if (thumbnailPreference.value === 'hidden') { return false }
+
+  if (showDeArrowThumbnail.value && deArrowCache.value?.thumbnail != null) {
+    return false
+  }
+
+  return wantsLargeThumbnail.value && !largeThumbnailMissing.value
+})
+
+/**
+ * A missing large thumbnail does not fail, which is why this reads the size.
+ *
+ * Asked for a thumbnail a video has not got, i.ytimg.com answers 404 and sends
+ * a 120x90 grey placeholder in the body anyway. A browser renders a 404 that
+ * carries a decodable image, so the picture loads, no error is raised, and the
+ * card stretches a 120px placeholder across 900px of column. The size it came
+ * back at is the only honest answer: the real one is 1280 wide.
+ *
+ * @param {Event} event
+ */
+function onThumbnailLoad(event) {
+  if (!largeThumbnailRequested.value) { return }
+
+  if (event.target.naturalWidth < 640) {
+    largeThumbnailMissing.value = true
+  }
+}
+
+function onThumbnailError() {
+  largeThumbnailMissing.value = true
+}
+
 const thumbnail = computed(() => {
   if (thumbnailPreference.value === 'hidden') {
     return thumbnailPlaceholder
@@ -724,15 +873,18 @@ const thumbnail = computed(() => {
     baseUrl = 'https://i.ytimg.com'
   }
 
+  // The same four frames at two sizes: mq* is 320px wide, hq720* is 1280px.
+  const large = largeThumbnailRequested.value
+
   switch (thumbnailPreference.value) {
     case 'start':
-      return `${baseUrl}/vi/${id.value}/mq1.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720_1' : 'mq1'}.jpg`
     case 'middle':
-      return `${baseUrl}/vi/${id.value}/mq2.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720_2' : 'mq2'}.jpg`
     case 'end':
-      return `${baseUrl}/vi/${id.value}/mq3.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720_3' : 'mq3'}.jpg`
     default:
-      return `${baseUrl}/vi/${id.value}/mqdefault.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720' : 'mqdefault'}.jpg`
   }
 })
 
@@ -1030,6 +1182,11 @@ function parseVideoData() {
   isPremium.value = props.data.premium || false
   viewCount.value = props.data.viewCount
 
+  // A scheduled thing states its time and says how far off it is beside it,
+  // where a published one says how long ago and nothing else. The difference is
+  // that the past is over: "3 days ago" cannot become wrong, and "in 3 days"
+  // does, on a card that reads its props once and never ticks. See
+  // `formatScheduledTime`.
   if (props.data.premiereDate !== undefined) {
     let premiereDate = props.data.premiereDate
 
@@ -1037,11 +1194,11 @@ function parseVideoData() {
     if (typeof premiereDate === 'string') {
       premiereDate = new Date(premiereDate)
     }
-    uploadedTime.value = premiereDate.toLocaleString([locale.value, 'en'])
     published.value = premiereDate.getTime()
+    uploadedTime.value = formatScheduledTime(published.value)
   } else if (props.data.premiereTimestamp !== undefined) {
-    uploadedTime.value = new Date(props.data.premiereTimestamp * 1000).toLocaleString([locale.value, 'en'])
     published.value = props.data.premiereTimestamp * 1000
+    uploadedTime.value = formatScheduledTime(published.value)
   } else if (typeof props.data.published === 'number' && !isLive.value) {
     published.value = props.data.published
 

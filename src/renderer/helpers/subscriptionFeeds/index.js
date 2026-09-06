@@ -13,38 +13,33 @@ import { postsFeed } from './posts'
  * differing only in which store keys and fetch functions they named. The
  * composable took the shared behaviour; this takes what genuinely differs.
  *
- * It is module scope rather than a prop of the tab because a refresh now
- * refreshes every feed, including the three whose tabs are not mounted. A
- * descriptor that only exists while its tab is on screen cannot be used to
- * fetch that feed, which is the flaw the whole manager is here to fix.
+ * The tabs are gone now — one stream shows every kind at once — and what is
+ * left of a feed is exactly this: where its entries are cached, how they are
+ * fetched, and how they are filtered before assembly.
  *
  * @typedef {object} SubscriptionFeedDescriptor
  * @property {string} feed identifier used for tracing, caching and error collection
  * @property {string} cacheGetter store getter holding this feed's cache
  * @property {string} updateAction store action that writes one channel's entries
  * @property {'videos' | 'posts'} entriesKey field name inside a cache entry
- * @property {'setting' | 'always' | 'never'} rssMode where RSS use is decided
+ * @property {'setting' | 'always' | 'never'} rssMode where RSS use is decided.
+ *   `never` is not a preference but a fact about what YouTube publishes: with
+ *   no RSS to read there is nothing lighter to read, whatever the setting says.
  * @property {boolean} followsDetailBackfill whether this feed's entries can be
  *   filled in in the background, and so needs rebuilding when they are
- * @property {() => boolean} isEnabled whether the user has this feed switched on
- * @property {boolean} [isCommunity] posts are rendered as a list, not a grid
- * @property {number} [initialDataLimit]
+ * @property {string} shownGetter store getter holding this feed's chip: whether
+ *   the reader has it switched on. Only ever about what is shown. What is
+ *   fetched is a separate question with a separate answer: every feed, every
+ *   time.
+ * @property {string} shownAction store action the chip writes through
+ * @property {(() => boolean) | undefined} isHiddenAppWide whether a setting
+ *   outside this page hides this kind everywhere. It overrules the chip, and
+ *   the chip is not offered while it holds — there is no sense in a control
+ *   that cannot do anything. Only live has one.
  * @property {(channel: object, context: { useRss: boolean, failedAttempts?: number }) => Promise<{
  *   status: string, entries: any[] | null, name?: string, thumbnailUrl?: string
  * }>} fetchChannel
  * @property {(entries: any[]) => any[]} postProcess filter and sort for display
- * @property {() => boolean} [isAvailable] whether an automatic refresh fetches
- *   this feed under the current settings. Distinct from `isEnabled`: a feed
- *   switched on but unavailable keeps its tab, which shows what the cache holds
- *   and offers a fetch. It does not say the feed cannot be fetched: posts under
- *   RSS fetch perfectly well when someone asks for them by name.
- * @property {(t: (key: string, values?: object) => string) => string}
- *   [unavailableMessage] what to say when no automatic refresh will fetch it.
- *   Handed `t` rather than importing one, so it can be written with literal
- *   locale keys.
- * @property {(t: (key: string, values?: object) => string) => string}
- *   [unavailableActionLabel] the label on the button that fetches it anyway.
- *   Absent for feeds with no unavailable state.
  */
 
 /** @type {Record<string, SubscriptionFeedDescriptor>} */
@@ -55,7 +50,11 @@ const DESCRIPTORS = {
   posts: postsFeed
 }
 
-/** The order feeds are shown in, and refreshed in when nothing is preferred. */
+/**
+ * The order feeds are refreshed in, and the order they are assembled into the
+ * stream in — which decides only which kind an entry two feeds both claim is
+ * counted as, since the stream itself is sorted by date.
+ */
 export const SUBSCRIPTION_FEEDS = ['videos', 'shorts', 'live', 'posts']
 
 /**
@@ -73,41 +72,87 @@ export function subscriptionFeedDescriptor(feed) {
 }
 
 /**
- * The feeds the user has switched on. What the tab strip offers.
+ * The feeds the user has switched on. What the stream is assembled from, and
+ * the answer to that question only.
+ *
+ * Two things decide it: the chip, which is the reader's choice for this stream,
+ * and the app-wide hide setting, which is their choice for the whole app and
+ * wins.
  *
  * @returns {string[]}
  */
 export function enabledSubscriptionFeeds() {
-  return SUBSCRIPTION_FEEDS.filter(feed => DESCRIPTORS[feed].isEnabled())
+  return SUBSCRIPTION_FEEDS.filter(feed => {
+    return !subscriptionFeedIsHiddenAppWide(feed) && subscriptionFeedIsShown(feed)
+  })
 }
 
 /**
- * Whether an automatic refresh fetches this feed under the current settings.
+ * The feeds worth offering a chip for.
  *
- * Being switched on and being fetched on a schedule are different questions,
- * and answering them with one flag is what made the posts tab disappear
- * whenever RSS was turned on. Vanishing is a poor way to explain anything, and
- * so is a paragraph with nothing to press: the tab now stays, shows what the
- * cache holds, and offers a fetch.
+ * Everything except a kind already hidden across the whole app: a chip that
+ * could not change what is on screen would be a lie about who is in charge.
  *
- * What this does not decide is whether the feed can be fetched. A request the
- * user made by name is exempt, as `requestedFeed` in `subscriptionRefresh`.
+ * @returns {string[]}
+ */
+export function choosableSubscriptionFeeds() {
+  return SUBSCRIPTION_FEEDS.filter(feed => !subscriptionFeedIsHiddenAppWide(feed))
+}
+
+/**
+ * Whether the reader has this feed's chip switched on.
+ *
+ * Their choice as they made it, which is not the same as what the stream ends
+ * up showing — `enabledSubscriptionFeeds` is where the two are put together.
+ * The chip must go on saying what it was left saying.
  *
  * @param {string} feed
  * @returns {boolean}
  */
-export function subscriptionFeedIsAvailable(feed) {
-  return subscriptionFeedDescriptor(feed).isAvailable?.() ?? true
+export function subscriptionFeedIsShown(feed) {
+  return store.getters[subscriptionFeedDescriptor(feed).shownGetter]
 }
 
 /**
- * The feeds an automatic refresh fetches: switched on, and not held back by a
- * setting.
+ * Switch a feed's chip on or off. Persisted, because it is a standing
+ * preference and not a mood.
+ *
+ * @param {string} feed
+ * @param {boolean} shown
+ * @returns {Promise<void>}
+ */
+export function setSubscriptionFeedShown(feed, shown) {
+  return store.dispatch(subscriptionFeedDescriptor(feed).shownAction, shown)
+}
+
+/**
+ * @param {string} feed
+ * @returns {boolean}
+ */
+function subscriptionFeedIsHiddenAppWide(feed) {
+  const { isHiddenAppWide } = subscriptionFeedDescriptor(feed)
+
+  return isHiddenAppWide != null && isHiddenAppWide()
+}
+
+/**
+ * The feeds a refresh fetches: every one of them, whatever is switched on.
+ *
+ * Deliberately not `enabledSubscriptionFeeds()` filtered down, and deliberately
+ * a function of its own rather than a list read off the one above. What is
+ * shown and what is fetched were the same list once, and the cost of that was a
+ * kind switched off going stale: switching it back on showed yesterday, and
+ * then a spinner. Switching a kind on is meant to be instant, and it can only
+ * be instant if what it was hiding had been fetched anyway.
+ *
+ * Fetching four kinds where one was fetched costs roughly double, mostly posts,
+ * which are the one kind RSS cannot serve. That was weighed and accepted: the
+ * request manager's budget and lanes pace it, and nothing here throttles.
  *
  * @returns {string[]}
  */
-export function fetchableSubscriptionFeeds() {
-  return enabledSubscriptionFeeds().filter(subscriptionFeedIsAvailable)
+export function fetchedSubscriptionFeeds() {
+  return SUBSCRIPTION_FEEDS.slice()
 }
 
 /**

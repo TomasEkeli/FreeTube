@@ -26,33 +26,20 @@ export const postsFeed = {
   cacheGetter: 'getPostsCache',
   updateAction: 'updateSubscriptionPostsCacheByChannel',
   entriesKey: 'posts',
-  // Community posts are not published as RSS at all
+  // Community posts are not published as RSS at all, so the scraper is the only
+  // way to fetch them and the RSS setting has nothing to say about this feed.
+  // That is what "RSS where possible" means: videos, shorts and live streams
+  // take the lighter path when it is asked for, and posts are fetched as they
+  // always were.
+  //
+  // Posts were held out of an RSS refresh entirely once, on the reasoning that
+  // the setting asks for fewer requests. What that produced was a kind that
+  // vanished when an unrelated-looking setting was turned on, and then a
+  // paragraph explaining two settings where a list of posts should have been.
   rssMode: 'never',
   followsDetailBackfill: false,
-  isCommunity: true,
-  initialDataLimit: 20,
-  isEnabled: () => !store.getters.getHideSubscriptionsCommunity,
-  // YouTube publishes no RSS for posts, so with RSS on an automatic refresh has
-  // nothing lighter to fetch this feed with, and lighter is the whole point of
-  // the setting. The scraper still works: what is unavailable is the automatic
-  // fetch, so the tab stays, shows what the cache holds and offers to fetch.
-  //
-  // It used to disappear, and then it printed a paragraph pointing at two
-  // settings. A tab that goes missing when an unrelated-looking setting is
-  // turned on teaches the user nothing about why, and a tab with nothing to
-  // press sends someone who wants posts to Settings to get them.
-  isAvailable: () => !store.getters.getUseRssFeeds,
-  // Written out with literal keys, and given `t` rather than reaching for one,
-  // so the keys stay where lint and the translators can see them.
-  //
-  // `hideSetting` is still passed although the English no longer names it:
-  // fifteen locales hold a translation of the older wording that interpolates
-  // it, and taking the value away would leave them interpolating nothing.
-  unavailableMessage: (t) => t('Subscriptions.Posts.RSS Message', {
-    rssSetting: t('Settings.Subscription Settings.Fetch Feeds from RSS'),
-    hideSetting: t('Settings.Distraction Free Settings.Hide Subscriptions Posts')
-  }),
-  unavailableActionLabel: (t) => t('Subscriptions.Posts.Load Posts'),
+  shownGetter: 'getShowSubscriptionsPosts',
+  shownAction: 'updateShowSubscriptionsPosts',
   fetchChannel: async (channel) => {
     const result = (!process.env.SUPPORTS_LOCAL_API || store.getters.getBackendPreference === 'invidious')
       ? await getChannelPostsInvidious(channel)

@@ -1,0 +1,76 @@
+/*
+ * Density modes.
+ *
+ * One global setting, three sizes, reaching every grid surface through two
+ * custom properties. The mode arrives in the DOM as body[data-density],
+ * written by App.vue from the listDensity setting; the rule with no attribute
+ * is standard, so the grid is already right before the settings have loaded.
+ *
+ * Variables rather than structure, deliberately: upstream edits the card and
+ * grid styles often, and a sync branch should find nothing here to fight over.
+ */
+
+/*
+ * The minimums are not widths. FtAutoGrid asks for
+ * repeat(auto-fill, minmax(min(column, 100%), 1fr)), so a mode's minimum
+ * decides only how many columns fit, and the columns then stretch to fill the
+ * row. Two modes that land on the same count are the same layout, and the one
+ * with the larger gap is the narrower of the two — which is how spacious came
+ * to look tighter than standard on every grid between 1240 and 1410px wide.
+ *
+ * So the three are derived rather than picked. A grid W wide takes n columns
+ * once W >= n * column + (n - 1) * gap, and a mode never shares a count with
+ * the mode below it as long as
+ *
+ *   2 * column + gap >= 3 * column-below + 2 * gap-below
+ *
+ * The two-column case is the binding one; the higher counts separate further
+ * on their own. It comes to about one and a half times the minimum below, and
+ * it is what a change to any of these numbers has to keep true. Tight is
+ * upstream's own grid, 262px at an 8px gap; the other two follow from it with
+ * a few pixels to spare, 400 where 393 would do and 610 where 606 would.
+ *
+ * Under about 530px of grid every mode is one column of the full width. That
+ * one the rule cannot separate, and need not: with no second column there is
+ * no gap, and it is the same card in every mode.
+ */
+
+/*
+ * The third value is the room a grid item is given before it has rendered
+ * itself. A card is its thumbnail plus a fairly fixed amount of text, and the
+ * thumbnail is the column width at 16:9, so this rises with the column: 9/16
+ * of the column, the 117px of text the measured cards agree on, and the
+ * snippet's slot below that where the mode has one.
+ *
+ * The last two are the description snippet's slot: how many lines of it a card
+ * shows, and the gap above it. The slot is the same height whether the card
+ * has a description or not, so the number of lines is also the number of empty
+ * lines a card without one reserves. Zero lines means no snippet at all, and a
+ * zero gap with it, so that the mode gives back every pixel of the slot: tight
+ * is the mode that asks for as many cards on screen as possible, and two lines
+ * of prose on every one of them is the opposite of that.
+ */
+
+body {
+  --ft-grid-min-column: 400px;
+  --ft-grid-gap: 16px;
+  --ft-grid-item-min-block-size: 384px;
+  --ft-card-description-lines: 2;
+  --ft-card-description-gap: 6px;
+}
+
+body[data-density='tight'] {
+  --ft-grid-min-column: 262px;
+  --ft-grid-gap: 8px;
+  --ft-grid-item-min-block-size: 264px;
+  --ft-card-description-lines: 0;
+  --ft-card-description-gap: 0;
+}
+
+body[data-density='spacious'] {
+  --ft-grid-min-column: 610px;
+  --ft-grid-gap: 20px;
+  --ft-grid-item-min-block-size: 521px;
+  --ft-card-description-lines: 3;
+  --ft-card-description-gap: 6px;
+}

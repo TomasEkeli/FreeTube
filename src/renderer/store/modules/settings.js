@@ -221,10 +221,6 @@ const state = {
   hideRecommendedVideos: false,
   hideSearchBar: false,
   hideSharingActions: false,
-  hideSubscriptionsVideos: false,
-  hideSubscriptionsShorts: false,
-  hideSubscriptionsLive: false,
-  hideSubscriptionsCommunity: false,
   hideTrendingVideos: false,
   hideUnsubscribeButton: false,
   hideUpcomingPremieres: false,
@@ -237,6 +233,10 @@ const state = {
   hideChapters: false,
   showDistractionFreeTitles: false,
   landingPage: 'subscriptions',
+  // How much room a card gets on every grid surface: 'tight' is the old
+  // sizing, 'standard' the roomier default, 'spacious' roomier still.
+  // The values themselves live in density.css, keyed on body[data-density].
+  listDensity: 'standard',
   listType: 'grid',
   maxVideoPlaybackRate: 3,
   // The volume slider's ceiling, as a percentage. Anything above 100% is
@@ -265,6 +265,25 @@ const state = {
   watchedProgressSavingMode: 'auto',
   saveVideoHistoryWithLastViewedPlaylist: true,
   showFamilyFriendlyOnly: false,
+  // Which kinds the subscriptions stream shows, one per chip in the row above
+  // it. A standing preference rather than a session's, which is why it is here
+  // and not in `sessionStorage`: the reader who never watches shorts wants them
+  // gone tomorrow as well.
+  //
+  // Only what is shown. Every kind is fetched every refresh whatever these say
+  // — see `fetchedSubscriptionFeeds` — so that switching one on is instant.
+  showSubscriptionsVideos: true,
+  showSubscriptionsShorts: true,
+  showSubscriptionsLive: true,
+  showSubscriptionsPosts: true,
+  // Whether the shelf of scheduled premieres and live streams over the
+  // subscriptions stream is open. Here rather than in `sessionStorage` because
+  // whoever folded it away meant it, and meant it tomorrow as well. Folded to
+  // begin with: the shelf is a schedule rather than news, and its one line says
+  // it is there without opening itself over the stream anyone came for. Only
+  // the default moved — a stored choice is read as it always was, so nobody who
+  // opened it finds it closed again.
+  upcomingShelfExpanded: false,
   sponsorBlockShowSkippedToast: true,
   sponsorBlockUrl: 'https://sponsor.ajay.app',
   sponsorBlockSponsor: {

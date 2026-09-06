@@ -825,6 +825,89 @@ export function getRelativeTimeFromDate(date, hideSeconds = false, useThirtyDayM
 }
 
 /**
+ * How far off something still is: "in 6 days", "in 2 hours".
+ *
+ * The forward-looking twin of `getRelativeTimeFromDate`, which cannot do this
+ * job: given a date in the future its difference goes negative, and it then
+ * either answers "Moments Ago" or counts the whole wait in seconds. Rather than
+ * teach it a second direction and risk the first, this is its own function.
+ *
+ * Days is as coarse as it gets. Weeks and months are how one reads the past,
+ * where the exact day stopped mattering a while ago; a schedule is read
+ * forwards, and "in 3 weeks" is a worse answer than "in 19 days" for something
+ * one might want to be present for. The exact time is alongside it in any case
+ * — see `formatScheduledTime`.
+ *
+ * @param {number} date milliseconds since the epoch
+ * @returns {string}
+ */
+export function getRelativeTimeUntilDate(date) {
+  if (!date) { return '' }
+
+  let until = (date - Date.now()) / 1000
+  let timeUnit = 'second'
+
+  if (Math.abs(until) >= 60) {
+    until /= 60
+    timeUnit = 'minute'
+  }
+
+  if (timeUnit === 'minute' && Math.abs(until) >= 60) {
+    until /= 60
+    timeUnit = 'hour'
+  }
+
+  if (timeUnit === 'hour' && Math.abs(until) >= 24) {
+    until /= 24
+    timeUnit = 'day'
+  }
+
+  return new Intl.RelativeTimeFormat([i18n.global.locale.value, 'en']).format(Math.round(until), timeUnit)
+}
+
+/**
+ * When something is scheduled for: "09-12 12:00 (in 6 days)".
+ *
+ * The exact time first and always, with how far off it is as help beside it.
+ * Never the other way round and never the relative time alone, because a
+ * premiere "in 6 days" is not something anyone can write in a calendar, and the
+ * card carrying it does not tick: read an hour later, "in 2 hours" is simply
+ * wrong, where a stated time stays true for ever.
+ *
+ * The date is deliberately short — no weekday, no seconds — because it sits in
+ * a line with the channel's name and has to stay a glance rather than a read.
+ * The year appears only when it is not this one, which is the only case where
+ * leaving it out could mislead.
+ *
+ * @param {number} date milliseconds since the epoch
+ * @returns {string}
+ */
+export function formatScheduledTime(date) {
+  if (!date) { return '' }
+
+  const when = new Date(date)
+
+  /** @type {Intl.DateTimeFormatOptions} */
+  const options = {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }
+
+  if (when.getFullYear() !== new Date().getFullYear()) {
+    options.year = 'numeric'
+  }
+
+  const absolute = new Intl.DateTimeFormat([i18n.global.locale.value, 'en'], options).format(when)
+  const relative = getRelativeTimeUntilDate(date)
+
+  if (relative === '') { return absolute }
+
+  return i18n.global.t('Global.Scheduled Time', { absolute, relative })
+}
+
+/**
  * Escapes HTML tags to avoid XSS
  * @param {string} untrusted
  * @returns {string}

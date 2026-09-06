@@ -8,13 +8,16 @@
       v-else
       class="card"
     >
-      <h2>
-        <FontAwesomeIcon
-          :icon="['fas', 'search']"
-          class="headingIcon"
-        />
-        {{ t("Search Filters.Search Results") }}
-      </h2>
+      <div class="headingRow">
+        <h2>
+          <FontAwesomeIcon
+            :icon="['fas', 'search']"
+            class="headingIcon"
+          />
+          {{ t("Search Filters.Search Results") }}
+        </h2>
+        <FtDensitySwitch />
+      </div>
       <FtElementList
         :data="shownResults"
       />
@@ -44,6 +47,7 @@ import { useRoute } from 'vue-router'
 
 import FtLoader from '../../components/FtLoader/FtLoader.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtElementList from '../../components/FtElementList/FtElementList.vue'
 import FtAutoLoadNextPageWrapper from '../../components/FtAutoLoadNextPageWrapper.vue'
 

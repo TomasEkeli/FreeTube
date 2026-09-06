@@ -3,13 +3,16 @@
     <FtCard
       class="card"
     >
-      <h2>
-        <FontAwesomeIcon
-          :icon="['fas', 'fire']"
-          class="trendingIcon"
-        />
-        {{ $t("Trending.Trending") }}
-      </h2>
+      <div class="headingRow">
+        <h2>
+          <FontAwesomeIcon
+            :icon="['fas', 'fire']"
+            class="trendingIcon"
+          />
+          {{ $t("Trending.Trending") }}
+        </h2>
+        <FtDensitySwitch />
+      </div>
       <FtFlexBox
         class="trendingInfoTabs"
         role="tablist"
@@ -104,6 +107,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTem
 import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtLoader from '../../components/FtLoader/FtLoader.vue'
 import FtElementList from '../../components/FtElementList/FtElementList.vue'
 import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'

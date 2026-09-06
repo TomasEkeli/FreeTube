@@ -66,6 +66,29 @@ export function isUpcomingPremiere(item) {
 }
 
 /**
+ * The video an entry in the feed leads to.
+ *
+ * For a video that is the video. For a post carrying one it is the attachment's,
+ * because the post is a gateway: the card opens the video, so watching that
+ * video is what "watched" means for the post as well. Without this a shared
+ * video stays in a feed that hides watched videos for ever, since nothing the
+ * post holds is a video id.
+ *
+ * Anything else — a text post, a poll, a shared playlist — leads to no video and
+ * says so.
+ *
+ * @param {object} entry an entry as the merged subscription stream holds it
+ * @returns {string | undefined}
+ */
+export function entryVideoId(entry) {
+  if (entry.videoId) { return entry.videoId }
+
+  const attachment = entry.postContent
+
+  return attachment?.type === 'video' ? attachment.content?.videoId : undefined
+}
+
+/**
  * Parse a YouTube Atom feed.
  *
  * A feed that parses but has no `entry` elements is a real answer: the channel

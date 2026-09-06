@@ -8,13 +8,16 @@
       v-else
       class="card"
     >
-      <h2>
-        <FontAwesomeIcon
-          :icon="['fas', 'users']"
-          class="headingIcon"
-        />
-        {{ $t("Most Popular") }}
-      </h2>
+      <div class="headingRow">
+        <h2>
+          <FontAwesomeIcon
+            :icon="['fas', 'users']"
+            class="headingIcon"
+          />
+          {{ $t("Most Popular") }}
+        </h2>
+        <FtDensitySwitch />
+      </div>
       <ft-element-list
         :data="shownResults"
       />
@@ -34,6 +37,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 
 import FtLoader from '../../components/FtLoader/FtLoader.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtElementList from '../../components/FtElementList/FtElementList.vue'
 import FtRefreshWidget from '../../components/FtRefreshWidget/FtRefreshWidget.vue'
 import store from '../../store/index'
