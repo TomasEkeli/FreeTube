@@ -415,6 +415,14 @@ $watched-transition-duration: 0.5s;
       overflow: hidden;
       overflow-wrap: anywhere;
 
+      // The watched styling fades this text out, and does it by setting a
+      // duration and no property, which means every property. Left at that the
+      // slot would animate its own height for half a second each time the
+      // density changed, and a card that resizes gradually is the jumping
+      // interface this whole slot exists to prevent. Only the colour was ever
+      // meant to move.
+      transition-property: color;
+
       /* stylelint-disable-next-line property-no-vendor-prefix */
       -webkit-box-orient: vertical;
       line-clamp: var(--ft-card-description-lines);

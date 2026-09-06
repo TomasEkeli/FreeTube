@@ -488,12 +488,17 @@ const effectiveListTypeIsList = computed(() => {
  * surfaces where a backend happens to supply it would make the shorts that do
  * and the shorts that do not look like different kinds of thing.
  *
+ * Read from the props rather than from the ref beside them, which is filled
+ * once and never again: the whole point of reserving the space is that a
+ * description can appear in a card that is already on screen, and it cannot do
+ * that if the card stopped listening when it mounted.
+ *
  * @type {import('vue').ComputedRef<string>}
  */
 const descriptionSnippet = computed(() => {
   if (isShort.value) { return '' }
 
-  return description.value ?? ''
+  return props.data.description ?? ''
 })
 
 /**
