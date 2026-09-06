@@ -280,8 +280,8 @@
         </button>
       </div>
       <p
-        v-if="description && effectiveListTypeIsList && appearance === 'result'"
-        v-safer-html="description"
+        v-if="showsDescriptionSlot"
+        v-safer-html="descriptionSnippet"
         class="description"
         dir="auto"
       />
@@ -477,6 +477,43 @@ const listType = computed(() => store.getters.getListType)
 const effectiveListTypeIsList = computed(() => {
   return (listType.value === 'list' || props.forceListType === 'list') &&
     props.forceListType !== 'grid'
+})
+
+/**
+ * The description this card shows, empty when it has none to show.
+ *
+ * A short is empty deliberately rather than by omission. The back-fill that
+ * teaches an entry its description never runs for shorts, so on the
+ * subscriptions feed a shorts card has nothing either way; showing one on the
+ * surfaces where a backend happens to supply it would make the shorts that do
+ * and the shorts that do not look like different kinds of thing.
+ *
+ * @type {import('vue').ComputedRef<string>}
+ */
+const descriptionSnippet = computed(() => {
+  if (isShort.value) { return '' }
+
+  return description.value ?? ''
+})
+
+/**
+ * Whether the card carries a description slot at all.
+ *
+ * A list shows the snippet only when there is one, as it always has. A grid
+ * card keeps the slot either way, empty when it has nothing: the description
+ * arrives minutes after the card is on screen, and a card that grew at that
+ * moment would push every card below it down the page. How tall the empty slot
+ * is, and whether the density mode has one at all, is decided in CSS.
+ *
+ * The appearance keeps the slot away from the watch page's sidebar cards,
+ * which is where the list rule has always kept the snippet too.
+ *
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const showsDescriptionSlot = computed(() => {
+  if (props.appearance !== 'result') { return false }
+
+  return !effectiveListTypeIsList.value || descriptionSnippet.value !== ''
 })
 
 /** @type {import('vue').ComputedRef<'' | 'start' | 'middle' | 'end' | 'hidden' | 'blur'>} */
