@@ -1961,7 +1961,9 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       }
     }
     case 'SHORT':
+    case 'STATION':
     case 'VIDEO': {
+      const isStation = lockupView.content_type === 'STATION'
       let publishedText
       let lengthSeconds = ''
       let liveNow = false
@@ -1976,7 +1978,8 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       }
 
       /** @type {YTNodes.ThumbnailBottomOverlayView | undefined } */
-      const thumbnailBottomOverlayView = lockupView.content_image?.overlays?.firstOfType(YTNodes.ThumbnailBottomOverlayView)
+      const thumbnailBottomOverlayView = lockupView.content_image?.overlays?.firstOfType(YTNodes.ThumbnailBottomOverlayView) ??
+        lockupView.content_image?.primary_thumbnail?.overlays?.firstOfType(YTNodes.ThumbnailBottomOverlayView)
 
       if (thumbnailBottomOverlayView) {
         if (thumbnailBottomOverlayView.badges.some(badge => badge.badge_style === 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE')) {
@@ -2038,6 +2041,11 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         author = maybeAuthorText
       }
 
+      // I think this is only used for stations at the moment
+      if (author == null) {
+        author = lockupView.metadata?.metadata?.metadata_rows[0].metadata_parts?.[0].avatar_stack.text?.text
+      }
+
       return {
         // Shorts and videos are read the same way but are not the same thing:
         // saying which one this is lets the card mark it. See `parseShort`.
@@ -2051,6 +2059,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         lengthSeconds,
         liveNow,
         isUpcoming,
+        isStation,
         premiereDate
       }
     }
