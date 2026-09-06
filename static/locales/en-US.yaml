@@ -186,15 +186,11 @@ Channels:
   Count: '{number} channel(s) found.'
   Empty: Your channel list is currently empty.
   Unsubscribe Prompt: Are you sure you want to unsubscribe from "{channelName}"?
-# Only the category names are left of this section: the page is Explore now, but
-# these two strings are translated everywhere and the chips still use them.
-Trending:
-  Gaming: Gaming
-  Sports: Sports
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown
   No Categories Shown: Switch on a category to see what is trending in it.
+  Nothing to Explore: YouTube is not offering anything to explore in this region.
 Most Popular: Most Popular
 Feed:
   Feed Last Updated: '{feedName} feed last updated: {date}'
