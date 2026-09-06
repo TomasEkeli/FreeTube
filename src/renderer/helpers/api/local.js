@@ -72,13 +72,16 @@ if (process.env.SUPPORTS_LOCAL_API) {
  * @param {object} options
  * @param {boolean} options.withPlayer set to true to get an Innertube instance that can decode the streaming URLs
  * @param {string|undefined} options.location the geolocation to pass to YouTube get different content
+ * @param {string|undefined} options.lang the language YouTube should answer in, as `hl`. Only
+ *   worth passing where YouTube writes the words rather than us — the Explore guide's
+ *   destination titles are the one place today
  * @param {boolean} options.safetyMode whether to hide mature content
  * @param {import('youtubei.js').ClientType} options.clientType use an alterate client
  * @param {boolean} options.generateSessionLocally generate the session locally or let YouTube generate it (local is faster, remote is more accurate)
  * @param {?import('youtubei.js').FetchFunction} options.fetchFunc optional custom fetch function
  * @returns the Innertube instance
  */
-async function createInnertube({ withPlayer = false, location = undefined, safetyMode = false, clientType = undefined, generateSessionLocally = true, fetchFunc = null } = {}) {
+async function createInnertube({ withPlayer = false, location = undefined, lang = undefined, safetyMode = false, clientType = undefined, generateSessionLocally = true, fetchFunc = null } = {}) {
   let cache
   if (withPlayer) {
     if (process.env.IS_ELECTRON) {
@@ -97,6 +100,7 @@ async function createInnertube({ withPlayer = false, location = undefined, safet
 
     retrieve_player: !!withPlayer,
     location: location,
+    lang: lang,
     enable_safety_mode: !!safetyMode,
     client_type: clientType,
 
@@ -311,41 +315,115 @@ export async function untilEndOfLocalPlayList(playlist, callback, options = { ru
 }
 
 /**
- * @param {string} location
- * @param {'gaming' | 'sports' | 'podcasts'} tab
+ * A destination a guide entry has to point at to be worth asking about: a
+ * channel, or one of the `FE…_destination` feeds. It leaves out Home,
+ * Subscriptions, History, Premium and the rest, which are places in YouTube
+ * rather than things YouTube is showing.
+ *
+ * Shape rather than name, because the names are localised — the section itself
+ * is "Utforsk" in Norwegian — and because a destination YouTube invents next
+ * year will have this shape and no name we know.
  */
-export async function getLocalTrending(location, tab) {
-  const innertube = await createInnertube({ location })
+const EXPLORE_DESTINATION_BROWSE_ID = /^(UC[\w-]{22}|FE\w*_destination)$/
 
-  let args
+/**
+ * The one hand-written exception, and the reason it exists.
+ *
+ * A guide entry points at a destination, not at a feed, and for most of them
+ * the destination's own page answers with videos. Gaming's does not: it is a
+ * wall of game cards with three videos beside it. Its feed is the `/gaming/trending`
+ * tab, and the link to that tab is in the response — but youtubei.js's
+ * `RichListHeader` parses the title and drops the endpoint, so it cannot be
+ * reached through the parsed tree. Rather than walk the raw response for one
+ * destination, the param is written down.
+ *
+ * `Egh0cmVuZGluZw==` is YouTube's own short form for that tab, taken from the
+ * gaming landing page's own link to it. See
+ * `thoughts/2026-09-06-trending-category-feeds-research.md` §2.2, which lists
+ * two other ways of getting it if this one ever stops working.
+ */
+const GAMING_TRENDING = {
+  browseId: 'UCOpNcN46UbXVtpKMrmU4Abg',
+  params: 'Egh0cmVuZGluZw%3D%3D'
+}
 
-  switch (tab) {
-    case 'gaming':
-      // https://www.youtube.com/gaming/trending
-      args = {
-        browseId: 'UCOpNcN46UbXVtpKMrmU4Abg',
-        params: 'Egh0cmVuZGluZ7gBAJIDAPIGBAoCMgA'
+/**
+ * The destinations YouTube offers a reader in this region: its own Explore
+ * list, as it would draw it in the sidebar.
+ *
+ * These are candidates, not chips. The guide says a destination exists, not
+ * that it has videos in it — Music, Movies and Playables are all in this list
+ * and none of them answers with a video. Asking is the only way to find out,
+ * which is what `getLocalExploreFeed` is for.
+ *
+ * @param {string} location the region, as `gl`
+ * @param {string|undefined} lang the language the titles should come back in, as `hl`
+ * @returns {Promise<{browseId: string, params: string|undefined, title: string, iconType: string|undefined}[]>}
+ */
+export async function getLocalExploreDestinations(location, lang) {
+  const innertube = await createInnertube({ location, lang })
+  const guide = await innertube.getGuide()
+
+  const destinations = []
+
+  /**
+   * @param {import('youtubei.js').YTNodes.GuideEntry[]} items
+   */
+  function collect(items) {
+    for (const item of items ?? []) {
+      // Everything below the first few destinations is behind YouTube's own
+      // "Show more", so anything that does not open the collapsible finds
+      // Music, Movies and Live and stops there.
+      if (item.is(YTNodes.GuideCollapsibleEntry)) {
+        collect(item.expandable_items)
+        continue
       }
-      break
-    case 'sports':
-      // https://www.youtube.com/channel/UCEgdi0XIXXZ-qJOFPf4JSKw/sportstab?ss=CMMG
-      args = {
-        browseId: 'UCEgdi0XIXXZ-qJOFPf4JSKw',
-        params: 'EglzcG9ydHN0YWK4AQCSAwDyBgQKAjIA'
+
+      if (item.is(YTNodes.GuideCollapsibleSectionEntry)) {
+        collect(item.section_items)
+        continue
       }
-      break
-    case 'podcasts':
-      // https://www.youtube.com/podcasts/popularepisodes
-      args = {
-        browseId: 'FEpodcasts_destination',
-        params: 'qgcCCAM%3D'
-      }
-      break
-    default:
-      throw new Error('Unknown trending tab')
+
+      if (!item.is(YTNodes.GuideEntry)) { continue }
+
+      const browseId = item.endpoint?.payload?.browseId
+
+      if (!browseId || !EXPLORE_DESTINATION_BROWSE_ID.test(browseId)) { continue }
+
+      destinations.push({
+        browseId,
+        params: browseId === GAMING_TRENDING.browseId ? GAMING_TRENDING.params : item.endpoint?.payload?.params,
+        title: item.title.text,
+        iconType: item.icon_type
+      })
+    }
   }
 
-  const response = await innertube.actions.execute('/browse', args)
+  for (const section of guide.contents ?? []) {
+    // The subscriptions section is channels the reader follows, which are the
+    // same shape as a destination and none of YouTube's business here.
+    if (!section.is(YTNodes.GuideSection)) { continue }
+
+    collect(section.items)
+  }
+
+  return destinations
+}
+
+/**
+ * What a destination is showing, as a list of videos.
+ *
+ * Empty is a real answer and not an error: it is how Music, Movies and
+ * Playables say they are not video feeds at all, and how News says it has
+ * nothing for this region.
+ *
+ * @param {string} location the region, as `gl`
+ * @param {{browseId: string, params: string|undefined}} destination
+ */
+export async function getLocalExploreFeed(location, { browseId, params }) {
+  const innertube = await createInnertube({ location })
+
+  const response = await innertube.actions.execute('/browse', params ? { browseId, params } : { browseId })
   const feed = new Mixins.Feed(innertube.actions, response)
 
   return feed.videos.map(video => parseLocalListVideo(video)).filter(_ => _)

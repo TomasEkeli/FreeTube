@@ -13,16 +13,21 @@ const state = {
   outlinesHidden: true,
   sessionSearchHistory: [],
   popularCache: null,
-  // What each Explore destination last answered with, kept for the session only:
-  // a chart nobody has looked at since the app started is worth refetching, one
-  // looked at a minute ago is not. `null` means never fetched, which is not the
-  // same as an empty list — a destination that answered with nothing has been
-  // asked and is not asked again until a refresh.
-  exploreCache: {
-    gaming: null,
-    sports: null,
-    podcasts: null
-  },
+  // What Explore found, per region, kept for the session only: a chart nobody
+  // has looked at since the app started is worth fetching again, one looked at
+  // a minute ago is not.
+  //
+  // Per region because that is what the answer depends on, twice over: YouTube
+  // offers different destinations in different countries, and the same
+  // destination shows different videos in each. Keyed that way, coming back to
+  // a region visited earlier in the session costs nothing.
+  //
+  // One entry holds the whole page — the categories, their videos and when
+  // they were fetched — because they arrive together. Finding out which
+  // destinations have videos in them *is* fetching them.
+  //
+  // `{ [region]: { fetchedAt: Date, categories: ExploreCategory[] } }`
+  exploreCache: {},
   cachedPlaylist: null,
   deArrowCache: {},
   showProgressBar: false,
@@ -48,11 +53,7 @@ const state = {
   externalPlayerValues: [],
   externalPlayerCmdArguments: {},
   lastPopularRefreshTimestamp: '',
-  lastExploreRefreshTimestamp: {
-    gaming: '',
-    sports: '',
-    podcasts: ''
-  },
+
   /**
    * Whether this window has done its automatic subscription fetch yet.
    *
@@ -156,10 +157,6 @@ const getters = {
 
   getExternalPlayerCmdArguments (state) {
     return state.externalPlayerCmdArguments
-  },
-
-  getLastExploreRefreshTimestamp(state) {
-    return state.lastExploreRefreshTimestamp
   },
 
   getLastPopularRefreshTimestamp(state) {
@@ -700,16 +697,12 @@ const mutations = {
     state.popularCache = value
   },
 
-  setExploreCache (state, { value, page }) {
-    state.exploreCache[page] = value
-  },
-
   /**
    * @param {typeof state} state
-   * @param {{page: string, timestamp: Date}} param1
+   * @param {{region: string, value: {fetchedAt: Date, categories: any[]}}} param1
    */
-  setLastExploreRefreshTimestamp (state, { page, timestamp }) {
-    state.lastExploreRefreshTimestamp[page] = timestamp
+  setExploreCache (state, { region, value }) {
+    state.exploreCache = { ...state.exploreCache, [region]: value }
   },
 
   setLastPopularRefreshTimestamp (state, timestamp) {
@@ -718,10 +711,12 @@ const mutations = {
 
   /**
    * @param {typeof state} state
-   * @param {string} page
+   * @param {string} region
    */
-  clearExploreCache(state, page) {
-    state.exploreCache[page] = null
+  clearExploreCache(state, region) {
+    const { [region]: _cleared, ...rest } = state.exploreCache
+
+    state.exploreCache = rest
   },
 
   setCachedPlaylist(state, value) {

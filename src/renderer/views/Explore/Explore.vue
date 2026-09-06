@@ -17,9 +17,9 @@
           :aria-label="$t('Explore.Categories Shown')"
         >
           <FtToggleChip
-            v-for="category in EXPLORE_CATEGORIES"
+            v-for="category in categories"
             :key="category.id"
-            :label="categoryTitle(category.id)"
+            :label="category.title"
             :icon="category.icon"
             :pressed="categoryIsShown(category.id)"
             @toggle="toggleCategory(category.id)"
@@ -28,21 +28,21 @@
         <FtDensitySwitch />
       </div>
       <FtLoader
-        v-if="anyLoading && stream.length === 0"
+        v-if="isLoading"
       />
       <FtElementList
-        v-else-if="enabledCategories.length > 0"
+        v-else-if="shownCategories.length > 0"
         :data="stream"
       />
       <p
         v-else
         class="message"
       >
-        {{ $t("Explore.No Categories Shown") }}
+        {{ categories.length > 0 ? $t("Explore.No Categories Shown") : $t("Explore.Nothing to Explore") }}
       </p>
     </FtCard>
     <FtRefreshWidget
-      :disable-refresh="anyLoading"
+      :disable-refresh="isLoading"
       :last-refresh-timestamp="lastRefreshTimestamp"
       :title="$t('Explore.Explore')"
       @click="refresh"
@@ -52,7 +52,7 @@
 
 <script setup>
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
@@ -65,14 +65,12 @@ import FtToggleChip from '../../components/FtToggleChip/FtToggleChip.vue'
 import store from '../../store/index'
 
 import {
-  EXPLORE_CATEGORIES,
-  enabledExploreCategories,
+  discoverExploreCategories,
   exploreCategoryIsShown,
   mergeByRank,
   setExploreCategoryShown
 } from '../../helpers/exploreCategories'
 import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../../helpers/utils'
-import { getLocalTrending } from '../../helpers/api/local'
 import { KeyboardShortcuts } from '../../../constants'
 
 /**
@@ -85,16 +83,19 @@ import { KeyboardShortcuts } from '../../../constants'
  * the reader ask for each one in turn and remember what the other two said.
  *
  * So the tabs are chips, the same grammar as the subscriptions page: each says
- * whether its destination belongs in what is being read, any number of them can
- * be on, and the one stream below holds whichever are.
+ * whether its category belongs in what is being read, any number of them can be
+ * on, and the one stream below holds whichever are.
+ *
+ * Which chips there are is YouTube's answer, not ours — see
+ * `helpers/exploreCategories.js`. It differs by region, and it is found by
+ * asking, so opening the page is one round of requests and then nothing:
+ * everything a chip could show is already here, and a chip pressed either way
+ * costs no traffic and no spinner.
  *
  * The stream is round-robin by rank rather than by date: see `mergeByRank`.
- *
- * A destination is fetched when its chip first goes on and served from the
- * cache after that, so switching one off and back on costs nothing.
  */
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 /** @type {import('vue').ComputedRef<'local' | 'invidious'>} */
 const backendPreference = computed(() => {
@@ -111,84 +112,69 @@ const region = computed(() => {
   return store.getters.getRegion.toUpperCase()
 })
 
-/** @type {import('vue').ComputedRef<Record<string, any[] | null>>} */
-const exploreCache = computed(() => {
-  return store.getters.getExploreCache
+/** What this region's last look at YouTube found, or nothing if we have not looked. */
+const found = computed(() => {
+  return store.getters.getExploreCache[region.value]
 })
+
+const isLoading = ref(false)
 
 /**
- * Which destinations are being fetched right now, so that a chip switched on
- * twice in a second does not fetch twice.
+ * The chips: every category this region has, whether or not it is switched on.
  *
- * @type {import('vue').Ref<Record<string, boolean>>}
+ * @type {import('vue').ComputedRef<import('../../helpers/exploreCategories').ExploreCategory[]>}
  */
-const isLoading = ref({})
+const categories = computed(() => found.value?.categories ?? [])
 
-/** @type {import('vue').ComputedRef<string[]>} */
-const enabledCategories = computed(() => {
-  // Reading the setting inside the computed is what subscribes this to it, so
-  // the chips and the stream both follow a toggle.
-  return enabledExploreCategories()
+/**
+ * The categories in the stream.
+ *
+ * Reading the chip setting inside a computed is what subscribes the page to it,
+ * so pressing a chip redraws the stream.
+ *
+ * @type {import('vue').ComputedRef<import('../../helpers/exploreCategories').ExploreCategory[]>}
+ */
+const shownCategories = computed(() => {
+  return categories.value.filter(category => exploreCategoryIsShown(category.id))
 })
-
-const anyLoading = computed(() => enabledCategories.value.some(id => isLoading.value[id]))
 
 /** @type {import('vue').ComputedRef<any[]>} */
 const stream = computed(() => {
-  return mergeByRank(enabledCategories.value.map(id => exploreCache.value[id] ?? []))
+  return mergeByRank(shownCategories.value.map(category => category.videos))
 })
 
-/**
- * How old the stream is: the age of the least recently fetched thing in it.
- *
- * Several destinations, several fetch times, and only one line to say it in.
- * The oldest is the honest answer — anything newer would claim the stale part
- * of the stream is fresher than it is.
- *
- * @type {import('vue').ComputedRef<string>}
- */
+/** @type {import('vue').ComputedRef<string>} */
 const lastRefreshTimestamp = computed(() => {
-  const timestamps = store.getters.getLastExploreRefreshTimestamp
-  const fetched = enabledCategories.value
-    .map(id => timestamps[id])
-    .filter(timestamp => timestamp)
+  const fetchedAt = found.value?.fetchedAt
 
-  if (fetched.length === 0) { return '' }
-
-  const oldest = fetched.reduce((oldest, timestamp) => timestamp < oldest ? timestamp : oldest)
-
-  return getRelativeTimeFromDate(oldest, true)
+  return fetchedAt ? getRelativeTimeFromDate(fetchedAt, true) : ''
 })
 
 /**
- * Fetch whatever is switched on and has never been fetched.
+ * Ask YouTube what it has, unless this region has already been asked in this
+ * session.
  *
- * A destination that answered with nothing is still a destination that has been
- * fetched; it is not asked again until a refresh.
+ * @param {boolean} refetch ignore what we have and ask again
  */
-function fetchMissing() {
-  for (const id of enabledCategories.value) {
-    if (exploreCache.value[id] == null && !isLoading.value[id]) {
-      fetchCategory(id)
-    }
-  }
-}
-
-/**
- * @param {string} id
- */
-async function fetchCategory(id) {
+async function discover(refetch = false) {
   if (!process.env.SUPPORTS_LOCAL_API || !(backendFallback.value || backendPreference.value === 'local')) {
     return
   }
 
-  isLoading.value = { ...isLoading.value, [id]: true }
+  if (found.value && !refetch) { return }
+
+  isLoading.value = true
 
   try {
-    const results = await getLocalTrending(region.value, id)
+    // The language the guide's titles come back in. YouTube names its own
+    // destinations, since they are its destinations and it has words for them
+    // in every language we ship.
+    const categories = await discoverExploreCategories(region.value, locale.value)
 
-    store.commit('setExploreCache', { value: results, page: id })
-    store.commit('setLastExploreRefreshTimestamp', { page: id, timestamp: new Date() })
+    store.commit('setExploreCache', {
+      region: region.value,
+      value: { fetchedAt: new Date(), categories }
+    })
   } catch (error) {
     console.error(error)
     const errorMessage = t('Local API Error (Click to copy)')
@@ -196,50 +182,22 @@ async function fetchCategory(id) {
       copyToClipboard(error)
     })
   } finally {
-    isLoading.value = { ...isLoading.value, [id]: false }
+    isLoading.value = false
   }
 }
 
-/** Throw away what is shown and ask for all of it again. */
+/** Throw away what is shown and ask again. */
 function refresh() {
-  for (const id of enabledCategories.value) {
-    store.commit('clearExploreCache', id)
-  }
+  store.commit('clearExploreCache', region.value)
 
-  fetchMissing()
-}
-
-/**
- * What each destination is called.
- *
- * Written out rather than looked up from the descriptors, because a translation
- * key has to be a literal for the linter to check it against the locale files.
- * The strings still sit in the locale files' `Trending` section, where they are
- * translated into every language the app ships: the next ticket replaces them
- * with the localised titles YouTube itself gives each destination, so moving
- * them now would throw those translations away for one ticket's lifetime.
- *
- * @param {string} id
- * @returns {string}
- */
-function categoryTitle(id) {
-  switch (id) {
-    case 'gaming':
-      return t('Trending.Gaming')
-    case 'sports':
-      return t('Trending.Sports')
-    case 'podcasts':
-      return t('Channel.Podcasts.Podcasts')
-    default:
-      return ''
-  }
+  discover(true)
 }
 
 /**
  * @param {string} id
  */
 function categoryIsShown(id) {
-  return enabledCategories.value.includes(id)
+  return exploreCategoryIsShown(id)
 }
 
 /**
@@ -248,11 +206,6 @@ function categoryIsShown(id) {
 function toggleCategory(id) {
   setExploreCategoryShown(id, !exploreCategoryIsShown(id))
 }
-
-// A chip switched on is a request for that destination, whether or not it has
-// ever been fetched. Watching the set rather than handling it in the toggle
-// keeps that true however the set comes to change.
-watch(enabledCategories, fetchMissing)
 
 /**
  * @param {KeyboardEvent} event the keyboard event
@@ -269,7 +222,7 @@ function keyboardShortcutHandler(event) {
   switch (event.key.toLowerCase()) {
     case 'f5':
     case KeyboardShortcuts.APP.SITUATIONAL.REFRESH:
-      if (!anyLoading.value) {
+      if (!isLoading.value) {
         refresh()
       }
       break
@@ -277,7 +230,7 @@ function keyboardShortcutHandler(event) {
 }
 
 onMounted(() => {
-  fetchMissing()
+  discover()
   document.addEventListener('keydown', keyboardShortcutHandler)
 })
 
