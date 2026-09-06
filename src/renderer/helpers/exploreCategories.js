@@ -9,7 +9,9 @@ import { getLocalExploreDestinations, getLocalExploreFeed } from './api/local'
  * categories either. What there is, is the Explore section of YouTube's own
  * sidebar — a handful of destinations, different in every region — and the
  * page is a row of chips over exactly those. Nothing here is allow-listed:
- * whatever YouTube says exists is what the reader can switch on.
+ * whatever YouTube says exists is what the reader can switch on, plus the few
+ * destinations it serves without advertising them (`EXPLORE_PROBES` in
+ * `api/local.js`).
  *
  * The one thing the code decides is what counts as a category, and the rule is
  * "a destination that answers with videos". Music answers with playlists,
@@ -74,27 +76,30 @@ export async function discoverExploreCategories(region, lang) {
   const destinations = await getLocalExploreDestinations(region, lang)
 
   const categories = await Promise.all(destinations.map(async destination => {
-    let videos
+    let feed
 
     try {
-      videos = await getLocalExploreFeed(region, destination)
+      feed = await getLocalExploreFeed(region, destination, lang)
     } catch (error) {
       // Some destinations answer with something youtubei.js cannot parse —
       // Memberships does today. That is an answer of "no videos here" as far as
       // this page is concerned.
-      console.error(`Explore: ${destination.title} (${destination.browseId}) could not be read`, error)
+      console.error(`Explore: ${destination.title ?? destination.browseId} could not be read`, error)
       return null
     }
 
-    if (videos.length === 0) { return null }
+    if (feed.videos.length === 0) { return null }
 
     const known = KNOWN_DESTINATIONS[destination.iconType]
 
     return {
       id: known?.id ?? destination.browseId,
-      title: destination.title,
+      // The guide's title where there was a guide entry, the destination
+      // page's own where this one was found by probing. Both are YouTube's
+      // words in the reader's language.
+      title: destination.title ?? feed.title ?? destination.browseId,
       icon: known?.icon ?? null,
-      videos
+      videos: feed.videos
     }
   }))
 

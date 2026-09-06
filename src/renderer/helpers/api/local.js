@@ -348,17 +348,50 @@ const GAMING_TRENDING = {
 }
 
 /**
- * The destinations YouTube offers a reader in this region: its own Explore
- * list, as it would draw it in the sidebar.
+ * The other half of guide-plus-probe: destinations YouTube serves in places
+ * where it does not advertise them.
+ *
+ * The guide is conservative rather than exact. It shrinks in smaller markets —
+ * Norway's leaves out Live, News, Learning and Fashion & Beauty — but three of
+ * those four answer with a full feed there anyway; only News is genuinely
+ * empty. Guide-presence means the feed works, guide-absence does not mean it
+ * is broken, so a chip row driven by the guide alone under-offers to exactly
+ * the readers who have least to choose from. See
+ * `thoughts/2026-09-06-trending-category-feeds-research.md` §4.
+ *
+ * This is a hand-written list, and it is meant to be: these are destinations
+ * we have seen with our own eyes. It is a fallback, not the source — anything
+ * in the guide is used from the guide, and a probe only fills a gap. Each
+ * carries the `icon_type` its guide entry has where the guide does list it, so
+ * a category is the same category with the same chip in every region.
+ *
+ * A probe is nothing more than asking, which is what discovery does to every
+ * destination anyway: whatever answers with videos is a category, and whatever
+ * does not is silently not one.
+ */
+const EXPLORE_PROBES = [
+  { browseId: 'UC4R8DWoMoI7CAwX8_LjQHig', iconType: 'LIVE_CAIRO' },
+  { browseId: 'UCYfdidRxbB8Qhf0Nx7ioOYw', iconType: 'NEWS_CAIRO' },
+  { browseId: 'UCtFRv9O2AHqOZjjynzrv-xg', iconType: 'LEARNING_CAIRO' },
+  { browseId: 'UCrpQ4p1Ql_hG8rKXIKM1MOQ', iconType: 'FASHION_LOGO_CAIRO' }
+]
+
+/**
+ * The destinations worth asking about in this region: YouTube's own Explore
+ * list, and the known few it leaves out of that list in smaller markets.
  *
  * These are candidates, not chips. The guide says a destination exists, not
  * that it has videos in it — Music, Movies and Playables are all in this list
  * and none of them answers with a video. Asking is the only way to find out,
  * which is what `getLocalExploreFeed` is for.
  *
+ * A probed destination arrives without a title, because the guide is where
+ * titles come from and it did not mention this one. Its own page has one, and
+ * `getLocalExploreFeed` brings it back.
+ *
  * @param {string} location the region, as `gl`
  * @param {string|undefined} lang the language the titles should come back in, as `hl`
- * @returns {Promise<{browseId: string, params: string|undefined, title: string, iconType: string|undefined}[]>}
+ * @returns {Promise<{browseId: string, params: string|undefined, title: string|undefined, iconType: string|undefined}[]>}
  */
 export async function getLocalExploreDestinations(location, lang) {
   const innertube = await createInnertube({ location, lang })
@@ -407,26 +440,49 @@ export async function getLocalExploreDestinations(location, lang) {
     collect(section.items)
   }
 
+  for (const probe of EXPLORE_PROBES) {
+    if (destinations.some(destination => destination.browseId === probe.browseId)) { continue }
+
+    destinations.push({
+      browseId: probe.browseId,
+      params: undefined,
+      title: undefined,
+      iconType: probe.iconType
+    })
+  }
+
   return destinations
 }
 
 /**
- * What a destination is showing, as a list of videos.
+ * What a destination is showing, and what it calls itself.
  *
  * Empty is a real answer and not an error: it is how Music, Movies and
  * Playables say they are not video feeds at all, and how News says it has
  * nothing for this region.
  *
+ * The title is the destination page's own, in the language of `hl`, and it is
+ * here for the destinations the guide never mentioned — a probed one has no
+ * other name. Where the guide did give a title, that one is used; this is the
+ * fallback.
+ *
  * @param {string} location the region, as `gl`
  * @param {{browseId: string, params: string|undefined}} destination
+ * @param {string|undefined} lang the language the title should come back in, as `hl`
+ * @returns {Promise<{title: string|undefined, videos: any[]}>}
  */
-export async function getLocalExploreFeed(location, { browseId, params }) {
-  const innertube = await createInnertube({ location })
+export async function getLocalExploreFeed(location, { browseId, params }, lang) {
+  const innertube = await createInnertube({ location, lang })
 
   const response = await innertube.actions.execute('/browse', params ? { browseId, params } : { browseId })
   const feed = new Mixins.Feed(innertube.actions, response)
 
-  return feed.videos.map(video => parseLocalListVideo(video)).filter(_ => _)
+  return {
+    // Not through the parsed tree: youtubei.js has no node for a destination
+    // page's header, and this is one string.
+    title: response.data?.header?.pageHeaderRenderer?.pageTitle,
+    videos: feed.videos.map(video => parseLocalListVideo(video)).filter(_ => _)
+  }
 }
 
 /**
