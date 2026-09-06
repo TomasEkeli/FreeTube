@@ -25,7 +25,33 @@
             @toggle="toggleCategory(category.id)"
           />
         </div>
-        <FtDensitySwitch />
+        <div class="pageControls">
+          <div
+            v-if="regionNames.length > 0"
+            class="regionPicker"
+          >
+            <label
+              class="regionLabel"
+              :for="regionSelectId"
+            >
+              {{ $t("Explore.Region") }}
+            </label>
+            <select
+              :id="regionSelectId"
+              v-model="region"
+              class="regionSelect"
+            >
+              <option
+                v-for="(name, index) in regionNames"
+                :key="regionValues[index]"
+                :value="regionValues[index]"
+              >
+                {{ name }}
+              </option>
+            </select>
+          </div>
+          <FtDensitySwitch />
+        </div>
       </div>
       <FtLoader
         v-if="isLoading"
@@ -52,7 +78,7 @@
 
 <script setup>
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
@@ -107,10 +133,29 @@ const backendFallback = computed(() => {
   return store.getters.getBackendFallback
 })
 
-/** @type {import('vue').ComputedRef<string>} */
-const region = computed(() => {
-  return store.getters.getRegion.toUpperCase()
+/**
+ * Which country's charts these are, and the page's own control for it.
+ *
+ * Trending is per country and always has been, but the only place to say which
+ * country was the settings screen — two rooms away from the thing it changes,
+ * and with no way to see what changed. So the setting is here too, on the page
+ * it decides. It is the same setting, not a copy: General Settings goes on
+ * showing it, and either one moves the other.
+ *
+ * @type {import('vue').WritableComputedRef<string>}
+ */
+const region = computed({
+  get: () => store.getters.getRegion.toUpperCase(),
+  set: (value) => store.dispatch('updateRegion', value)
 })
+
+const regionSelectId = useId()
+
+/** @type {import('vue').ComputedRef<string[]>} */
+const regionNames = computed(() => store.getters.getRegionNames)
+
+/** @type {import('vue').ComputedRef<string[]>} */
+const regionValues = computed(() => store.getters.getRegionValues)
 
 /** What this region's last look at YouTube found, or nothing if we have not looked. */
 const found = computed(() => {
@@ -228,6 +273,18 @@ function keyboardShortcutHandler(event) {
       break
   }
 }
+
+/**
+ * A new region is a different page: different destinations on offer, and
+ * different videos behind each of them. Nothing watched this setting before,
+ * so changing it did nothing until the next visit; now the page follows it
+ * wherever it was changed, here or in the settings.
+ *
+ * Nothing is thrown away. The cache is keyed by region, so going back to one
+ * looked at earlier in this session is instant, and a refresh is what asks
+ * YouTube again.
+ */
+watch(region, () => discover())
 
 onMounted(() => {
   discover()
