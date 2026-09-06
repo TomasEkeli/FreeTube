@@ -97,11 +97,11 @@
       <div class="switchColumn">
         <FtToggleSwitch
           v-if="SUPPORTS_LOCAL_API"
-          :label="t('Settings.Distraction Free Settings.Hide Trending Videos')"
+          :label="t('Settings.Distraction Free Settings.Hide Explore')"
           :compact="true"
-          :disabled="disableHideTrendingVideos"
-          :default-value="hideTrendingVideos"
-          @change="updateHideTrendingVideos"
+          :disabled="disableHideExplore"
+          :default-value="hideExplore"
+          @change="updateHideExplore"
         />
         <FtToggleSwitch
           :label="t('Settings.Distraction Free Settings.Hide Popular Videos')"
@@ -333,14 +333,14 @@ function handleHideRecommendedVideos(value) {
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */
-const hideTrendingVideos = computed(() => store.getters.getHideTrendingVideos)
+const hideExplore = computed(() => store.getters.getHideExplore)
 
-const disableHideTrendingVideos = computed(() => backendPreference.value !== 'local' && !backendFallback.value)
+const disableHideExplore = computed(() => backendPreference.value !== 'local' && !backendFallback.value)
 /**
  * @param {boolean} value
  */
-function updateHideTrendingVideos(value) {
-  store.dispatch('updateHideTrendingVideos', value)
+function updateHideExplore(value) {
+  store.dispatch('updateHideExplore', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

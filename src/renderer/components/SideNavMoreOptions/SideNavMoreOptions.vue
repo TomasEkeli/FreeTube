@@ -208,7 +208,7 @@ const menuRef = useTemplateRef('menuRef')
 
 /** @type {import('vue').ComputedRef<boolean>} */
 const exploreVisible = computed(() => {
-  return !store.getters.getHideTrendingVideos &&
+  return !store.getters.getHideExplore &&
     (store.getters.getBackendFallback || store.getters.getBackendPreference === 'local')
 })
 
