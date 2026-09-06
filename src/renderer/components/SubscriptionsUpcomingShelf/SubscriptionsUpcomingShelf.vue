@@ -10,10 +10,12 @@
   next thing to happen, whereas the stream below runs newest first because that
   is the latest thing that did.
 
-  A list rather than a row of cards. A schedule is a column of times one reads
-  down, and the stream underneath is already a grid: a second grid over it would
-  read as more of the same feed, which is exactly the confusion this exists to
-  end.
+  The same cards, the same grid, the same density as the stream below — the
+  shelf follows the reader's layout choices exactly as every other surface
+  does, rather than imposing a layout of its own. What sets it apart is the
+  frame: the tint, the header, and the count, not a different shape of card.
+  (It briefly forced a full-width list on the theory that a schedule is a
+  column; on screen that read as the shelf ignoring the density switch.)
 
   Folded away it is one line with a count on it, which is the whole shelf for a
   reader who does not care — and the count is still there, so caring again costs
@@ -49,7 +51,6 @@
       v-if="expanded"
       class="shelfList"
       :data="entries"
-      display="list"
       :use-channels-hidden-preference="false"
     />
   </section>
