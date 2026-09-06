@@ -13,7 +13,12 @@ const state = {
   outlinesHidden: true,
   sessionSearchHistory: [],
   popularCache: null,
-  trendingCache: {
+  // What each Explore destination last answered with, kept for the session only:
+  // a chart nobody has looked at since the app started is worth refetching, one
+  // looked at a minute ago is not. `null` means never fetched, which is not the
+  // same as an empty list — a destination that answered with nothing has been
+  // asked and is not asked again until a refresh.
+  exploreCache: {
     gaming: null,
     sports: null,
     podcasts: null
@@ -43,7 +48,7 @@ const state = {
   externalPlayerValues: [],
   externalPlayerCmdArguments: {},
   lastPopularRefreshTimestamp: '',
-  lastTrendingRefreshTimestamp: {
+  lastExploreRefreshTimestamp: {
     gaming: '',
     sports: '',
     podcasts: ''
@@ -81,8 +86,8 @@ const getters = {
     return state.popularCache
   },
 
-  getTrendingCache(state) {
-    return state.trendingCache
+  getExploreCache(state) {
+    return state.exploreCache
   },
 
   getCachedPlaylist(state) {
@@ -153,8 +158,8 @@ const getters = {
     return state.externalPlayerCmdArguments
   },
 
-  getLastTrendingRefreshTimestamp(state) {
-    return state.lastTrendingRefreshTimestamp
+  getLastExploreRefreshTimestamp(state) {
+    return state.lastExploreRefreshTimestamp
   },
 
   getLastPopularRefreshTimestamp(state) {
@@ -695,16 +700,16 @@ const mutations = {
     state.popularCache = value
   },
 
-  setTrendingCache (state, { value, page }) {
-    state.trendingCache[page] = value
+  setExploreCache (state, { value, page }) {
+    state.exploreCache[page] = value
   },
 
   /**
    * @param {typeof state} state
-   * @param {{page: 'gaming' | 'sports' | 'podcasts', timestamp: Date}} param1
+   * @param {{page: string, timestamp: Date}} param1
    */
-  setLastTrendingRefreshTimestamp (state, { page, timestamp }) {
-    state.lastTrendingRefreshTimestamp[page] = timestamp
+  setLastExploreRefreshTimestamp (state, { page, timestamp }) {
+    state.lastExploreRefreshTimestamp[page] = timestamp
   },
 
   setLastPopularRefreshTimestamp (state, timestamp) {
@@ -713,10 +718,10 @@ const mutations = {
 
   /**
    * @param {typeof state} state
-   * @param {'gaming' | 'sports' | 'podcasts'} page
+   * @param {string} page
    */
-  clearTrendingCache(state, page) {
-    state.trendingCache[page] = null
+  clearExploreCache(state, page) {
+    state.exploreCache[page] = null
   },
 
   setCachedPlaylist(state, value) {

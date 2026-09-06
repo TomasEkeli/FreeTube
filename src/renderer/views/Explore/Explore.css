@@ -8,10 +8,7 @@
   color: var(--tertiary-text-color);
 }
 
-/* The control row and the chips in it are shared with Explore; they live in
-   components/FtToggleChip/chipRow.css. */
-
-.subscriptionIcon {
+.exploreIcon {
   color: var(--primary-color);
 }
 
