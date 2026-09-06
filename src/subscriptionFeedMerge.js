@@ -79,13 +79,15 @@ export function mergeSubscriptionFeedEntries(lists) {
 
 /**
  * Whether this entry is something that has not happened yet: a premiere or a
- * scheduled live stream.
+ * scheduled live stream still ahead of us.
  *
- * Answered from the flags the sources set, and deliberately not from the
- * publish time being in the future. The two agree today only because a premiere
- * is given its premiere date as its publish time — which is the very defect the
- * shelf exists to undo, and a shelf that depended on it would be built on the
- * thing it is meant to correct.
+ * Two questions, and both have to answer yes.
+ *
+ * Is it scheduled at all? Answered from the flags the sources set, and
+ * deliberately not from the publish time being in the future. The two agree
+ * today only because a premiere is given its premiere date as its publish time
+ * — which is the very defect the shelf exists to undo, and a shelf that
+ * depended on it would be built on the thing it is meant to correct.
  *
  * Not `isUpcomingPremiere`, which this file's renderer neighbour uses for the
  * hide-premieres setting. That predicate falls back to "an RSS entry with no
@@ -95,14 +97,34 @@ export function mergeSubscriptionFeedEntries(lists) {
  * about premieres, so it stays in the stream until the detail back-fill fetches
  * the channel page and learns better, at which point the next rebuild moves it.
  *
+ * And is it still ahead? The flag alone is not enough, because nothing ever
+ * takes it off: an RSS refresh brings no premiere flag at all, so the carry-over
+ * hands the old one straight back, and a stream that aired in August is still
+ * marked upcoming in September. Twenty-eight entries were flagged in one real
+ * profile and ten of them had already happened. A schedule that opens with ten
+ * things one has already missed is not a schedule. When the stated time has
+ * passed the thing has happened, and where it belongs is the stream, at the time
+ * it happened — which is exactly where its publish time puts it.
+ *
+ * An entry nothing dates stays on the shelf: it was scheduled, and there is no
+ * evidence it is over.
+ *
  * @param {object} entry
+ * @param {number} [now] milliseconds since the epoch, for the callers that
+ *   split a whole list and should not ask the clock once per entry
  * @returns {boolean}
  */
-export function subscriptionEntryIsUpcoming(entry) {
-  return entry.isUpcoming === true ||
+export function subscriptionEntryIsUpcoming(entry, now = Date.now()) {
+  const scheduled = entry.isUpcoming === true ||
     entry.premiere === true ||
     entry.premiereDate != null ||
     entry.premiereTimestamp != null
+
+  if (!scheduled) { return false }
+
+  const at = subscriptionEntryScheduledAt(entry)
+
+  return at == null || at > now
 }
 
 /**
@@ -156,14 +178,16 @@ export function subscriptionEntryScheduledAt(entry) {
  * placing an unknown time anywhere among the known ones would be a claim.
  *
  * @param {any[]} entries the merged stream, newest first
+ * @param {number} [now] milliseconds since the epoch, asked once so that one
+ *   list is split against one instant
  * @returns {{ stream: any[], upcoming: any[] }}
  */
-export function splitUpcomingEntries(entries) {
+export function splitUpcomingEntries(entries, now = Date.now()) {
   const stream = []
   const upcoming = []
 
   for (const entry of entries) {
-    if (subscriptionEntryIsUpcoming(entry)) {
+    if (subscriptionEntryIsUpcoming(entry, now)) {
       upcoming.push(entry)
     } else {
       stream.push(entry)

@@ -184,7 +184,7 @@ function upcoming(id, daysAhead, overrides = {}) {
   const { stream, upcoming: shelf } = splitUpcomingEntries(mergeSubscriptionFeedEntries([
     [video('yesterday', 1), video('last-week', 7)],
     [upcoming('premiere', 3)]
-  ]))
+  ]), NOW)
 
   check(`the future leaves the stream (${idsOf(stream)})`, idsOf(stream) === 'yesterday,last-week')
   check(`and lands on the shelf (${idsOf(shelf)})`, idsOf(shelf) === 'premiere')
@@ -196,7 +196,7 @@ function upcoming(id, daysAhead, overrides = {}) {
     upcoming('in-six-days', 6),
     upcoming('in-two-hours', 1 / 12),
     upcoming('tomorrow', 1)
-  ])
+  ], NOW)
 
   check(`the shelf is soonest first (${idsOf(shelf)})`, idsOf(shelf) === 'in-two-hours,tomorrow,in-six-days')
 }
@@ -204,7 +204,7 @@ function upcoming(id, daysAhead, overrides = {}) {
 // Splitting must not disturb the order the merge put the stream in
 {
   const merged = mergeSubscriptionFeedEntries([[video('a', 1), video('b', 2), video('c', 3)]])
-  const { stream } = splitUpcomingEntries(merged)
+  const { stream } = splitUpcomingEntries(merged, NOW)
 
   check(`the stream keeps the merged order (${idsOf(stream)})`, idsOf(stream) === 'a,b,c')
 }
@@ -216,10 +216,10 @@ function upcoming(id, daysAhead, overrides = {}) {
   const flagOnly = video('flag-only', -2, { isUpcoming: true })
   const localFlag = video('premiere-flag', -2, { premiere: true })
 
-  check('Invidious premieres are upcoming', subscriptionEntryIsUpcoming(invidious))
-  check('a bare upcoming flag is enough', subscriptionEntryIsUpcoming(flagOnly))
-  check('and so is a bare premiere flag', subscriptionEntryIsUpcoming(localFlag))
-  check('an ordinary video is not upcoming', !subscriptionEntryIsUpcoming(video('ordinary', 1)))
+  check('Invidious premieres are upcoming', subscriptionEntryIsUpcoming(invidious, NOW))
+  check('a bare upcoming flag is enough', subscriptionEntryIsUpcoming(flagOnly, NOW))
+  check('and so is a bare premiere flag', subscriptionEntryIsUpcoming(localFlag, NOW))
+  check('an ordinary video is not upcoming', !subscriptionEntryIsUpcoming(video('ordinary', 1), NOW))
 }
 
 // The RSS guess that the hide-premieres setting falls back to is deliberately
@@ -227,7 +227,7 @@ function upcoming(id, daysAhead, overrides = {}) {
 {
   const unwatched = video('unwatched', 0, { isRSS: true, viewCount: 0 })
 
-  check('an unwatched RSS entry stays in the stream', !subscriptionEntryIsUpcoming(unwatched))
+  check('an unwatched RSS entry stays in the stream', !subscriptionEntryIsUpcoming(unwatched, NOW))
 }
 
 // A premiere date that has been through the cache is a string, and a shelf that
@@ -250,11 +250,36 @@ function upcoming(id, daysAhead, overrides = {}) {
   check('an undated entry has no scheduled time', subscriptionEntryScheduledAt({ videoId: 'undated' }) === null)
 }
 
+// The flag is never taken off — an RSS refresh carries the old one back — so a
+// premiere that has aired is still marked upcoming for ever. It has happened,
+// so it belongs in the stream, at the time it happened, which is where its
+// publish time already puts it
+{
+  const aired = upcoming('aired-in-august', -14)
+  const { stream, upcoming: shelf } = splitUpcomingEntries(
+    mergeSubscriptionFeedEntries([[video('yesterday', 1), aired, video('last-month', 30)]]),
+    NOW
+  )
+
+  check('an event that has passed is not upcoming', !subscriptionEntryIsUpcoming(aired, NOW))
+  check(`it rejoins the stream at its own time (${idsOf(stream)})`, idsOf(stream) === 'yesterday,aired-in-august,last-month')
+  check('and the shelf is left with the things still ahead', shelf.length === 0)
+}
+
+// The moment itself belongs to the past: a premiere that started a second ago
+// has started
+{
+  const starting = upcoming('starting', 0)
+
+  check('an event due now has begun', !subscriptionEntryIsUpcoming(starting, NOW))
+  check('and one due in a minute has not', subscriptionEntryIsUpcoming(upcoming('soon', 1 / 1440), NOW))
+}
+
 // An undated upcoming entry is still upcoming; it just cannot claim a place in
 // the order
 {
   const undated = { videoId: 'undated', type: 'video', isUpcoming: true }
-  const { upcoming: shelf } = splitUpcomingEntries([undated, upcoming('dated', 9)])
+  const { upcoming: shelf } = splitUpcomingEntries([undated, upcoming('dated', 9)], NOW)
 
   check(`an undated event sorts last on the shelf (${idsOf(shelf)})`, idsOf(shelf) === 'dated,undated')
 }
@@ -263,7 +288,7 @@ function upcoming(id, daysAhead, overrides = {}) {
 // anything
 {
   const entries = [video('a', 1), video('b', 2)]
-  const { stream, upcoming: shelf } = splitUpcomingEntries(entries)
+  const { stream, upcoming: shelf } = splitUpcomingEntries(entries, NOW)
 
   check(`a stream with no future is unchanged (${idsOf(stream)})`, idsOf(stream) === 'a,b')
   check('and the shelf is empty', shelf.length === 0)
