@@ -36,6 +36,8 @@
           class="thumbnailImage"
           :class="{ blur: blurThumbnails }"
           alt=""
+          @error="onThumbnailError"
+          @load="onThumbnailLoad"
         >
       </RouterLink>
       <div
@@ -524,6 +526,9 @@ const showsDescriptionSlot = computed(() => {
 /** @type {import('vue').ComputedRef<'' | 'start' | 'middle' | 'end' | 'hidden' | 'blur'>} */
 const thumbnailPreference = computed(() => store.getters.getThumbnailPreference)
 
+/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious'>} */
+const listDensity = computed(() => store.getters.getListDensity)
+
 /** @type {import('vue').ComputedRef<boolean>} */
 const blurThumbnails = computed(() => store.getters.getBlurThumbnails)
 
@@ -791,6 +796,67 @@ function handleOptionsClick(option) {
   }
 }
 
+/**
+ * Whether this card is big enough to be worth the large thumbnail.
+ *
+ * A grid column stretches, so a card is not its mode's minimum: a standard one
+ * runs from 400 to 816px wide and a spacious one from 610 to 1240, and a 320px
+ * image spread over either of those is the soft, blocky thing it looks like.
+ * Tight tops out at 530px and is the mode that puts the most cards on screen at
+ * once, so it is the one that can least afford eight times the bytes, and a
+ * list card's thumbnail is 336px whatever the mode.
+ *
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const wantsLargeThumbnail = computed(() => {
+  return !effectiveListTypeIsList.value && listDensity.value !== 'tight'
+})
+
+/**
+ * Set when the large thumbnail did not arrive, so that the card can ask for
+ * the small one instead.
+ *
+ * A video uploaded below 720p has no 1280px thumbnail — three of sixty in a
+ * sample of a real subscription feed — and there is nothing to ask beforehand:
+ * requesting it is the only way to find out. The card only ever holds one
+ * video, so the answer holds for as long as the card does.
+ */
+const largeThumbnailMissing = ref(false)
+
+/** Whether the URL the card is currently showing is the large thumbnail. */
+const largeThumbnailRequested = computed(() => {
+  if (thumbnailPreference.value === 'hidden') { return false }
+
+  if (showDeArrowThumbnail.value && deArrowCache.value?.thumbnail != null) {
+    return false
+  }
+
+  return wantsLargeThumbnail.value && !largeThumbnailMissing.value
+})
+
+/**
+ * A missing large thumbnail does not fail, which is why this reads the size.
+ *
+ * Asked for a thumbnail a video has not got, i.ytimg.com answers 404 and sends
+ * a 120x90 grey placeholder in the body anyway. A browser renders a 404 that
+ * carries a decodable image, so the picture loads, no error is raised, and the
+ * card stretches a 120px placeholder across 900px of column. The size it came
+ * back at is the only honest answer: the real one is 1280 wide.
+ *
+ * @param {Event} event
+ */
+function onThumbnailLoad(event) {
+  if (!largeThumbnailRequested.value) { return }
+
+  if (event.target.naturalWidth < 640) {
+    largeThumbnailMissing.value = true
+  }
+}
+
+function onThumbnailError() {
+  largeThumbnailMissing.value = true
+}
+
 const thumbnail = computed(() => {
   if (thumbnailPreference.value === 'hidden') {
     return thumbnailPlaceholder
@@ -807,15 +873,18 @@ const thumbnail = computed(() => {
     baseUrl = 'https://i.ytimg.com'
   }
 
+  // The same four frames at two sizes: mq* is 320px wide, hq720* is 1280px.
+  const large = largeThumbnailRequested.value
+
   switch (thumbnailPreference.value) {
     case 'start':
-      return `${baseUrl}/vi/${id.value}/mq1.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720_1' : 'mq1'}.jpg`
     case 'middle':
-      return `${baseUrl}/vi/${id.value}/mq2.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720_2' : 'mq2'}.jpg`
     case 'end':
-      return `${baseUrl}/vi/${id.value}/mq3.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720_3' : 'mq3'}.jpg`
     default:
-      return `${baseUrl}/vi/${id.value}/mqdefault.jpg`
+      return `${baseUrl}/vi/${id.value}/${large ? 'hq720' : 'mqdefault'}.jpg`
   }
 })
 
