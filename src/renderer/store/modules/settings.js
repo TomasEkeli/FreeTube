@@ -267,6 +267,12 @@ const state = {
   // A standing preference rather than a session's, like the subscriptions
   // chips: whoever has no use for sport today has none tomorrow either.
   exploreCategoriesHidden: [],
+  // The regions Explore offers as one-click shortcuts. Two lists, because they
+  // answer two different questions: `Recent` is where you have been, kept
+  // automatically and short; `Pinned` is where you mean to keep going, said
+  // deliberately and kept until unsaid. Newest first in both.
+  exploreRegionsRecent: [],
+  exploreRegionsPinned: [],
   rememberHistory: true,
   rememberSearchHistory: true,
   // 'auto', 'semi-auto', 'never'
