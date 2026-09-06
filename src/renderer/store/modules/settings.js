@@ -207,6 +207,10 @@ const state = {
   hideCommentLikes: false,
   hideCommentPhotos: false,
   hideComments: false,
+  // Whether the Explore page is offered at all: sidebar entry, app menu entry
+  // and landing-page choice. Called `hideTrendingVideos` until the page was
+  // renamed; the old row is left where it lies, unread by anything.
+  hideExplore: false,
   hideFeaturedChannels: false,
   channelsHidden: '[]',
   forbiddenTitles: '[]',
@@ -221,7 +225,6 @@ const state = {
   hideRecommendedVideos: false,
   hideSearchBar: false,
   hideSharingActions: false,
-  hideTrendingVideos: false,
   hideUnsubscribeButton: false,
   hideUpcomingPremieres: false,
   hideVideoLikesAndDislikes: false,
@@ -259,6 +262,20 @@ const state = {
   proxyProtocol: 'socks5',
   proxyVideos: !process.env.SUPPORTS_LOCAL_API,
   region: 'US',
+  // The Explore destinations the reader has switched off, by id. What is off
+  // rather than what is on, so that a destination the app learns about later
+  // arrives switched on: the page is there to show what YouTube is pushing, and
+  // a new chart nobody has an opinion about yet belongs in the stream.
+  //
+  // A standing preference rather than a session's, like the subscriptions
+  // chips: whoever has no use for sport today has none tomorrow either.
+  exploreCategoriesHidden: [],
+  // The regions Explore offers as one-click shortcuts. Two lists, because they
+  // answer two different questions: `Recent` is where you have been, kept
+  // automatically and short; `Pinned` is where you mean to keep going, said
+  // deliberately and kept until unsaid. Newest first in both.
+  exploreRegionsRecent: [],
+  exploreRegionsPinned: [],
   rememberHistory: true,
   rememberSearchHistory: true,
   // 'auto', 'semi-auto', 'never'

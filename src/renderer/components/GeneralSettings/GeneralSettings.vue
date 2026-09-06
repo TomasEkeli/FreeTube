@@ -112,12 +112,12 @@
       />
       <FtSelect
         v-if="regionDataLoaded"
-        :placeholder="t('Settings.General Settings.Region for Trending')"
+        :placeholder="t('Settings.General Settings.Region for Explore')"
         :value="region"
         :select-names="regionNames"
         :select-values="regionValues"
         :icon="['fas', 'globe']"
-        :tooltip="t('Tooltips.General Settings.Region for Trending')"
+        :tooltip="t('Tooltips.General Settings.Region for Explore')"
         @change="updateRegion"
       />
       <FtSelect
@@ -328,7 +328,7 @@ const hidePlaylists = computed(() => store.getters.getHidePlaylists)
 const hidePopularVideos = computed(() => store.getters.getHidePopularVideos)
 
 /** @type {import('vue').ComputedRef<boolean>} */
-const hideTrendingVideos = computed(() => store.getters.getHideTrendingVideos)
+const hideExplore = computed(() => store.getters.getHideExplore)
 
 const INCLUDED_DEFAULT_PAGE_NAMES = [
   'subscriptions',
@@ -337,14 +337,14 @@ const INCLUDED_DEFAULT_PAGE_NAMES = [
   'userPlaylists',
   'history',
   'settings',
-  ...(process.env.SUPPORTS_LOCAL_API ? ['trending'] : [])
+  ...(process.env.SUPPORTS_LOCAL_API ? ['explore'] : [])
 ]
 
 const defaultPages = computed(() => {
   let includedPageNames = INCLUDED_DEFAULT_PAGE_NAMES
 
-  if (hideTrendingVideos.value || !backendFallback.value || backendPreference.value !== 'local') {
-    includedPageNames = includedPageNames.filter((pageName) => pageName !== 'trending')
+  if (hideExplore.value || !backendFallback.value || backendPreference.value !== 'local') {
+    includedPageNames = includedPageNames.filter((pageName) => pageName !== 'explore')
   }
 
   if (hidePlaylists.value) {
@@ -355,7 +355,10 @@ const defaultPages = computed(() => {
     includedPageNames = includedPageNames.filter((pageName) => pageName !== 'popular')
   }
 
-  return router.getRoutes().filter((route) => includedPageNames.includes(route.name))
+  // An alias comes back from the router as a second record under the same name
+  // — /trending alongside /explore — and would offer the same page twice under
+  // the same label.
+  return router.getRoutes().filter((route) => includedPageNames.includes(route.name) && route.aliasOf == null)
 })
 
 const defaultPageNames = computed(() => defaultPages.value.map((route) => translateWindowTitle(route.meta.title)))
@@ -365,11 +368,11 @@ const defaultPageValues = computed(() => {
   return defaultPages.value.map((route) => route.path.slice(1))
 })
 
-/** @type {import('vue').ComputedRef<'subscriptions' | 'subscribedChannels' | 'popular' | 'userPlaylists' | 'history' | 'settings' | 'trending'>} */
+/** @type {import('vue').ComputedRef<'subscriptions' | 'subscribedChannels' | 'popular' | 'userPlaylists' | 'history' | 'settings' | 'explore'>} */
 const landingPage = computed(() => store.getters.getLandingPage)
 
 /**
- * @param {'subscriptions' | 'subscribedChannels' | 'popular' | 'userPlaylists' | 'history' | 'settings' | 'trending'} value
+ * @param {'subscriptions' | 'subscribedChannels' | 'popular' | 'userPlaylists' | 'history' | 'settings' | 'explore'} value
  */
 function updateLandingPage(value) {
   store.dispatch('updateLandingPage', value)

@@ -8,26 +8,8 @@
   color: var(--tertiary-text-color);
 }
 
-/*
- * The page's one control row: which kinds are shown at one end, how much room
- * each of them gets at the other. The two sides break onto separate lines when
- * the window is too narrow to hold them side by side, and each of them wraps
- * within itself after that.
- */
-.controlRow {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-  justify-content: space-between;
-  margin-block: 4px 16px;
-}
-
-.chipRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+/* The control row and the chips in it are shared with Explore; they live in
+   components/FtToggleChip/chipRow.css. */
 
 .subscriptionIcon {
   color: var(--primary-color);

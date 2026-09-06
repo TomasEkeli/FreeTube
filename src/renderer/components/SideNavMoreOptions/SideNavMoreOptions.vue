@@ -54,24 +54,24 @@
         </p>
       </router-link>
       <router-link
-        v-if=" SUPPORTS_LOCAL_API && trendingVisible"
+        v-if=" SUPPORTS_LOCAL_API && exploreVisible"
         class="navOption"
-        :title="$t('Trending.Trending')"
-        :aria-label="hideLabelsSideBar ? $t('Trending.Trending') : null"
-        to="/trending"
+        :title="$t('Explore.Explore')"
+        :aria-label="hideLabelsSideBar ? $t('Explore.Explore') : null"
+        to="/explore"
         @click="closeMenu"
       >
         <FontAwesomeIcon
-          :icon="['fas', 'fire']"
+          :icon="['fas', 'compass']"
           class="navIcon"
           :class="applyNavIconExpand"
         />
         <p
           v-if="!hideLabelsSideBar"
-          id="trendingNavLabel"
+          id="exploreNavLabel"
           class="navLabel"
         >
-          {{ $t("Trending.Trending") }}
+          {{ $t("Explore.Explore") }}
         </p>
       </router-link>
       <router-link
@@ -207,8 +207,8 @@ const openMoreOptions = ref(false)
 const menuRef = useTemplateRef('menuRef')
 
 /** @type {import('vue').ComputedRef<boolean>} */
-const trendingVisible = computed(() => {
-  return !store.getters.getHideTrendingVideos &&
+const exploreVisible = computed(() => {
+  return !store.getters.getHideExplore &&
     (store.getters.getBackendFallback || store.getters.getBackendPreference === 'local')
 })
 

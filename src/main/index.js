@@ -1728,7 +1728,7 @@ function runApp() {
               backendPreference = data.value
               await setMenu()
               break
-            case 'hideTrendingVideos':
+            case 'hideExplore':
             case 'hidePopularVideos':
             case 'hidePlaylists':
               await setMenu()
@@ -2384,7 +2384,7 @@ function runApp() {
 
   async function setMenu() {
     const sidenavSettings = baseHandlers.settings._findSidenavSettings()
-    const hideTrendingVideos = (await sidenavSettings.hideTrendingVideos)?.value
+    const hideExplore = (await sidenavSettings.hideExplore)?.value
     const hidePopularVideos = (await sidenavSettings.hidePopularVideos)?.value
     const hidePlaylists = (await sidenavSettings.hidePlaylists)?.value
 
@@ -2563,10 +2563,10 @@ function runApp() {
             },
             type: 'normal'
           },
-          (!hideTrendingVideos && (backendFallback || backendPreference === 'local')) && {
-            label: 'Trending',
+          (!hideExplore && (backendFallback || backendPreference === 'local')) && {
+            label: 'Explore',
             click: (_menuItem, browserWindow, _event) => {
-              navigateTo('/trending', browserWindow)
+              navigateTo('/explore', browserWindow)
             },
             type: 'normal'
           },

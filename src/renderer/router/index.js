@@ -2,7 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import Subscriptions from '../views/Subscriptions/Subscriptions.vue'
 import SubscribedChannels from '../views/SubscribedChannels/SubscribedChannels.vue'
 import ProfileSettings from '../views/ProfileSettings/ProfileSettings.vue'
-import Trending from '../views/Trending/Trending.vue'
+import Explore from '../views/Explore/Explore.vue'
 import Popular from '../views/Popular/Popular.vue'
 import UserPlaylists from '../views/UserPlaylists/UserPlaylists.vue'
 import History from '../views/History/History.vue'
@@ -44,12 +44,17 @@ const router = createRouter({
     },
     ...(process.env.SUPPORTS_LOCAL_API
       ? [{
-          path: '/trending',
-          name: 'trending',
+          path: '/explore',
+          // The page was called Trending for as long as YouTube had a trending
+          // feed. It hasn't for a while, and the old address is in muscle
+          // memory, in saved landing pages and in YouTube's own /feed/trending
+          // links, so it goes on working.
+          alias: '/trending',
+          name: 'explore',
           meta: {
-            title: 'Trending'
+            title: 'Explore'
           },
-          component: Trending
+          component: Explore
         }]
       : []),
     {

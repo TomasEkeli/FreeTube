@@ -13,11 +13,21 @@ const state = {
   outlinesHidden: true,
   sessionSearchHistory: [],
   popularCache: null,
-  trendingCache: {
-    gaming: null,
-    sports: null,
-    podcasts: null
-  },
+  // What Explore found, per region, kept for the session only: a chart nobody
+  // has looked at since the app started is worth fetching again, one looked at
+  // a minute ago is not.
+  //
+  // Per region because that is what the answer depends on, twice over: YouTube
+  // offers different destinations in different countries, and the same
+  // destination shows different videos in each. Keyed that way, coming back to
+  // a region visited earlier in the session costs nothing.
+  //
+  // One entry holds the whole page — the categories, their videos and when
+  // they were fetched — because they arrive together. Finding out which
+  // destinations have videos in them *is* fetching them.
+  //
+  // `{ [region]: { fetchedAt: Date, categories: ExploreCategory[] } }`
+  exploreCache: {},
   cachedPlaylist: null,
   deArrowCache: {},
   showProgressBar: false,
@@ -43,11 +53,7 @@ const state = {
   externalPlayerValues: [],
   externalPlayerCmdArguments: {},
   lastPopularRefreshTimestamp: '',
-  lastTrendingRefreshTimestamp: {
-    gaming: '',
-    sports: '',
-    podcasts: ''
-  },
+
   /**
    * Whether this window has done its automatic subscription fetch yet.
    *
@@ -81,8 +87,8 @@ const getters = {
     return state.popularCache
   },
 
-  getTrendingCache(state) {
-    return state.trendingCache
+  getExploreCache(state) {
+    return state.exploreCache
   },
 
   getCachedPlaylist(state) {
@@ -151,10 +157,6 @@ const getters = {
 
   getExternalPlayerCmdArguments (state) {
     return state.externalPlayerCmdArguments
-  },
-
-  getLastTrendingRefreshTimestamp(state) {
-    return state.lastTrendingRefreshTimestamp
   },
 
   getLastPopularRefreshTimestamp(state) {
@@ -695,16 +697,12 @@ const mutations = {
     state.popularCache = value
   },
 
-  setTrendingCache (state, { value, page }) {
-    state.trendingCache[page] = value
-  },
-
   /**
    * @param {typeof state} state
-   * @param {{page: 'gaming' | 'sports' | 'podcasts', timestamp: Date}} param1
+   * @param {{region: string, value: {fetchedAt: Date, categories: any[]}}} param1
    */
-  setLastTrendingRefreshTimestamp (state, { page, timestamp }) {
-    state.lastTrendingRefreshTimestamp[page] = timestamp
+  setExploreCache (state, { region, value }) {
+    state.exploreCache = { ...state.exploreCache, [region]: value }
   },
 
   setLastPopularRefreshTimestamp (state, timestamp) {
@@ -713,10 +711,12 @@ const mutations = {
 
   /**
    * @param {typeof state} state
-   * @param {'gaming' | 'sports' | 'podcasts'} page
+   * @param {string} region
    */
-  clearTrendingCache(state, page) {
-    state.trendingCache[page] = null
+  clearExploreCache(state, region) {
+    const { [region]: _cleared, ...rest } = state.exploreCache
+
+    state.exploreCache = rest
   },
 
   setCachedPlaylist(state, value) {

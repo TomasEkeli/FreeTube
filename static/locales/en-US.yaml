@@ -186,11 +186,13 @@ Channels:
   Count: '{number} channel(s) found.'
   Empty: Your channel list is currently empty.
   Unsubscribe Prompt: Are you sure you want to unsubscribe from "{channelName}"?
-Trending:
-  Trending: Trending
-  Gaming: Gaming
-  Sports: Sports
-  Trending Tabs: Trending Tabs
+Explore:
+  Explore: Explore
+  Categories Shown: Categories Shown
+  Region: Region
+  Regions at Hand: Regions at Hand
+  No Categories Shown: Switch on a category to see what is trending in it.
+  Nothing to Explore: YouTube is not offering anything to explore in this region.
 Most Popular: Most Popular
 Feed:
   Feed Last Updated: '{feedName} feed last updated: {date}'
@@ -358,7 +360,7 @@ Settings:
     Set Current Instance as Default: Set Current Instance as Default
     Clear Default Instance: Clear Default Instance
     View all Invidious instance information: View all Invidious instance information
-    Region for Trending: Region for Trending
+    Region for Explore: Region for Explore
     #! List countries
     External Link Handling:
       External Link Handling: External Link Handling
@@ -609,7 +611,7 @@ Settings:
     Hide Channel Subscribers: Hide Channel Subscribers
     Hide Comment Likes: Hide Comment Likes
     Hide Recommended Videos: Hide Recommended Videos
-    Hide Trending Videos: Hide Trending Videos
+    Hide Explore: Hide Explore
     Hide Popular Videos: Hide Popular Videos
     Hide Playlists: Hide Playlists
     Hide Live Chat: Hide Live Chat
@@ -1127,8 +1129,8 @@ Tooltips:
       a frame of the video, blurred or hidden instead of the default thumbnail.
     Invidious Instance: The Invidious instance that FreeTube will connect to for API
       calls. Changes to this setting apply only to the current window unless you set this instance as the default.
-    Region for Trending: The region of trends allows you to pick which country's trending
-      videos you want to have displayed.
+    Region for Explore: Which country's charts Explore shows. Trending is per country,
+      so this decides what is on the page.
     External Link Handling: |
       Choose the default behavior when a link, which cannot be opened in FreeTube, is clicked.
       By default FreeTube will open the clicked link in your default browser.

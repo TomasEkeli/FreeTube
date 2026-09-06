@@ -51,17 +51,17 @@
         </p>
       </router-link>
       <router-link
-        v-if="SUPPORTS_LOCAL_API && !hideTrendingVideos && (backendFallback || backendPreference === 'local')"
+        v-if="SUPPORTS_LOCAL_API && !hideExplore && (backendFallback || backendPreference === 'local')"
         class="navOption mobileHidden"
         role="button"
-        to="/trending"
-        :title="$t('Trending.Trending')"
+        to="/explore"
+        :title="$t('Explore.Explore')"
       >
         <div
           class="thumbnailContainer"
         >
           <FontAwesomeIcon
-            :icon="['fas', 'fire']"
+            :icon="['fas', 'compass']"
             class="navIcon"
             :class="applyNavIconExpand"
           />
@@ -69,7 +69,7 @@
         <p
           class="navLabel"
         >
-          {{ $t("Trending.Trending") }}
+          {{ $t("Explore.Explore") }}
         </p>
       </router-link>
       <router-link
@@ -307,8 +307,8 @@ const hidePlaylists = computed(() => {
 })
 
 /** @type {import('vue').ComputedRef<boolean>} */
-const hideTrendingVideos = computed(() => {
-  return store.getters.getHideTrendingVideos
+const hideExplore = computed(() => {
+  return store.getters.getHideExplore
 })
 
 /** @type {import('vue').ComputedRef<boolean>} */
