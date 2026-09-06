@@ -87,6 +87,7 @@ import store from '../../store/index'
 import { useSubscriptionActivity } from '../../composables/useSubscriptionActivity'
 
 import { debounce } from '../../helpers/utils'
+import { entryVideoId } from '../../helpers/subscriptions'
 
 import { KeyboardShortcuts } from '../../../constants'
 
@@ -193,8 +194,10 @@ const filteredVideoList = computed(() => {
   let videoList = props.videoList
 
   if (hideWatchedSubs.value) {
-    videoList = videoList.filter((video) => {
-      return historyCacheById.value[video.videoId] === undefined
+    // Keyed on what the entry leads to rather than on the entry, so that a post
+    // sharing a video goes when that video is watched. See `entryVideoId`.
+    videoList = videoList.filter((entry) => {
+      return historyCacheById.value[entryVideoId(entry)] === undefined
     })
   }
 

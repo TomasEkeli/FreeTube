@@ -51,6 +51,11 @@ Global:
     Live: Live
     Upcoming: Upcoming
     Post: Post
+    # The last four mark what a post carries, on top of the post marker itself
+    Poll: Poll
+    Quiz: Quiz
+    Video: Video
+    Playlist: Playlist
   # How much room a card gets on a grid of them.
   Density:
     Label: Card density

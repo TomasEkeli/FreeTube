@@ -2,7 +2,7 @@
   <div
     class="ft-list-post ft-list-item outside"
     :appearance="appearance"
-    :class="{ list: listType === 'list', grid: listType === 'grid', inGrid: layout === 'grid' && !singlePost }"
+    :class="{ list: listType === 'list', grid: listType === 'grid' }"
   >
     <div
       class="author-div"
@@ -217,22 +217,6 @@ const props = defineProps({
   singlePost: {
     type: Boolean,
     default: false
-  },
-  /**
-   * The shape of the container this is being dropped into.
-   *
-   * A post has always been laid out as a wide column down the middle of the
-   * page, because until the subscriptions feeds were merged the only places one
-   * appeared were a page of its own and a single-column list. In a card grid
-   * that column is 40% of a 262px cell — a hundred-pixel sliver. It fills its
-   * cell instead.
-   *
-   * Making the post *look* like the cards around it is a separate piece of work;
-   * this only stops it being unreadable in the meantime.
-   */
-  layout: {
-    type: String,
-    default: 'list'
   },
 })
 

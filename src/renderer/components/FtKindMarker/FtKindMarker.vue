@@ -6,9 +6,11 @@
   icon alone would not, hence icon *and* text.
 -->
 <template>
-  <div
+  <component
+    :is="to ? 'RouterLink' : 'div'"
     class="kindMarker"
-    :class="kind"
+    :class="[kind, { kindMarkerLink: to }]"
+    :to="to"
   >
     <FontAwesomeIcon
       class="kindMarkerIcon"
@@ -16,7 +18,7 @@
       aria-hidden="true"
     />
     <span class="kindMarkerLabel">{{ label }}</span>
-  </div>
+  </component>
 </template>
 
 <script setup>
@@ -25,13 +27,27 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
-  /** @type {import('vue').PropType<'shorts' | 'live' | 'upcoming' | 'post'>} */
+  /** @type {import('vue').PropType<'shorts' | 'live' | 'upcoming' | 'post' | 'poll' | 'quiz' | 'video' | 'playlist'>} */
   kind: {
     type: String,
     required: true,
     // Spelled out rather than read off the map below, because `defineProps` is
     // compiled away and may not reach for anything declared in this block.
-    validator: (value) => ['shorts', 'live', 'upcoming', 'post'].includes(value)
+    validator: (value) => ['shorts', 'live', 'upcoming', 'post', 'poll', 'quiz', 'video', 'playlist'].includes(value)
+  },
+  /**
+   * Where the marker leads, if anywhere.
+   *
+   * A marker is a label, and stays one by default. It becomes a link where the
+   * card it sits on leads somewhere else: a post card carrying a video opens
+   * the video, and then the word POST is the way to the post. The word names
+   * the destination, which is the whole reason it is the right thing to click.
+   *
+   * @type {import('vue').PropType<import('vue-router').RouteLocationRaw?>}
+   */
+  to: {
+    type: [Object, String],
+    default: undefined
   }
 })
 
@@ -41,12 +57,20 @@ const { t } = useI18n()
  * The icons are the ones the subscriptions feeds already answer to, so a kind
  * looks the same whether it is being chosen in the feed's controls or read off
  * a card.
+ *
+ * The last four are what a post carries rather than what it is: they mark a
+ * post card whose picture, or lack of one, would not otherwise say that opening
+ * it leads to a poll, a quiz, a video or a playlist.
  */
 const ICONS = {
   shorts: ['fas', 'clapperboard'],
   live: ['fas', 'tower-broadcast'],
   upcoming: ['fas', 'clock'],
-  post: ['fas', 'message']
+  post: ['fas', 'message'],
+  poll: ['fas', 'bars-progress'],
+  quiz: ['fas', 'question-circle'],
+  video: ['fas', 'circle-play'],
+  playlist: ['fas', 'list']
 }
 
 const icon = computed(() => ICONS[props.kind])
@@ -63,6 +87,14 @@ const label = computed(() => {
       return t('Global.Kind Marker.Upcoming')
     case 'post':
       return t('Global.Kind Marker.Post')
+    case 'poll':
+      return t('Global.Kind Marker.Poll')
+    case 'quiz':
+      return t('Global.Kind Marker.Quiz')
+    case 'video':
+      return t('Global.Kind Marker.Video')
+    case 'playlist':
+      return t('Global.Kind Marker.Playlist')
     default:
       return ''
   }
