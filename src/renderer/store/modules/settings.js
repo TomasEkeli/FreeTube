@@ -207,6 +207,10 @@ const state = {
   hideCommentLikes: false,
   hideCommentPhotos: false,
   hideComments: false,
+  // Whether the Explore page is offered at all: sidebar entry, app menu entry
+  // and landing-page choice. Called `hideTrendingVideos` until the page was
+  // renamed; the old row is left where it lies, unread by anything.
+  hideExplore: false,
   hideFeaturedChannels: false,
   channelsHidden: '[]',
   forbiddenTitles: '[]',
@@ -221,7 +225,6 @@ const state = {
   hideRecommendedVideos: false,
   hideSearchBar: false,
   hideSharingActions: false,
-  hideTrendingVideos: false,
   hideUnsubscribeButton: false,
   hideUpcomingPremieres: false,
   hideVideoLikesAndDislikes: false,

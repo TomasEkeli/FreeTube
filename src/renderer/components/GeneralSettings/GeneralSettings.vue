@@ -328,7 +328,7 @@ const hidePlaylists = computed(() => store.getters.getHidePlaylists)
 const hidePopularVideos = computed(() => store.getters.getHidePopularVideos)
 
 /** @type {import('vue').ComputedRef<boolean>} */
-const hideTrendingVideos = computed(() => store.getters.getHideTrendingVideos)
+const hideExplore = computed(() => store.getters.getHideExplore)
 
 const INCLUDED_DEFAULT_PAGE_NAMES = [
   'subscriptions',
@@ -343,7 +343,7 @@ const INCLUDED_DEFAULT_PAGE_NAMES = [
 const defaultPages = computed(() => {
   let includedPageNames = INCLUDED_DEFAULT_PAGE_NAMES
 
-  if (hideTrendingVideos.value || !backendFallback.value || backendPreference.value !== 'local') {
+  if (hideExplore.value || !backendFallback.value || backendPreference.value !== 'local') {
     includedPageNames = includedPageNames.filter((pageName) => pageName !== 'explore')
   }
 
