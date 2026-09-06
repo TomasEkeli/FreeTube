@@ -49,6 +49,22 @@
                 {{ name }}
               </option>
             </select>
+            <div
+              class="chipRow"
+              role="group"
+              :aria-label="$t('Explore.Regions at Hand')"
+            >
+              <FtToggleChip
+                v-for="shortcut in regionShortcuts"
+                :key="shortcut.region"
+                :label="shortcut.region"
+                :icon="shortcut.pinned ? ['fas', 'thumbtack'] : null"
+                :pressed="shortcut.region === region"
+                :title="regionName(shortcut.region)"
+                @toggle="region = shortcut.region"
+                @contextmenu.prevent="togglePinned(shortcut.region)"
+              />
+            </div>
           </div>
           <FtDensitySwitch />
         </div>
@@ -96,6 +112,11 @@ import {
   mergeByRank,
   setExploreCategoryShown
 } from '../../helpers/exploreCategories'
+import {
+  exploreRegionShortcuts,
+  noteExploreRegionUsed,
+  toggleExploreRegionPinned
+} from '../../helpers/exploreRegions'
 import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../../helpers/utils'
 import { KeyboardShortcuts } from '../../../constants'
 
@@ -156,6 +177,35 @@ const regionNames = computed(() => store.getters.getRegionNames)
 
 /** @type {import('vue').ComputedRef<string[]>} */
 const regionValues = computed(() => store.getters.getRegionValues)
+
+/**
+ * The regions a click away: pinned first, then where the reader has been. The
+ * one being shown is among them and pressed.
+ *
+ * @type {import('vue').ComputedRef<import('../../helpers/exploreRegions').RegionShortcut[]>}
+ */
+const regionShortcuts = computed(() => exploreRegionShortcuts())
+
+/**
+ * What a country code is called, for the shortcut's title — the chip says NO
+ * because the row has to stay narrow, and this is how it still says Norway to
+ * anyone hovering over it or listening to it.
+ *
+ * @param {string} code
+ * @returns {string}
+ */
+function regionName(code) {
+  const index = regionValues.value.indexOf(code)
+
+  return index === -1 ? code : regionNames.value[index]
+}
+
+/**
+ * @param {string} code
+ */
+function togglePinned(code) {
+  toggleExploreRegionPinned(code)
+}
 
 /** What this region's last look at YouTube found, or nothing if we have not looked. */
 const found = computed(() => {
@@ -284,9 +334,16 @@ function keyboardShortcutHandler(event) {
  * looked at earlier in this session is instant, and a refresh is what asks
  * YouTube again.
  */
-watch(region, () => discover())
+watch(region, () => {
+  noteExploreRegionUsed(region.value)
+  discover()
+})
 
 onMounted(() => {
+  // Where the page opens counts as somewhere the reader has been, so the row
+  // of shortcuts says something the first time it is seen rather than after
+  // the first switch away.
+  noteExploreRegionUsed(region.value)
   discover()
   document.addEventListener('keydown', keyboardShortcutHandler)
 })
