@@ -178,8 +178,14 @@
           <template v-if="channelId !== null || channelName !== null"> • </template>
           {{ t('Global.Counts.View Count', { count: parsedViewCount }, viewCount) }}
         </span>
+        <!--
+          A live stream has no publish time worth showing: it is on now. A
+          scheduled one does, and it is the whole point of the card, so an entry
+          that is somehow both still shows when it starts — the same order of
+          answers the kind marker gives.
+        -->
         <span
-          v-if="uploadedTime !== '' && !isLive"
+          v-if="uploadedTime !== '' && (!isLive || isUpcoming)"
           class="uploadedTime"
         > • {{ uploadedTime }}</span>
         <span
@@ -305,6 +311,7 @@ import {
   copyToClipboard,
   formatDurationAsTimestamp,
   formatNumber,
+  formatScheduledTime,
   getRelativeTimeFromDate,
   openExternalLink,
   showToast,
@@ -1064,6 +1071,11 @@ function parseVideoData() {
   isPremium.value = props.data.premium || false
   viewCount.value = props.data.viewCount
 
+  // A scheduled thing states its time and says how far off it is beside it,
+  // where a published one says how long ago and nothing else. The difference is
+  // that the past is over: "3 days ago" cannot become wrong, and "in 3 days"
+  // does, on a card that reads its props once and never ticks. See
+  // `formatScheduledTime`.
   if (props.data.premiereDate !== undefined) {
     let premiereDate = props.data.premiereDate
 
@@ -1071,11 +1083,11 @@ function parseVideoData() {
     if (typeof premiereDate === 'string') {
       premiereDate = new Date(premiereDate)
     }
-    uploadedTime.value = premiereDate.toLocaleString([locale.value, 'en'])
     published.value = premiereDate.getTime()
+    uploadedTime.value = formatScheduledTime(published.value)
   } else if (props.data.premiereTimestamp !== undefined) {
-    uploadedTime.value = new Date(props.data.premiereTimestamp * 1000).toLocaleString([locale.value, 'en'])
     published.value = props.data.premiereTimestamp * 1000
+    uploadedTime.value = formatScheduledTime(published.value)
   } else if (typeof props.data.published === 'number' && !isLive.value) {
     published.value = props.data.published
 

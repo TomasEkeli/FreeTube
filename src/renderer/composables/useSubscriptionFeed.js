@@ -19,7 +19,7 @@ import {
   detailBackfillRevision
 } from '../helpers/subscriptionDetailBackfill'
 import { debounce, getRelativeTimeFromDate } from '../helpers/utils'
-import { mergeSubscriptionFeedEntries } from '../../subscriptionFeedMerge'
+import { mergeSubscriptionFeedEntries, splitUpcomingEntries } from '../../subscriptionFeedMerge'
 
 /**
  * The subscriptions feed: every kind the user has switched on, in one stream.
@@ -37,6 +37,11 @@ import { mergeSubscriptionFeedEntries } from '../../subscriptionFeedMerge'
  * one sort field, newest first. The per-channel cap keeps working because it
  * still sees a list; that it now counts across kinds rather than within one is
  * a detail nobody using it would notice.
+ *
+ * One list, but two: what is scheduled and has not happened yet comes out of
+ * the stream at the end of assembly and is handed over separately, for the
+ * shelf above it. Everything before that point is common, which is what keeps
+ * the two answering to the same chips and the same settings.
  *
  * The cache remains the record of what has been fetched, each feed's revision
  * says when that record changed, and this rebuilds the stream from the cache
@@ -63,6 +68,18 @@ export function useSubscriptionFeed() {
   const isLoading = ref(true)
 
   const entryList = shallowRef([])
+
+  /**
+   * What is scheduled and has not happened yet, soonest first.
+   *
+   * Assembled from the same cache, by the same rules, and split out at the last
+   * moment — so a chip switched off empties this of that kind exactly as it
+   * empties the stream, and the hide-premieres setting empties it of premieres,
+   * without either of them being mentioned twice.
+   *
+   * @type {import('vue').ShallowRef<any[]>}
+   */
+  const upcomingList = shallowRef([])
 
   /**
    * Which kind each entry in the stream came from.
@@ -326,15 +343,37 @@ export function useSubscriptionFeed() {
     })
 
     entryFeeds = nextEntryFeeds
-    entryList.value = mergeSubscriptionFeedEntries(lists)
+
+    // The future comes out of the stream here, at the end, rather than in each
+    // kind's `postProcess`: premieres and scheduled live streams arrive from
+    // two different feeds and are one shelf, so the split belongs where the
+    // kinds have already met.
+    const { stream, upcoming } = splitUpcomingEntries(mergeSubscriptionFeedEntries(lists))
+
+    entryList.value = stream
+    upcomingList.value = upcoming
 
     // An empty stream with a refresh still running is not an answer yet, and
     // saying "your channels have published nothing" for the half minute six
     // hundred channels take would be a confident lie. Everything else — cache
     // complete, cache partial, nothing coming — is answered by what is here.
-    if (entryList.value.length > 0 || !isRefreshing.value) {
+    if (!nothingToShow() || !isRefreshing.value) {
       isLoading.value = false
     }
+  }
+
+  /**
+   * Whether the page has nothing on it at all.
+   *
+   * The shelf counts. A profile whose channels have published nothing this week
+   * but have four premieres scheduled has something to read, and holding a
+   * spinner over it until a refresh finishes would be hiding the only answer
+   * there is.
+   *
+   * @returns {boolean}
+   */
+  function nothingToShow() {
+    return entryList.value.length === 0 && upcomingList.value.length === 0
   }
 
   /** @returns {boolean} whether there was anything worth showing */
@@ -453,7 +492,7 @@ export function useSubscriptionFeed() {
    * it is being brought up to date.
    */
   function showLoaderIfEmpty() {
-    if (entryList.value.length === 0) {
+    if (nothingToShow()) {
       isLoading.value = true
     }
   }
@@ -611,7 +650,7 @@ export function useSubscriptionFeed() {
   }, 1000)
 
   watch(detailBackfillRevision, () => {
-    if (entryList.value.length === 0) { return }
+    if (nothingToShow()) { return }
 
     rebuildAfterBackfill()
   })
@@ -653,7 +692,7 @@ export function useSubscriptionFeed() {
       // empty page while holding a perfectly readable copy. A cache that turns
       // out to hold nothing leaves the loader up, and whichever refresh is
       // running takes it down when it finishes.
-      if (entryList.value.length === 0) {
+      if (nothingToShow()) {
         rebuildFromCache()
       }
     })
@@ -667,6 +706,7 @@ export function useSubscriptionFeed() {
     isLoading,
     isRefreshing,
     entryList,
+    upcomingList,
     errorChannels,
     attemptedFetch,
     lastRefreshTimestamp,

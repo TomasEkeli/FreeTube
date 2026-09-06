@@ -25,6 +25,10 @@
         </div>
         <FtDensitySwitch />
       </div>
+      <SubscriptionsUpcomingShelf
+        v-if="anyFeedEnabled && !isLoading"
+        :entries="upcomingList"
+      />
       <SubscriptionsTabUi
         v-if="anyFeedEnabled"
         :is-loading="isLoading"
@@ -55,6 +59,7 @@ import FtCard from '../../components/ft-card/ft-card.vue'
 import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtToggleChip from '../../components/FtToggleChip/FtToggleChip.vue'
 import SubscriptionsTabUi from '../../components/SubscriptionsTabUi/SubscriptionsTabUi.vue'
+import SubscriptionsUpcomingShelf from '../../components/SubscriptionsUpcomingShelf/SubscriptionsUpcomingShelf.vue'
 
 import { useSubscriptionFeed } from '../../composables/useSubscriptionFeed'
 import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
@@ -85,12 +90,19 @@ import {
  * The row is the page's one control row: the chips at one end and the density
  * switch at the other, since a second row of controls over a single stream is
  * the sort of thing this page was rebuilt to be rid of.
+ *
+ * Between that row and the stream sits the shelf of what has not happened yet,
+ * which is the other half of making one list readable: a premiere is dated by
+ * the day it will air, so leaving it in the stream put the future at the top of
+ * a list of the past. The shelf is a schedule and the stream is history, and
+ * neither has to be read as the other.
  */
 
 const {
   isLoading,
   isRefreshing,
   entryList,
+  upcomingList,
   errorChannels,
   attemptedFetch,
   lastRefreshTimestamp,

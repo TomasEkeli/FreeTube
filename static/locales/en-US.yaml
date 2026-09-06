@@ -56,6 +56,11 @@ Global:
     Quiz: Quiz
     Video: Video
     Playlist: Playlist
+  # When something is scheduled for, as the stated time with how far off it is
+  # beside it: "09-12 12:00 (in 6 days)". The stated time is never dropped —
+  # "in 6 days" is not something anyone can write in a calendar, and it stops
+  # being true the moment it is read.
+  Scheduled Time: '{absolute} ({relative})'
   # How much room a card gets on a grid of them.
   Density:
     Label: Card density
@@ -166,6 +171,11 @@ Subscriptions:
   # Every chip in that row is off. It stands right above this, so this says
   # where to look rather than sending anyone to the settings
   No Kinds Shown: Videos, shorts, live streams and posts are all switched off. Switch one on above to see your subscriptions.
+  # The shelf of premieres and scheduled live streams over the stream. Folded
+  # away, this line is the whole shelf, which is why it carries the count rather
+  # than only a name. "Events" covers both kinds without naming either
+  Upcoming:
+    Count: 'Upcoming: 1 event | Upcoming: {count} events'
 More: More
 Channels:
   Channels: Channels
