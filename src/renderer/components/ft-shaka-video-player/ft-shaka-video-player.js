@@ -1543,9 +1543,9 @@ export default defineComponent({
           sabrAbortController.signal,
         )
       }, 1000))
-      sabrStream.onReloadOnce(() => {
+      sabrStream.onReloadOnce(({ reason } = {}) => {
         sabrAbortController.abort()
-        emit('player-reload-requested')
+        emit('player-reload-requested', reason)
       })
       sabrStream.onRefreshNeeded(() => {
         refreshSabrCredentials()
@@ -1732,7 +1732,7 @@ export default defineComponent({
         console.error(`[SABR recovery] session reload failed (${error?.message ?? error}), falling back to a page reload`)
 
         sabrAbortController?.abort()
-        emit('player-reload-requested')
+        emit('player-reload-requested', `the session reload failed: ${error?.message ?? error}`)
       } finally {
         isRebuildingSabrSession.value = false
 

@@ -48,6 +48,16 @@ const ATTESTATION_RETRY_LIMIT = 3
 const BACKOFF_LOOP_SUSPECTED_AT = 3
 const RETRY_LOOP_SUSPECTED_AT = 100
 
+/** The regulator's prefix, so the whole ladder reads as one story in the log */
+const RECOVERY_LOG = '[SABR recovery]'
+
+/**
+ * What a `RELOAD_PLAYER_RESPONSE` part says, in the words the viewer sees.
+ * The part also has a token for re-fetching the player response, which we do
+ * not use yet; until then the reload it forces is at least named.
+ */
+const SERVER_RELOAD_REASON = 'the server asked for a player reload'
+
 /**
  * @typedef OperationInputs
  * @type {object}
@@ -123,9 +133,9 @@ const RETRY_LOOP_SUSPECTED_AT = 100
  * @type {object}
  * @property {shaka.extern.SchemePlugin} handleRequest
  * @property {(cb: ({backoffMs: number}) => void) => void} onBackoffRequested
- * @property {(cb: () => void) => void} onReloadOnce
+ * @property {(cb: (payload: { reason: string }) => void) => void} onReloadOnce
  * @property {(cb: () => void) => void} onRefreshNeeded
- * @property {(cb: () => void) => void} onHardReloadNeededOnce
+ * @property {(cb: (payload: { reason: string }) => void) => void} onHardReloadNeededOnce
  * @property {(newSabrData: import('../../views/Watch/Watch').SabrData) => void} refresh
  * @property {(error: Error) => void} abandonRefresh
  * @property {() => string[]} getFormatIds
@@ -274,10 +284,15 @@ function createRecoverableNetworkError(code, ...args) {
 /**
  * Ends this SABR session and asks for the named recovery. Requests already in
  * flight abort themselves once `playerReloadRequested` is set.
+ *
+ * The reason travels with the event because several unrelated causes end in
+ * the same remedy, and one the viewer sees at most once a week. A reload that
+ * cannot say what asked for it cannot be diagnosed afterwards.
  * @param {CurrentState} currentState
  * @param {'reload' | 'hard-reload-needed'} event
+ * @param {string} reason names what asked for the recovery
  */
-function endSessionForRecovery(currentState, event) {
+function endSessionForRecovery(currentState, event, reason) {
   // A session that has been cleaned up has no player left to recover, and
   // asking for one reloads a page the viewer is already looking at
   if (currentState.isTornDown()) { return }
@@ -285,16 +300,17 @@ function endSessionForRecovery(currentState, event) {
   currentState.sabrStreamState.playerReloadRequested = true
   if (!currentState.abortController.signal.aborted) {
     currentState.abortController.abort()
-    currentState.eventEmitter.emit(event)
+    currentState.eventEmitter.emit(event, { reason })
   }
 }
 
 /**
  * Asks the watch view to reload the player.
  * @param {CurrentState} currentState
+ * @param {string} reason names what asked for the reload
  */
-function requestPlayerReload(currentState) {
-  endSessionForRecovery(currentState, 'reload')
+function requestPlayerReload(currentState, reason) {
+  endSessionForRecovery(currentState, 'reload', reason)
 }
 
 /**
@@ -316,10 +332,10 @@ function actOnRecoveryDecision(decision, currentState, operationInputs, reloadLa
 
   switch (decision.action) {
     case 'rebuild':
-      endSessionForRecovery(currentState, 'hard-reload-needed')
+      endSessionForRecovery(currentState, 'hard-reload-needed', reloadLabel)
       break
     case 'reload-page':
-      requestPlayerReload(currentState)
+      requestPlayerReload(currentState, reloadLabel)
 
       throw createRecoverableNetworkError(
         ShakaError.Code.HTTP_ERROR,
@@ -391,17 +407,21 @@ async function parkUntilRefreshed(operationInputs, currentState) {
 
   try {
     await pending.promise
-  } catch {
+  } catch (error) {
     if (currentState.abortStatus.cancelled || currentState.isTornDown()) {
       // Woken by teardown, not by a failed refresh: bow out quietly
       throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
     }
 
-    requestPlayerReload(currentState)
+    // The abandoning caller said why, in `abandonRefresh`; dropping it here is
+    // what made two different failures reach the viewer as one message
+    const reason = error?.message ?? 'SABR credential refresh abandoned'
+
+    requestPlayerReload(currentState, reason)
     throw createRecoverableNetworkError(
       ShakaError.Code.HTTP_ERROR,
       operationInputs.uri,
-      new Error('Reloading player: SABR credential refresh failed'),
+      new Error(`Reloading player: ${reason}`),
       operationInputs.requestType,
     )
   } finally {
@@ -735,8 +755,14 @@ async function doRequest(
             const reloadPlaybackContext = decodePart(part, ReloadPlaybackContext)
             if (!reloadPlaybackContext) break
 
-            // Whole video cannot be played
-            requestPlayerReload(currentState)
+            // Whole video cannot be played.
+            //
+            // The one reload nobody could see: it left no line at all, so a
+            // page reload from here looked the same as no reload at all. The
+            // line goes here because `requestPlayerReload` does nothing on a
+            // torn down session, and the part still arrived.
+            console.warn(`${RECOVERY_LOG} ${SERVER_RELOAD_REASON}`)
+            requestPlayerReload(currentState, SERVER_RELOAD_REASON)
             break
           }
           default: {
@@ -1272,6 +1298,12 @@ export function createSabrSession(sabrData, recovery, getPlayer, getManifest, pl
     onBackoffRequested(callback) {
       eventEmitter.on('backoff-requested', callback)
     },
+    /**
+     * Fires when this session is finished and only reloading the watch page
+     * is left. The payload names what asked for it, so the toast the viewer
+     * sees can say so.
+     * @param {(payload: { reason: string }) => void} callback
+     */
     onReloadOnce(callback) {
       eventEmitter.once('reload', callback)
     },
@@ -1290,7 +1322,7 @@ export function createSabrSession(sabrData, recovery, getPlayer, getManifest, pl
      * stopped being worth it and the session should be rebuilt from scratch,
      * keeping the watch page. This session is finished either way: the
      * consumer either rebuilds it or falls back to reloading the page.
-     * @param {() => void} callback
+     * @param {(payload: { reason: string }) => void} callback
      */
     onHardReloadNeededOnce(callback) {
       eventEmitter.once('hard-reload-needed', callback)
@@ -1328,7 +1360,8 @@ export function createSabrSession(sabrData, recovery, getPlayer, getManifest, pl
     /**
      * Aborts a refresh that could not complete. Parked requests reject and
      * fall back to the full player reload.
-     * @param {Error} error
+     * @param {Error} error its message is the reason the viewer is shown, so
+     * it says what went wrong rather than that something did
      */
     abandonRefresh(error) {
       sabrStreamState.refreshInFlight = false

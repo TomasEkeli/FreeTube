@@ -2230,8 +2230,21 @@ export default defineComponent({
       }
     },
 
-    async onPlayerReloadRequested() {
-      showToast('Reloading player according to SABR request')
+    /**
+     * Reloads the watch page, the most expensive remedy in the ladder: the
+     * buffer, the player and the page all go. Several unrelated causes end
+     * here, and every one of them used to show the same message, so the
+     * reason now travels with the request and is shown.
+     *
+     * @param {string} [reason] what asked for the reload. Optional because the
+     * view binds this straight to the event, so an emitter that sends no
+     * payload must still reload.
+     */
+    async onPlayerReloadRequested(reason) {
+      const cause = reason ?? 'a SABR request'
+
+      console.warn(`[SABR recovery] reloading the page: ${cause}`)
+      showToast(`Reloading player: ${cause}`)
 
       const timestamp = this.getTimestamp()
       if (timestamp > 0) {
