@@ -1661,12 +1661,20 @@ export default defineComponent({
         }
 
         const video_ = video.value
-        const wasPaused = video_.paused
         const playbackPosition = video_.currentTime
+
+        // A video that has never played is not a video the viewer paused: the
+        // element's autoplay attribute was still waiting for data when the
+        // rebuild took the data away. Restoring "paused" literally is what
+        // left a rebuild during the first load showing a play button on a
+        // video nobody had touched, where the page reload it replaced would
+        // have started playing by itself.
+        const neverStarted = video_.played.length === 0
+        const shouldResume = !video_.paused || (neverStarted && autoplayVideos.value)
 
         // Pause for the swap rather than letting the element try to play
         // through it, so the state afterwards is decided rather than raced
-        if (!wasPaused) {
+        if (!video_.paused) {
           video_.pause()
         }
 
@@ -1706,9 +1714,7 @@ export default defineComponent({
           player.trickPlay(playbackRate, false)
         }
 
-        if (wasPaused) {
-          video_.pause()
-        } else {
+        if (shouldResume) {
           // Reloading a media element does not resume it, and a viewer who was
           // watching did not ask to be stopped. A refused resume leaves them
           // with a loaded video and a play button, which is not worth throwing
@@ -1718,6 +1724,8 @@ export default defineComponent({
           } catch (error) {
             console.warn(`[SABR recovery] session rebuilt but playback did not resume (${error?.message ?? error})`)
           }
+        } else {
+          video_.pause()
         }
 
         console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
