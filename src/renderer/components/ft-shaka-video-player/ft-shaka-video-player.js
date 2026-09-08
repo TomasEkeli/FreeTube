@@ -1642,22 +1642,24 @@ export default defineComponent({
       ignoreErrors = true
 
       try {
-        const formatIdsBefore = sabrStream.getFormatIds()
-
-        /** @type {{ sabrData: object, formatIds: string[] } | null} */
+        /** @type {{ sabrData: object, formatIds: string[], manifestSrc?: string, manifestMimeType?: string } | null} */
         const result = await new Promise((resolve) => {
-          emit('sabr-refresh-requested', { onResult: resolve, reloadPlaybackContext })
+          emit('sabr-refresh-requested', { onResult: resolve, reloadPlaybackContext, rebuilding: true })
         })
 
         if (!result) {
           throw new Error('no fresh credentials')
         }
 
-        // The manifest is not rebuilt, so it still describes the old formats.
-        // Loading it against a session that serves different ones would ask
-        // for media that does not exist.
-        if (formatIdsBefore.some(id => !result.formatIds.includes(id))) {
-          throw new Error('formats changed across the reload')
+        // The formats may have changed, and it no longer matters: a rebuild
+        // unloads the media source and starts a session with an empty init
+        // data cache, so nothing that survives it refers to the old formats.
+        // The manifest was the last thing that did, and it is now built from
+        // the same player response as the session it describes. Refusing the
+        // rebuild over a changed `lastModified` is what used to send a
+        // re-encoded video to a page reload.
+        if (!result.manifestSrc) {
+          throw new Error('no fresh manifest')
         }
 
         const video_ = video.value
@@ -1706,7 +1708,7 @@ export default defineComponent({
         player.configure(getPlayerConfig(props.format, useAutoQuality))
         configureStreamingTimeout()
 
-        await player.load(props.manifestSrc, playbackPosition, props.manifestMimeType)
+        await player.load(result.manifestSrc, playbackPosition, result.manifestMimeType)
 
         restoreTrackSelection(useAutoQuality, activeVariant)
 

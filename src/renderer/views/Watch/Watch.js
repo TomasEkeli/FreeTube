@@ -146,6 +146,14 @@ export default defineComponent({
       /** @type {SabrData | null} */
       sabrData: null,
       /**
+       * The storyboards the SABR manifest carries. Kept because a session
+       * rebuild builds a fresh manifest from a fresh player response, and
+       * storyboards come from the `/next` half, which the rebuild does not
+       * re-read.
+       * @type {import('../../helpers/player/SabrManifestParser').SabrManifest['storyboards']}
+       */
+      sabrStoryboards: [],
+      /**
        * Owns the SABR transport and the recovery ladder for this view.
        * @type {?import('../../helpers/player/SabrRegulator').SabrRegulator}
        */
@@ -469,6 +477,7 @@ export default defineComponent({
       this.manifestSrc = null
       this.manifestMimeType = MANIFEST_TYPE_DASH
       this.sabrData = null
+      this.sabrStoryboards = []
       this.legacyFormats = []
       this.attemptedFormats = []
       this.captions = []
@@ -1891,6 +1900,7 @@ export default defineComponent({
      */
     createLocalSabrManifest: function (videoInfo, poToken, clientInfo, storyboards) {
       this.sabrData = this.buildSabrData(videoInfo, poToken, clientInfo)
+      this.sabrStoryboards = storyboards
 
       /** @type {import('../../helpers/player/SabrManifestParser').SabrManifest} */
       const sabrManifest = {
@@ -2190,15 +2200,28 @@ export default defineComponent({
      * old session served, and reusing a buffer across a format change
      * corrupts playback.
      *
+     * A rebuild asks for a manifest as well, and gets one built from this very
+     * response. It throws its media source away anyway, so nothing it keeps
+     * refers to the old formats, and a manifest that agrees with the fresh
+     * session is what makes changed format identifiers stop being a failure.
+     * A refresh must not have one: it keeps the buffer, so its formats have to
+     * be the ones already playing.
+     *
      * @param {{
-     *   onResult: (result: { sabrData: SabrData, formatIds: string[] } | null) => void,
-     *   reloadPlaybackContext?: object
+     *   onResult: (result: {
+     *     sabrData: SabrData,
+     *     formatIds: string[],
+     *     manifestSrc?: string,
+     *     manifestMimeType?: string
+     *   } | null) => void,
+     *   reloadPlaybackContext?: object,
+     *   rebuilding?: boolean
      * }} payload `reloadPlaybackContext` is the server's own reload token, set
      * only when a `RELOAD_PLAYER_RESPONSE` part asked for this. It has to ride
      * on the `/player` call, or the response describes the same finished
      * playback context we were told to leave.
      */
-    async onSabrRefreshRequested({ onResult, reloadPlaybackContext }) {
+    async onSabrRefreshRequested({ onResult, reloadPlaybackContext, rebuilding = false }) {
       if (this.backendPreference !== 'local') {
         onResult(null)
         return
@@ -2216,19 +2239,37 @@ export default defineComponent({
           return
         }
 
-        const sabrData = this.buildSabrData(info, poToken, clientInfo)
-        this.sabrData = sabrData
         this.streamingDataExpiryDate = info.streaming_data.expires
 
+        // Reuses the manifest parser's own identifier builder so the two can
+        // never drift
+        const formatIds = info.streaming_data.adaptive_formats.map(format => buildFormatId({
+          itag: format.itag,
+          lastModified: format.last_modified_ms,
+          xtags: format.xtags,
+        }))
+
+        if (!rebuilding) {
+          const sabrData = this.buildSabrData(info, poToken, clientInfo)
+          this.sabrData = sabrData
+
+          onResult({ sabrData, formatIds })
+          return
+        }
+
+        // Sets `sabrData` and `sabrStoryboards` as the first load does, so the
+        // view's own copy describes what the player is about to load rather
+        // than what it was playing
+        const manifestSrc = this.createLocalSabrManifest(info, poToken, clientInfo, this.sabrStoryboards)
+
+        this.manifestSrc = manifestSrc
+        this.manifestMimeType = MANIFEST_TYPE_SABR
+
         onResult({
-          sabrData,
-          // Reuses the manifest parser's own identifier builder so the two
-          // can never drift
-          formatIds: info.streaming_data.adaptive_formats.map(format => buildFormatId({
-            itag: format.itag,
-            lastModified: format.last_modified_ms,
-            xtags: format.xtags,
-          })),
+          sabrData: this.sabrData,
+          formatIds,
+          manifestSrc,
+          manifestMimeType: MANIFEST_TYPE_SABR,
         })
       } catch (error) {
         console.error('SABR credential refresh failed', error)
