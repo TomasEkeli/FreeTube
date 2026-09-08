@@ -295,9 +295,24 @@ function endSessionForRecovery(currentState, event, reason, payload) {
   // asking for one reloads a page the viewer is already looking at
   if (currentState.isTornDown()) { return }
 
+  // Only the first caller asks for a remedy. Audio and video reach the same
+  // conclusion together, and the second one must not spend a second rung.
+  const alreadyEnded = currentState.sabrStreamState.playerReloadRequested
+
   currentState.sabrStreamState.playerReloadRequested = true
+
   if (!currentState.abortController.signal.aborted) {
     currentState.abortController.abort()
+  }
+
+  // The emit used to sit inside that guard, and a request that had already
+  // aborted its own controller therefore ended the session and told nobody.
+  // A completed segment does exactly that (`MEDIA_END` aborts the request), so
+  // any recovery decided after the media had arrived left the session marked
+  // dead, every later request aborting against it, and no rebuild, no page
+  // reload and no message. The one failure worse than the page reload this
+  // work exists to remove.
+  if (!alreadyEnded) {
     currentState.eventEmitter.emit(event, { ...payload, reason })
   }
 }
