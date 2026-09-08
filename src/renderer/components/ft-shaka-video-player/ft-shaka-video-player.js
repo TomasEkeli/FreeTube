@@ -32,6 +32,7 @@ import {
 } from '../../helpers/utils'
 import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
+import { sabrWallInjectionEnabled, shouldAbandonRefresh } from '../../helpers/player/sabrWallInjection'
 
 /** @typedef {import('../../helpers/sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
 
@@ -1550,8 +1551,8 @@ export default defineComponent({
       sabrStream.onRefreshNeeded(() => {
         refreshSabrCredentials()
       })
-      sabrStream.onHardReloadNeededOnce(() => {
-        hardReloadSabrSession()
+      sabrStream.onHardReloadNeededOnce((payload) => {
+        hardReloadSabrSession(payload)
       })
     }
 
@@ -1590,7 +1591,8 @@ export default defineComponent({
         // abandons the park rather than releasing it: releasing parked
         // requests into a session with different formats would fetch
         // mismatched media into the existing buffer.
-        const formatsChanged = formatIdsBefore.some(id => !result.formatIds.includes(id))
+        const formatsChanged = formatIdsBefore.some(id => !result.formatIds.includes(id)) ||
+          (sabrWallInjectionEnabled && shouldAbandonRefresh())
 
         if (formatsChanged) {
           sabrStream.abandonRefresh(new Error('SABR formats changed across refresh'))
@@ -1613,8 +1615,13 @@ export default defineComponent({
      *
      * Anything that stops it falls back to the full page reload, so behaviour
      * is never worse than before this existed.
+     *
+     * @param {object} [payload]
+     * @param {object} [payload.reloadPlaybackContext] the server's own reload
+     * token, when the server is what asked. The fresh player response has to
+     * be fetched with it, or YouTube answers with the same finished context.
      */
-    async function hardReloadSabrSession() {
+    async function hardReloadSabrSession({ reloadPlaybackContext } = {}) {
       if (!sabrStream) return
 
       if (isRebuildingSabrSession.value) {
@@ -1639,7 +1646,7 @@ export default defineComponent({
 
         /** @type {{ sabrData: object, formatIds: string[] } | null} */
         const result = await new Promise((resolve) => {
-          emit('sabr-refresh-requested', { onResult: resolve })
+          emit('sabr-refresh-requested', { onResult: resolve, reloadPlaybackContext })
         })
 
         if (!result) {

@@ -2190,16 +2190,22 @@ export default defineComponent({
      * old session served, and reusing a buffer across a format change
      * corrupts playback.
      *
-     * @param {{ onResult: (result: { sabrData: SabrData, formatIds: string[] } | null) => void }} payload
+     * @param {{
+     *   onResult: (result: { sabrData: SabrData, formatIds: string[] } | null) => void,
+     *   reloadPlaybackContext?: object
+     * }} payload `reloadPlaybackContext` is the server's own reload token, set
+     * only when a `RELOAD_PLAYER_RESPONSE` part asked for this. It has to ride
+     * on the `/player` call, or the response describes the same finished
+     * playback context we were told to leave.
      */
-    async onSabrRefreshRequested({ onResult }) {
+    async onSabrRefreshRequested({ onResult, reloadPlaybackContext }) {
       if (this.backendPreference !== 'local') {
         onResult(null)
         return
       }
 
       try {
-        const { info, poToken, clientInfo } = await getLocalVideoInfo(this.videoId)
+        const { info, poToken, clientInfo } = await getLocalVideoInfo(this.videoId, { reloadPlaybackContext })
 
         // No token means getLocalVideoInfo could not mint one even with
         // retries; a refresh with it would just install a walled session

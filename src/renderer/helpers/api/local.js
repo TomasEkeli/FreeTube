@@ -789,6 +789,11 @@ function buildSessionFromYtConfig(ytConfig, fetchFunc) {
 
 /**
  * @param {string} id
+ * @param {object} [options]
+ * @param {object} [options.reloadPlaybackContext] the decoded
+ * `ReloadPlaybackContext` from a server `RELOAD_PLAYER_RESPONSE` part, passed
+ * verbatim to `/player`. It is what makes the response describe a playable
+ * context rather than the finished one the server just told us to leave.
  * @returns {Promise<{
  *   info: import('youtubei.js').YT.VideoInfo,
  *   poToken: string | undefined,
@@ -801,7 +806,7 @@ function buildSessionFromYtConfig(ytConfig, fetchFunc) {
  *   adEndTimeUnixMs: number
  * }>}
  */
-export async function getLocalVideoInfo(id) {
+export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
   let responseTime
   let totalAdTimeMilliseconds = 0
 
@@ -879,7 +884,10 @@ export async function getLocalVideoInfo(id) {
   let nextResponse
   const context = htmlExtracts.session.context
 
-  if (htmlExtracts.playerResponse) {
+  // The watch page's embedded player response saves a request, but it was
+  // built without our reload token, so it describes the context the server has
+  // just finished with. A reload has to ask `/player` itself.
+  if (htmlExtracts.playerResponse && !reloadPlaybackContext) {
     totalAdTimeMilliseconds = extractTotalAdTimeMilliseconds(htmlExtracts.playerResponse)
 
     playerResponse = { data: htmlExtracts.playerResponse }
@@ -894,7 +902,8 @@ export async function getLocalVideoInfo(id) {
           splay: false,
           lactMilliseconds: '-1',
           signatureTimestamp: player.signature_timestamp
-        }
+        },
+        ...(reloadPlaybackContext ? { reloadPlaybackContext } : {})
       },
       serviceIntegrityDimensions: {
         poToken: contentPoToken

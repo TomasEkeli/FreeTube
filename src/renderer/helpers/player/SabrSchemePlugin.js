@@ -17,7 +17,7 @@ import {
 import shaka from 'shaka-player'
 
 import { deepCopy } from '../utils'
-import { injectedBackoffMs, injectedProtectionStatus, noteCredentialsInstalled, noteSessionServing, sabrWallInjectionEnabled, shouldInjectWall } from './sabrWallInjection'
+import { injectedBackoffMs, injectedProtectionStatus, injectedReloadPlaybackContext, noteCredentialsInstalled, noteSessionServing, sabrWallInjectionEnabled, shouldInjectServerReload, shouldInjectWall } from './sabrWallInjection'
 
 const AbortableOperation = shaka.util.AbortableOperation
 const ShakaError = shaka.util.Error
@@ -48,13 +48,9 @@ const ATTESTATION_RETRY_LIMIT = 3
 const BACKOFF_LOOP_SUSPECTED_AT = 3
 const RETRY_LOOP_SUSPECTED_AT = 100
 
-/** The regulator's prefix, so the whole ladder reads as one story in the log */
-const RECOVERY_LOG = '[SABR recovery]'
-
 /**
- * What a `RELOAD_PLAYER_RESPONSE` part says, in the words the viewer sees.
- * The part also has a token for re-fetching the player response, which we do
- * not use yet; until then the reload it forces is at least named.
+ * What a `RELOAD_PLAYER_RESPONSE` part says, in the words the viewer sees and
+ * the regulator logs.
  */
 const SERVER_RELOAD_REASON = 'the server asked for a player reload'
 
@@ -291,8 +287,10 @@ function createRecoverableNetworkError(code, ...args) {
  * @param {CurrentState} currentState
  * @param {'reload' | 'hard-reload-needed'} event
  * @param {string} reason names what asked for the recovery
+ * @param {object} [payload] anything the remedy needs, such as the server's
+ * reload context for a rebuild that must re-fetch the player response
  */
-function endSessionForRecovery(currentState, event, reason) {
+function endSessionForRecovery(currentState, event, reason, payload) {
   // A session that has been cleaned up has no player left to recover, and
   // asking for one reloads a page the viewer is already looking at
   if (currentState.isTornDown()) { return }
@@ -300,7 +298,7 @@ function endSessionForRecovery(currentState, event, reason) {
   currentState.sabrStreamState.playerReloadRequested = true
   if (!currentState.abortController.signal.aborted) {
     currentState.abortController.abort()
-    currentState.eventEmitter.emit(event, { reason })
+    currentState.eventEmitter.emit(event, { ...payload, reason })
   }
 }
 
@@ -311,6 +309,34 @@ function endSessionForRecovery(currentState, event, reason) {
  */
 function requestPlayerReload(currentState, reason) {
   endSessionForRecovery(currentState, 'reload', reason)
+}
+
+/**
+ * Ends the session as the regulator decided, without touching the request.
+ *
+ * Split out of `actOnRecoveryDecision` for the one caller that is not a
+ * request site: a decision reached while reading UMP parts cannot throw,
+ * because the read loop already ends the request when the session aborts, and
+ * a throw from inside it would be re-read as a network failure.
+ *
+ * @param {import('./SabrRegulator').RecoveryDecision} decision
+ * @param {CurrentState} currentState
+ * @param {string} reloadLabel names the cause, for the log and the toast
+ * @param {object} [payload] anything the remedy needs
+ */
+function endSessionAsDecided(decision, currentState, reloadLabel, payload) {
+  if (decision.log) {
+    console.warn(decision.log)
+  }
+
+  switch (decision.action) {
+    case 'rebuild':
+      endSessionForRecovery(currentState, 'hard-reload-needed', reloadLabel, payload)
+      break
+    case 'reload-page':
+      requestPlayerReload(currentState, reloadLabel)
+      break
+  }
 }
 
 /**
@@ -326,17 +352,10 @@ function requestPlayerReload(currentState, reason) {
  * @param {string} reloadLabel names the cause in the error a page reload throws
  */
 function actOnRecoveryDecision(decision, currentState, operationInputs, reloadLabel) {
-  if (decision.log) {
-    console.warn(decision.log)
-  }
+  endSessionAsDecided(decision, currentState, reloadLabel)
 
   switch (decision.action) {
-    case 'rebuild':
-      endSessionForRecovery(currentState, 'hard-reload-needed', reloadLabel)
-      break
     case 'reload-page':
-      requestPlayerReload(currentState, reloadLabel)
-
       throw createRecoverableNetworkError(
         ShakaError.Code.HTTP_ERROR,
         operationInputs.uri,
@@ -359,6 +378,25 @@ function actOnRecoveryDecision(decision, currentState, operationInputs, reloadLa
   // 'rebuild' and 'abort' both leave this request with nothing to do: the
   // session it belongs to is finished either way
   throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
+}
+
+/**
+ * Answers the server's request for a player reload, real or injected, by
+ * asking the ladder for a rebuild and handing it the server's token.
+ *
+ * @param {CurrentState} currentState
+ * @param {object} reloadPlaybackContext the decoded `ReloadPlaybackContext`
+ */
+function answerServerReload(currentState, reloadPlaybackContext) {
+  endSessionAsDecided(
+    currentState.recovery.decideOnServerReload({
+      description: SERVER_RELOAD_REASON,
+      sessionEnded: currentState.sabrStreamState.playerReloadRequested,
+    }),
+    currentState,
+    SERVER_RELOAD_REASON,
+    { reloadPlaybackContext },
+  )
 }
 
 /**
@@ -417,13 +455,15 @@ async function parkUntilRefreshed(operationInputs, currentState) {
     // what made two different failures reach the viewer as one message
     const reason = error?.message ?? 'SABR credential refresh abandoned'
 
-    requestPlayerReload(currentState, reason)
-    throw createRecoverableNetworkError(
-      ShakaError.Code.HTTP_ERROR,
-      operationInputs.uri,
-      new Error(`Reloading player: ${reason}`),
-      operationInputs.requestType,
-    )
+    // This used to reload the page from here, which spent the most expensive
+    // remedy without ever offering the rebuild rung above it. The ladder
+    // decides now, as it does everywhere else.
+    const decision = currentState.recovery.decideOnRefreshAbandoned({
+      reason,
+      sessionEnded: currentState.sabrStreamState.playerReloadRequested,
+    })
+
+    actOnRecoveryDecision(decision, currentState, operationInputs, `credential refresh abandoned (${reason})`)
   } finally {
     currentState.timeoutController?.resume()
   }
@@ -755,14 +795,16 @@ async function doRequest(
             const reloadPlaybackContext = decodePart(part, ReloadPlaybackContext)
             if (!reloadPlaybackContext) break
 
-            // Whole video cannot be played.
+            // Upstream reads this as "the whole video cannot be played" and
+            // reloads the page. The part says the opposite: it hands us a
+            // token for re-fetching the player response, and the reference
+            // implementation installs the new streaming URL and retries the
+            // same segment. That is a session rebuild, so it climbs the ladder
+            // like every other cause, carrying the token to the rebuild.
             //
-            // The one reload nobody could see: it left no line at all, so a
-            // page reload from here looked the same as no reload at all. The
-            // line goes here because `requestPlayerReload` does nothing on a
-            // torn down session, and the part still arrived.
-            console.warn(`${RECOVERY_LOG} ${SERVER_RELOAD_REASON}`)
-            requestPlayerReload(currentState, SERVER_RELOAD_REASON)
+            // The decision's own line is what makes this path visible at last;
+            // it had none, so it was the one reload that left no trace.
+            answerServerReload(currentState, reloadPlaybackContext)
             break
           }
           default: {
@@ -795,6 +837,16 @@ async function doRequest(
     throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
   } else if (currentState.abortStatus.timedOut) {
     throw createRecoverableNetworkError(ShakaError.Code.TIMEOUT, operationInputs.uri, operationInputs.requestType)
+  }
+
+  // A server reload the server did not send. It goes here rather than in the
+  // part loop because a fabricated part would have to be spliced into a stream
+  // that has already been read; everything downstream of the decode is what is
+  // being tested, and this is where that starts.
+  if (sabrWallInjectionEnabled && shouldInjectServerReload(currentState.sabrStreamState.requestNumber)) {
+    answerServerReload(currentState, injectedReloadPlaybackContext())
+
+    throw createRecoverableNetworkError(ShakaError.Code.OPERATION_ABORTED, operationInputs.uri, operationInputs.requestType)
   }
 
   if (wallInjected) {
