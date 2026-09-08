@@ -32,6 +32,7 @@ import {
 } from '../../helpers/utils'
 import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
+import { sabrWallInjectionEnabled, shouldAbandonRefresh } from '../../helpers/player/sabrWallInjection'
 
 /** @typedef {import('../../helpers/sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
 
@@ -1543,15 +1544,15 @@ export default defineComponent({
           sabrAbortController.signal,
         )
       }, 1000))
-      sabrStream.onReloadOnce(() => {
+      sabrStream.onReloadOnce(({ reason } = {}) => {
         sabrAbortController.abort()
-        emit('player-reload-requested')
+        emit('player-reload-requested', reason)
       })
       sabrStream.onRefreshNeeded(() => {
         refreshSabrCredentials()
       })
-      sabrStream.onHardReloadNeededOnce(() => {
-        hardReloadSabrSession()
+      sabrStream.onHardReloadNeededOnce((payload) => {
+        hardReloadSabrSession(payload)
       })
     }
 
@@ -1590,7 +1591,8 @@ export default defineComponent({
         // abandons the park rather than releasing it: releasing parked
         // requests into a session with different formats would fetch
         // mismatched media into the existing buffer.
-        const formatsChanged = formatIdsBefore.some(id => !result.formatIds.includes(id))
+        const formatsChanged = formatIdsBefore.some(id => !result.formatIds.includes(id)) ||
+          (sabrWallInjectionEnabled && shouldAbandonRefresh())
 
         if (formatsChanged) {
           sabrStream.abandonRefresh(new Error('SABR formats changed across refresh'))
@@ -1613,8 +1615,13 @@ export default defineComponent({
      *
      * Anything that stops it falls back to the full page reload, so behaviour
      * is never worse than before this existed.
+     *
+     * @param {object} [payload]
+     * @param {object} [payload.reloadPlaybackContext] the server's own reload
+     * token, when the server is what asked. The fresh player response has to
+     * be fetched with it, or YouTube answers with the same finished context.
      */
-    async function hardReloadSabrSession() {
+    async function hardReloadSabrSession({ reloadPlaybackContext } = {}) {
       if (!sabrStream) return
 
       if (isRebuildingSabrSession.value) {
@@ -1635,31 +1642,41 @@ export default defineComponent({
       ignoreErrors = true
 
       try {
-        const formatIdsBefore = sabrStream.getFormatIds()
-
-        /** @type {{ sabrData: object, formatIds: string[] } | null} */
+        /** @type {{ sabrData: object, formatIds: string[], manifestSrc?: string, manifestMimeType?: string } | null} */
         const result = await new Promise((resolve) => {
-          emit('sabr-refresh-requested', { onResult: resolve })
+          emit('sabr-refresh-requested', { onResult: resolve, reloadPlaybackContext, rebuilding: true })
         })
 
         if (!result) {
           throw new Error('no fresh credentials')
         }
 
-        // The manifest is not rebuilt, so it still describes the old formats.
-        // Loading it against a session that serves different ones would ask
-        // for media that does not exist.
-        if (formatIdsBefore.some(id => !result.formatIds.includes(id))) {
-          throw new Error('formats changed across the reload')
+        // The formats may have changed, and it no longer matters: a rebuild
+        // unloads the media source and starts a session with an empty init
+        // data cache, so nothing that survives it refers to the old formats.
+        // The manifest was the last thing that did, and it is now built from
+        // the same player response as the session it describes. Refusing the
+        // rebuild over a changed `lastModified` is what used to send a
+        // re-encoded video to a page reload.
+        if (!result.manifestSrc) {
+          throw new Error('no fresh manifest')
         }
 
         const video_ = video.value
-        const wasPaused = video_.paused
         const playbackPosition = video_.currentTime
+
+        // A video that has never played is not a video the viewer paused: the
+        // element's autoplay attribute was still waiting for data when the
+        // rebuild took the data away. Restoring "paused" literally is what
+        // left a rebuild during the first load showing a play button on a
+        // video nobody had touched, where the page reload it replaced would
+        // have started playing by itself.
+        const neverStarted = video_.played.length === 0
+        const shouldResume = !video_.paused || (neverStarted && autoplayVideos.value)
 
         // Pause for the swap rather than letting the element try to play
         // through it, so the state afterwards is decided rather than raced
-        if (!wasPaused) {
+        if (!video_.paused) {
           video_.pause()
         }
 
@@ -1691,7 +1708,7 @@ export default defineComponent({
         player.configure(getPlayerConfig(props.format, useAutoQuality))
         configureStreamingTimeout()
 
-        await player.load(props.manifestSrc, playbackPosition, props.manifestMimeType)
+        await player.load(result.manifestSrc, playbackPosition, result.manifestMimeType)
 
         restoreTrackSelection(useAutoQuality, activeVariant)
 
@@ -1699,9 +1716,7 @@ export default defineComponent({
           player.trickPlay(playbackRate, false)
         }
 
-        if (wasPaused) {
-          video_.pause()
-        } else {
+        if (shouldResume) {
           // Reloading a media element does not resume it, and a viewer who was
           // watching did not ask to be stopped. A refused resume leaves them
           // with a loaded video and a play button, which is not worth throwing
@@ -1711,6 +1726,8 @@ export default defineComponent({
           } catch (error) {
             console.warn(`[SABR recovery] session rebuilt but playback did not resume (${error?.message ?? error})`)
           }
+        } else {
+          video_.pause()
         }
 
         console.warn(`[SABR recovery] session rebuilt, resuming at ${playbackPosition.toFixed(1)}s`)
@@ -1732,7 +1749,7 @@ export default defineComponent({
         console.error(`[SABR recovery] session reload failed (${error?.message ?? error}), falling back to a page reload`)
 
         sabrAbortController?.abort()
-        emit('player-reload-requested')
+        emit('player-reload-requested', `the session reload failed: ${error?.message ?? error}`)
       } finally {
         isRebuildingSabrSession.value = false
 

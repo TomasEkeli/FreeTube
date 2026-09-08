@@ -37,7 +37,7 @@
  * ladder behaving correctly under an intermittent wall, but it is not a test
  * of the rungs above the rebuild, and only a delay of zero is.
  *
- * Two named options may follow, in either order, and either on its own:
+ * Named options may follow, in any order, and any of them alone:
  *
  *   FT_SABR_WALL=10:never:backoff=4  every refusal also asks us to wait four
  *                                    seconds before asking again
@@ -45,6 +45,13 @@
  *                                    than left pending
  *   FT_SABR_WALL=0:never:patience=20 escalate after twenty seconds of refreshing
  *                                    rather than the usual eighty five
+ *   FT_SABR_WALL=0:never:abandon=1   the first credential refresh is abandoned
+ *                                    as if the formats had changed under it
+ *   FT_SABR_WALL=99999:never:reload=3 the third request of a session is answered
+ *                                    as if the server had asked for a player
+ *                                    reload. The delay of 99999 keeps the wall
+ *                                    itself out of the way, so this path can be
+ *                                    walked on its own.
  *
  * `backoff` is what makes the loop detector countable. It counts backoffs
  * within a single segment request and only a refused request retries inside
@@ -73,6 +80,16 @@
  * to say something about how patient the ladder should be must leave it alone,
  * and so must any run where the buffer is supposed to decide first.
  *
+ * `abandon` and `reload` exist because the two paths they imitate cannot be
+ * provoked any other way. A refresh is only abandoned when a real player
+ * response comes back describing different formats, which is rare enough that
+ * it is the prime suspect for a symptom seen once a week; and the server sent
+ * no `RELOAD_PLAYER_RESPONSE` at all across the whole of August, so the only
+ * way to know the handling works is to fabricate one. The reload's token is a
+ * made up string, so YouTube answers it however it answers nonsense: the test
+ * is that a rebuild is attempted, budgeted and logged, and that whatever comes
+ * back either plays or falls back to a page reload that says why.
+ *
  * Responses are rewritten rather than prevented, so everything downstream runs
  * exactly as it does against a real wall: the server's media is read and then
  * discarded, so the buffer drains at playback speed just as it really would.
@@ -91,7 +108,7 @@
  * @returns {null}
  */
 function refuseConfig(raw, because) {
-  console.error(`[SABR recovery] FT_SABR_WALL="${raw}" ignored: ${because}. Expected <seconds>[:<credentials>|never][:backoff=<seconds>][:status=<2|3>][:patience=<seconds>]`)
+  console.error(`[SABR recovery] FT_SABR_WALL="${raw}" ignored: ${because}. Expected <seconds>[:<credentials>|never][:backoff=<seconds>][:status=<2|3>][:patience=<seconds>][:abandon=<count>][:reload=<request>]`)
 
   return null
 }
@@ -119,6 +136,8 @@ const CONFIG = (() => {
   let backoffMs = 0
   let protectionStatus = 2
   let patienceSeconds = 0
+  let refreshesToAbandon = 0
+  let serverReloadAtRequest = 0
 
   // Named rather than positional, so that either can be given alone and so
   // that a command line still says what it does a month later
@@ -154,13 +173,31 @@ const CONFIG = (() => {
 
         break
       }
+      case 'abandon': {
+        refreshesToAbandon = Number.parseInt(value)
+
+        if (!(refreshesToAbandon > 0)) {
+          return refuseConfig(raw, `abandon "${value}" is not a count of refreshes`)
+        }
+
+        break
+      }
+      case 'reload': {
+        serverReloadAtRequest = Number.parseInt(value)
+
+        if (!(serverReloadAtRequest > 0)) {
+          return refuseConfig(raw, `reload "${value}" is not a request number`)
+        }
+
+        break
+      }
       default: {
-        return refuseConfig(raw, `"${optionText}" is not one of backoff=<seconds>, status=<2|3> or patience=<seconds>`)
+        return refuseConfig(raw, `"${optionText}" is not one of backoff=<seconds>, status=<2|3>, patience=<seconds>, abandon=<count> or reload=<request>`)
       }
     }
   }
 
-  return { delayMs: delaySeconds * 1000, credentialsUntilTrusted, backoffMs, protectionStatus, patienceSeconds }
+  return { delayMs: delaySeconds * 1000, credentialsUntilTrusted, backoffMs, protectionStatus, patienceSeconds, refreshesToAbandon, serverReloadAtRequest }
 })()
 
 export const sabrWallInjectionEnabled = CONFIG !== null
@@ -173,9 +210,11 @@ if (CONFIG !== null) {
   const refusal = CONFIG.protectionStatus === 3 ? 'as a rejected token' : 'as a pending attestation'
   const backoff = CONFIG.backoffMs > 0 ? `, asking for ${CONFIG.backoffMs / 1000}s of backoff each time` : ''
   const patience = CONFIG.patienceSeconds > 0 ? `, escalating after ${CONFIG.patienceSeconds}s of refreshing instead of the usual number` : ''
+  const abandon = CONFIG.refreshesToAbandon > 0 ? `, abandoning the first ${CONFIG.refreshesToAbandon} credential refreshes as if the formats had changed` : ''
+  const serverReload = CONFIG.serverReloadAtRequest > 0 ? `, answering request ${CONFIG.serverReloadAtRequest} as a server reload request` : ''
 
   console.warn(
-    `[SABR recovery] WALL INJECTION ACTIVE: sessions wall ${CONFIG.delayMs / 1000}s in ${refusal}${backoff}${patience}, ${needed}. Unset FT_SABR_WALL to stop.`
+    `[SABR recovery] WALL INJECTION ACTIVE: sessions wall ${CONFIG.delayMs / 1000}s in ${refusal}${backoff}${patience}${abandon}${serverReload}, ${needed}. Unset FT_SABR_WALL to stop.`
   )
 }
 
@@ -214,6 +253,8 @@ export function resetWallInjection() {
 
   credentialsInstalled = 0
   servingSince = null
+  refreshesAbandoned = 0
+  serverReloadsInjected = 0
 }
 
 /**
@@ -233,6 +274,54 @@ export function noteSessionServing() {
   if (CONFIG === null || servingSince !== null) { return }
 
   servingSince = Date.now()
+}
+
+/** Credential refreshes abandoned so far, against `abandon=<count>`. */
+let refreshesAbandoned = 0
+
+/** Server reloads fabricated so far for this video, against `reload=<request>`. */
+let serverReloadsInjected = 0
+
+/**
+ * Whether the refresh now completing should be thrown away as if the fresh
+ * player response had described different formats. Counts itself, so a count
+ * of one abandons the first refresh and lets the rest through.
+ * @returns {boolean}
+ */
+export function shouldAbandonRefresh() {
+  if (CONFIG === null || refreshesAbandoned >= CONFIG.refreshesToAbandon) { return false }
+
+  refreshesAbandoned += 1
+
+  return true
+}
+
+/**
+ * Whether this response should be answered as if the server had sent a
+ * `RELOAD_PLAYER_RESPONSE` part. Once per video: the point is to watch the
+ * rebuild happen, and a session that is reloaded on every request never gets
+ * far enough to show anything.
+ * @param {number} requestNumber the session's running request count
+ * @returns {boolean}
+ */
+export function shouldInjectServerReload(requestNumber) {
+  if (CONFIG === null || CONFIG.serverReloadAtRequest === 0) { return false }
+  if (serverReloadsInjected > 0 || requestNumber < CONFIG.serverReloadAtRequest) { return false }
+
+  serverReloadsInjected += 1
+
+  return true
+}
+
+/**
+ * A reload context shaped like the server's, with a token YouTube has never
+ * issued. What comes back is whatever YouTube makes of nonsense, which is the
+ * honest half of this test: the other half, that a rebuild is attempted,
+ * budgeted and logged, is ours to get right.
+ * @returns {{ reloadPlaybackParams: { token: string } }}
+ */
+export function injectedReloadPlaybackContext() {
+  return { reloadPlaybackParams: { token: 'FT_SABR_WALL_INJECTED_RELOAD_TOKEN' } }
 }
 
 /**

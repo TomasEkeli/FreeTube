@@ -45,6 +45,8 @@ const AbortableOperation = shaka.util.AbortableOperation
  * @property {(facts: { hasServedMedia: boolean, sessionEnded: boolean }) => RecoveryDecision} decideOnRefusal
  * @property {() => void} noteRefreshStarted
  * @property {(facts: { description: string, hasServedMedia: boolean, sessionEnded: boolean }) => RecoveryDecision} decideOnLoopSuspicion
+ * @property {(facts: { reason: string, sessionEnded: boolean }) => RecoveryDecision} decideOnRefreshAbandoned
+ * @property {(facts: { description: string, sessionEnded: boolean }) => RecoveryDecision} decideOnServerReload
  */
 
 /**
@@ -667,6 +669,84 @@ export function createSabrRegulator({ isRegulated = () => false } = {}) {
 
       // A video that has already been rebuilt and reloaded is telling us that
       // the reloading is not what is wrong
+      return {
+        action: 'run-on',
+        log: `${RECOVERY_LOG} ${description}, and every reload is spent, so letting the request run`,
+      }
+    },
+
+    /**
+     * Rung 0 could not complete: either the fresh player response never
+     * arrived, or it described different formats from the ones the buffer
+     * holds, so the credentials cannot be swapped underneath the running
+     * session.
+     *
+     * This used to reload the whole watch page on the spot, which skipped the
+     * rebuild rung entirely. A refresh that cannot land says the running
+     * session cannot be patched; it says nothing about whether a fresh one
+     * would work, and a fresh one is exactly what the viewer's own remedy of
+     * reopening the video amounts to. So it climbs the ladder like everything
+     * else, and reaches a page reload only after a rebuild has been tried.
+     *
+     * The buffer is not consulted. Rung 0 was chosen because there was runway,
+     * that runway has just been spent, and the parked requests cannot wait for
+     * a second refresh built from the same player response.
+     *
+     * @param {object} facts
+     * @param {string} facts.reason why the refresh was abandoned, for the log
+     * @param {boolean} facts.sessionEnded whether this session has already been ended for a recovery
+     * @returns {RecoveryDecision}
+     */
+    decideOnRefreshAbandoned({ reason, sessionEnded }) {
+      // Audio and video park on the same refresh and wake on the same
+      // rejection, so the first one to escalate ends the session for both
+      if (sessionEnded) {
+        return { action: 'abort', log: null }
+      }
+
+      const escalation = escalate(`credential refresh abandoned (${reason})`)
+
+      if (escalation) { return escalation }
+
+      // A rebuild still waiting on a load it will never get is now waiting for
+      // nothing, and must not read this as its own failure
+      rebuildSuperseded = rebuildUnsettled
+
+      endEpisode(`giving up: ${ladder.hardReloads} session reloads and ${ladder.pageReloads} page reloads did not get a trusted token`)
+
+      return { action: 'give-up', log: null, error: new SabrGiveUpError() }
+    },
+
+    /**
+     * The server sent a `RELOAD_PLAYER_RESPONSE` part, which means this
+     * playback context is finished and a fresh player response is needed.
+     *
+     * It is neither a refusal nor a loop: no waiting will fix it, and the
+     * buffer is beside the point, so this escalates at once. The reference
+     * implementation answers it by re-fetching the player response with the
+     * token the part carries and retrying the same segment, which is what our
+     * session rebuild does, minus the retry.
+     *
+     * When every budget is spent this runs on rather than giving up. The
+     * server asked for a reload, which is not a verdict on the token, and a
+     * spent budget says reloading is not what is wrong; letting the request
+     * run reports whatever the server does next. Reconsider if a capture ever
+     * shows a loop of these.
+     *
+     * @param {object} facts
+     * @param {string} facts.description what the server asked for, for the log
+     * @param {boolean} facts.sessionEnded whether this session has already been ended for a recovery
+     * @returns {RecoveryDecision}
+     */
+    decideOnServerReload({ description, sessionEnded }) {
+      if (sessionEnded) {
+        return { action: 'abort', log: null }
+      }
+
+      const escalation = escalate(description)
+
+      if (escalation) { return escalation }
+
       return {
         action: 'run-on',
         log: `${RECOVERY_LOG} ${description}, and every reload is spent, so letting the request run`,
