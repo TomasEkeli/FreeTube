@@ -1,4 +1,4 @@
-import { ClientType, Constants, Innertube, Misc, Mixins, Parser, Platform, Player, Session, UniversalCache, Utils, YT, YTNodes } from 'youtubei.js'
+import { ClientType, Constants, Innertube, Log, Misc, Mixins, Parser, Platform, Player, Session, UniversalCache, Utils, YT, YTNodes } from 'youtubei.js'
 import Autolinker from 'autolinker'
 import { parseLooseJSON } from 'bgutils-js/utils'
 
@@ -22,6 +22,18 @@ const TRACKING_PARAM_NAMES = [
   'utm_term',
   'utm_content',
 ]
+
+// `setLevel` takes the set of levels to enable rather than a threshold, and
+// youtubei.js defaults it to `[Level.WARNING]`. So out of the box it reports
+// things we can do nothing about, hundreds of times per session, while
+// swallowing its own errors entirely. The loudest of them is an attachment run
+// whose character range does not line up with any text run, which costs a
+// custom emoji or a link its formatting and nothing more.
+//
+// Errors are the ones worth seeing, so ask for those instead. Add
+// `Log.Level.WARNING` back to this call when digging into a parsing change,
+// because that is when the noise turns into evidence.
+Log.setLevel(Log.Level.ERROR)
 
 if (process.env.SUPPORTS_LOCAL_API) {
   Platform.shim.eval = (data) => {
