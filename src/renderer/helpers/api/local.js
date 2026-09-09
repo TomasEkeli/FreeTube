@@ -692,6 +692,9 @@ function extractNextResponse(htmlPage) {
 async function getWatchHTMLWatchPage(videoId, fetchFunc) {
   let attestation = readCachedAttestation()
 
+  // TEMPORARY PROBE (personal/unplayable-probe)
+  const attestationFromCache = !!attestation
+
   /** @type {string | undefined} */
   let playerId
   let playerResponse
@@ -741,7 +744,9 @@ async function getWatchHTMLWatchPage(videoId, fetchFunc) {
     session,
     playerId,
     playerResponse,
-    nextResponse
+    nextResponse,
+    // TEMPORARY PROBE (personal/unplayable-probe)
+    attestationFromCache
   }
 }
 
@@ -909,6 +914,33 @@ export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
         poToken: contentPoToken
       }
     })
+  }
+
+  // TEMPORARY PROBE (personal/unplayable-probe): youtubei.js drops whatever
+  // YouTube puts in nodes it has no class for, and the explanation for a
+  // refusal appears to have moved into one of those (PlayerInterstitial /
+  // InterstitialView). Log the unparsed status so nothing is lost on the way.
+  const rawPlayabilityStatus = playerResponse.data?.playabilityStatus
+
+  if (rawPlayabilityStatus && rawPlayabilityStatus.status !== 'OK') {
+    const rawStreamingData = playerResponse.data?.streamingData
+
+    console.warn('[FT_UNPLAYABLE_PROBE] ' + JSON.stringify({
+      videoId: id,
+      status: rawPlayabilityStatus.status,
+      reason: rawPlayabilityStatus.reason,
+      playerResponseFrom: (htmlExtracts.playerResponse && !reloadPlaybackContext) ? 'watch page HTML' : '/player',
+      attestationFromCache: htmlExtracts.attestationFromCache,
+      poTokenMinted: !!contentPoToken,
+      gl: context.client?.gl,
+      remoteHost: context.client?.remoteHost,
+      originalUrl: context.client?.originalUrl,
+      clientVersion: context.client?.clientVersion,
+      hasStreamingData: !!rawStreamingData,
+      adaptiveFormatCount: rawStreamingData?.adaptiveFormats?.length ?? 0,
+      responseKeys: Object.keys(playerResponse.data ?? {}),
+      playabilityStatus: rawPlayabilityStatus
+    }, null, 2))
   }
 
   if (htmlExtracts.nextResponse) {
