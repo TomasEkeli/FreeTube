@@ -42,6 +42,8 @@ import {
 import { sortCaptions } from '../../helpers/player/utils'
 import { selectLiveManifest } from '../../helpers/player/liveManifest'
 import { classifyPlayabilityError, getPlayabilityExplanation } from '../../helpers/player/playability'
+import { getLocalVideoTitle } from '../../helpers/player/watchMetadata'
+import { traceWatch } from '../../helpers/watchTrace'
 import { buildFormatId, MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
 import { createSabrRegulator, SabrGiveUpError } from '../../helpers/player/SabrRegulator'
 import { useI18n } from 'vue-i18n'
@@ -569,6 +571,8 @@ export default defineComponent({
     },
 
     getVideoInformationLocal: async function () {
+      let watchInfoStage = 'request'
+
       if (this.firstLoad) {
         this.isLoading = true
       }
@@ -599,6 +603,16 @@ export default defineComponent({
 
         this.isFamilyFriendly = result.basic_info.is_family_safe
 
+        // Read before the presentational metadata below, because the playback
+        // branches further down depend on them and that section is allowed to
+        // fail.
+        this.isLive = !!result.basic_info.is_live
+        this.isUpcoming = !!result.basic_info.is_upcoming
+        this.isLiveContent = !!result.basic_info.is_live_content
+        this.isPostLiveDvr = !!result.basic_info.is_post_live_dvr
+        this.isUnlisted = !!result.basic_info.is_unlisted
+
+        watchInfoStage = 'recommendations'
         this.recommendedVideos = result.watch_next_feed
           ?.filter((item) => {
             return item.type === 'CompactVideo' || item.type === 'CompactMovie' ||
@@ -614,143 +628,197 @@ export default defineComponent({
           return
         }
 
-        // extract localised title first and fall back to the not localised one
-        this.videoTitle = result.primary_info?.title.text?.trim() ?? result.basic_info.title?.trim()
-        this.videoViewCount = result.basic_info.view_count ?? (result.primary_info.view_count ? extractNumberFromString(result.primary_info.view_count.text) : null)
-        this.license = result.secondary_info.metadata.rows.find(element => element.title?.text === 'License')?.contents[0]?.text
+        // Everything in here describes the video rather than plays it, and
+        // YouTube reshapes these fields without warning. A single one of them
+        // turning up null used to throw out of this whole function, so a
+        // perfectly playable video would not play at all. Losing a subtitle
+        // line is a much smaller loss than losing the video, so this section
+        // says what it could not read and carries on.
+        try {
+          watchInfoStage = 'metadata-shape'
+          traceWatch(watchInfoStage, {
+            videoId: this.videoId,
+            playabilityStatus: playabilityStatus.status,
+            hasBasicInfo: !!result.basic_info,
+            hasPrimaryInfo: !!result.primary_info,
+            hasPrimaryTitle: !!result.primary_info?.title,
+            hasSecondaryInfo: !!result.secondary_info,
+            hasSecondaryOwner: !!result.secondary_info?.owner,
+            hasSubscriberCount: !!result.secondary_info?.owner?.subscriber_count,
+            hasDescription: !!result.secondary_info?.description
+          })
 
-        this.channelId = result.basic_info.channel_id ?? result.secondary_info.owner?.author.id
-        this.channelName = result.basic_info.author ?? result.secondary_info.owner?.author.name
+          watchInfoStage = 'title'
+          // extract localised title first and fall back to the not localised one
+          this.videoTitle = getLocalVideoTitle(result)
 
-        if (result.secondary_info.owner?.author) {
-          this.channelThumbnail = result.secondary_info.owner.author.best_thumbnail?.url ?? ''
-        } else {
-          this.channelThumbnail = ''
-        }
+          watchInfoStage = 'view-count'
+          this.videoViewCount = result.basic_info.view_count ?? (result.primary_info?.view_count ? extractNumberFromString(result.primary_info.view_count.text) : null)
 
-        this.videoGenreIsMusic = result.basic_info.category === 'Music'
+          watchInfoStage = 'licence'
+          this.license = result.secondary_info?.metadata?.rows?.find(element => element.title?.text === 'License')?.contents?.[0]?.text
 
-        this.updateSubscriptionDetails({
-          channelThumbnailUrl: this.channelThumbnail.length === 0 ? null : this.channelThumbnail,
-          channelName: this.channelName,
-          channelId: this.channelId
-        })
+          watchInfoStage = 'channel'
+          this.channelId = result.basic_info.channel_id ?? result.secondary_info?.owner?.author?.id
+          this.channelName = result.basic_info.author ?? result.secondary_info?.owner?.author?.name
 
-        if (result.page[0].microformat?.publish_date) {
-          // `result.page[0].microformat.publish_date` example value: `2023-08-12T08:59:59-07:00`
-          this.videoPublished = Date.parse(result.page[0].microformat.publish_date)
-        } else {
-          // text date Jan 1, 2000, not as accurate but better than nothing
-          this.videoPublished = Date.parse(result.primary_info.published)
-        }
-
-        if (result.secondary_info?.description.runs) {
-          try {
-            this.videoDescription = parseLocalTextRuns(result.secondary_info.description.runs)
-          } catch (error) {
-            console.error('Failed to extract the localised description, falling back to the standard one.', error, JSON.stringify(result.secondary_info.description.runs))
-            this.videoDescription = result.basic_info.short_description
+          if (result.secondary_info?.owner?.author) {
+            this.channelThumbnail = result.secondary_info.owner.author.best_thumbnail?.url ?? ''
+          } else {
+            this.channelThumbnail = ''
           }
-        } else {
-          this.videoDescription = result.basic_info.short_description
-        }
 
-        switch (this.thumbnailPreference) {
-          case 'start':
-            this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxres1.jpg`
-            break
-          case 'middle':
-            this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxres2.jpg`
-            break
-          case 'end':
-            this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxres3.jpg`
-            break
-          default:
-            this.thumbnail = result.basic_info.thumbnail?.[0].url ?? `https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg`
-            break
-        }
+          this.videoGenreIsMusic = result.basic_info.category === 'Music'
 
-        if (this.hideVideoLikesAndDislikes) {
-          this.videoLikeCount = null
-          this.videoDislikeCount = null
-        } else {
-          this.videoLikeCount = isNaN(result.basic_info.like_count) ? 0 : result.basic_info.like_count
+          this.updateSubscriptionDetails({
+            channelThumbnailUrl: this.channelThumbnail.length === 0 ? null : this.channelThumbnail,
+            channelName: this.channelName,
+            channelId: this.channelId
+          })
 
-          // YouTube doesn't return dislikes anymore
-          this.videoDislikeCount = 0
-        }
+          watchInfoStage = 'published-date'
+          if (result.page[0]?.microformat?.publish_date) {
+            // `result.page[0].microformat.publish_date` example value: `2023-08-12T08:59:59-07:00`
+            this.videoPublished = Date.parse(result.page[0].microformat.publish_date)
+          } else if (result.primary_info?.published) {
+            // text date Jan 1, 2000, not as accurate but better than nothing
+            this.videoPublished = Date.parse(result.primary_info.published)
+          }
 
-        this.isLive = !!result.basic_info.is_live
-        this.isUpcoming = !!result.basic_info.is_upcoming
-        this.isLiveContent = !!result.basic_info.is_live_content
-        this.isPostLiveDvr = !!result.basic_info.is_post_live_dvr
-        this.isUnlisted = !!result.basic_info.is_unlisted
-
-        const subCount = !result.secondary_info.owner.subscriber_count.isEmpty() ? parseLocalSubscriberCount(result.secondary_info.owner.subscriber_count.text) : NaN
-
-        if (!isNaN(subCount)) {
-          this.channelSubscriptionCountText = formatNumber(subCount, subCount >= 10000 ? { notation: 'compact' } : undefined)
-        } else {
-          this.channelSubscriptionCountText = ''
-        }
-
-        let chapters = []
-        let chaptersKind = 'chapters'
-        if (!this.hideChapters) {
-          const rawChapters = result.player_overlays?.decorated_player_bar?.player_bar?.markers_map
-            ?.find(marker => marker.marker_key === 'DESCRIPTION_CHAPTERS')?.value.chapters
-
-          if (rawChapters) {
-            for (const chapter of rawChapters) {
-              const start = chapter.time_range_start_millis / 1000
-
-              chapters.push({
-                title: chapter.title.text,
-                timestamp: formatDurationAsTimestamp(start),
-                startSeconds: start,
-                endSeconds: 0,
-                thumbnail: chapter.thumbnail[0]
-              })
+          watchInfoStage = 'description'
+          if (result.secondary_info?.description?.runs) {
+            try {
+              this.videoDescription = parseLocalTextRuns(result.secondary_info.description.runs)
+            } catch (error) {
+              console.error('Failed to extract the localised description, falling back to the standard one.', error, JSON.stringify(result.secondary_info.description.runs))
+              this.videoDescription = result.basic_info.short_description
             }
           } else {
-            /** @type {import('youtubei.js').YTNodes.MacroMarkersList | null | undefined} */
-            const macroMarkersList = result.page[1]?.engagement_panels
-              ?.find(pannel => pannel.panel_identifier === 'engagement-panel-macro-markers-auto-chapters')?.content
+            this.videoDescription = result.basic_info.short_description
+          }
 
-            if (macroMarkersList) {
-              for (const item of macroMarkersList.contents) {
-                if (item instanceof YTNodes.MacroMarkersListItem) {
-                  chapters.push({
-                    title: item.title.text,
-                    timestamp: item.time_description.text,
-                    startSeconds: Utils.timeToSeconds(item.time_description.text),
-                    endSeconds: 0,
-                    thumbnail: item.thumbnail[0]
-                  })
-                }
+          watchInfoStage = 'thumbnail'
+          switch (this.thumbnailPreference) {
+            case 'start':
+              this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxres1.jpg`
+              break
+            case 'middle':
+              this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxres2.jpg`
+              break
+            case 'end':
+              this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxres3.jpg`
+              break
+            default:
+              this.thumbnail = result.basic_info.thumbnail?.[0]?.url ?? `https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg`
+              break
+          }
+
+          watchInfoStage = 'like-count'
+          if (this.hideVideoLikesAndDislikes) {
+            this.videoLikeCount = null
+            this.videoDislikeCount = null
+          } else {
+            this.videoLikeCount = isNaN(result.basic_info.like_count) ? 0 : result.basic_info.like_count
+
+            // YouTube doesn't return dislikes anymore
+            this.videoDislikeCount = 0
+          }
+
+          watchInfoStage = 'subscriber-count'
+          const subscriberCount = result.secondary_info?.owner?.subscriber_count
+          const subCount = subscriberCount && !subscriberCount.isEmpty() ? parseLocalSubscriberCount(subscriberCount.text) : NaN
+
+          if (!isNaN(subCount)) {
+            this.channelSubscriptionCountText = formatNumber(subCount, subCount >= 10000 ? { notation: 'compact' } : undefined)
+          } else {
+            this.channelSubscriptionCountText = ''
+          }
+
+          watchInfoStage = 'chapters'
+          let chapters = []
+          let chaptersKind = 'chapters'
+          if (!this.hideChapters) {
+            const rawChapters = result.player_overlays?.decorated_player_bar?.player_bar?.markers_map
+              ?.find(marker => marker.marker_key === 'DESCRIPTION_CHAPTERS')?.value?.chapters
+
+            if (rawChapters) {
+              for (const chapter of rawChapters) {
+                const start = chapter.time_range_start_millis / 1000
+
+                chapters.push({
+                  title: chapter.title?.text ?? '',
+                  timestamp: formatDurationAsTimestamp(start),
+                  startSeconds: start,
+                  endSeconds: 0,
+                  thumbnail: chapter.thumbnail?.[0]
+                })
               }
-              chaptersKind = 'keyMoments'
             } else {
-              chapters = this.extractChaptersFromDescription(result.basic_info.short_description ?? result.secondary_info.description.text)
+              /** @type {import('youtubei.js').YTNodes.MacroMarkersList | null | undefined} */
+              const macroMarkersList = result.page[1]?.engagement_panels
+                ?.find(pannel => pannel.panel_identifier === 'engagement-panel-macro-markers-auto-chapters')?.content
+
+              if (macroMarkersList) {
+                for (const item of macroMarkersList.contents) {
+                  if (item instanceof YTNodes.MacroMarkersListItem) {
+                    chapters.push({
+                      title: item.title?.text ?? '',
+                      timestamp: item.time_description?.text ?? '',
+                      startSeconds: Utils.timeToSeconds(item.time_description?.text ?? ''),
+                      endSeconds: 0,
+                      thumbnail: item.thumbnail?.[0]
+                    })
+                  }
+                }
+                chaptersKind = 'keyMoments'
+              } else {
+                chapters = this.extractChaptersFromDescription(result.basic_info.short_description ?? result.secondary_info?.description?.text ?? '')
+              }
+            }
+
+            if (chapters.length > 0) {
+              this.addChaptersEndSeconds(chapters, result.basic_info.duration)
+
+              // prevent vue from adding reactivity which isn't needed
+              // as the chapter objects are read-only after this anyway
+              // the chapters are checked for every timeupdate event that the player emits
+              // this should lessen the performance and memory impact of the chapters
+              chapters.forEach(Object.freeze)
             }
           }
 
-          if (chapters.length > 0) {
-            this.addChaptersEndSeconds(chapters, result.basic_info.duration)
+          this.videoChapters = chapters
+          this.videoChaptersKind = chaptersKind
+        } catch (error) {
+          // `resetVideoState` has already blanked every one of these fields,
+          // so whatever this section did not reach is simply absent rather
+          // than left over from the previous video.
+          console.error(
+            `Could not read all of the watch page metadata for ${this.videoId}, stopped at "${watchInfoStage}". Playing the video without it.`,
+            error
+          )
+          traceWatch('metadata-failed', {
+            stage: watchInfoStage,
+            videoId: this.videoId,
+            error: error.toString(),
+            stack: error.stack
+          })
 
-            // prevent vue from adding reactivity which isn't needed
-            // as the chapter objects are read-only after this anyway
-            // the chapters are checked for every timeupdate event that the player emits
-            // this should lessen the performance and memory impact of the chapters
-            chapters.forEach(Object.freeze)
+          if (!this.videoTitle) {
+            this.videoTitle = result.basic_info.title ?? ''
           }
+          if (!this.videoDescription) {
+            this.videoDescription = result.basic_info.short_description ?? ''
+          }
+          if (!this.thumbnail) {
+            this.thumbnail = `https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg`
+          }
+          this.videoChapters = []
         }
 
-        this.videoChapters = chapters
-        this.videoChaptersKind = chaptersKind
+        const isDrmProtected = result.streaming_data?.adaptive_formats?.some(format => format.drm_families || format.drm_track_type)
 
-        const isDrmProtected = result.streaming_data?.adaptive_formats.some(format => format.drm_families || format.drm_track_type)
-
+        watchInfoStage = 'playability'
         if (playabilityStatus.status === 'UNPLAYABLE' || playabilityStatus.status === 'LOGIN_REQUIRED' || isDrmProtected) {
           if (playabilityStatus.error_screen?.offer_id === 'sponsors_only_video') {
             // Members-only videos can only be watched while logged into a Google account that is a paid channel member
@@ -901,6 +969,7 @@ export default defineComponent({
           }
         }
 
+        watchInfoStage = 'formats'
         if ((!this.isUpcoming && !this.isLive && !this.isPostLiveDvr) || (this.isUpcoming && this.playabilityStatus === 'OK')) {
           this.videoLengthSeconds = result.basic_info.duration
           if (result.streaming_data) {
@@ -918,7 +987,7 @@ export default defineComponent({
                 return {
                   id: caption.vss_id,
                   url: url.toString(),
-                  label: caption.name.text,
+                  label: caption.name?.text ?? caption.language_code,
                   language: caption.language_code,
                   mimeType: 'text/vtt'
                 }
@@ -976,7 +1045,7 @@ export default defineComponent({
             this.videoStoryboardSrc = this.createLocalStoryboardUrls(storyboard)
           }
 
-          if (result.streaming_data?.adaptive_formats.length > 0) {
+          if (result.streaming_data?.adaptive_formats?.length > 0) {
             this.vrProjection = result.streaming_data.adaptive_formats
               .find(format => {
                 return format.has_video &&
@@ -1039,6 +1108,12 @@ export default defineComponent({
         this.updateTitle()
       } catch (err) {
         console.error(err)
+        traceWatch('local-video-information-failed', {
+          stage: watchInfoStage,
+          videoId: this.videoId,
+          error: err.toString(),
+          stack: err.stack
+        })
         if (this.backendPreference === 'local' && this.backendFallback && !err.toString().includes('private') && !err.toString().includes('unavailable')) {
           const errorMessage = this.t('Local API Error (Click to copy)')
           showToast(`${errorMessage}: ${err}`, 10000, () => {
@@ -2104,7 +2179,7 @@ export default defineComponent({
         translationName = this.t('Locale Name')
         translationCode = userLanguages.values().next().value
       } else {
-        translationName = translationLanguage.language_name.text
+        translationName = translationLanguage.language_name?.text ?? translationLanguage.language_code
         translationCode = translationLanguage.language_code
       }
 
@@ -2129,7 +2204,7 @@ export default defineComponent({
 
       const label = this.t('Video.Player.TranslatedCaptionTemplate', {
         language: translationName,
-        originalLanguage: trackToTranslate.name.text
+        originalLanguage: trackToTranslate.name?.text ?? trackToTranslate.language_code
       })
 
       return {

@@ -51,6 +51,7 @@
     "check-subscription-feed-merge": "node _scripts/checkSubscriptionFeedMerge.mjs",
     "check-live-manifest": "node _scripts/checkLiveManifest.mjs",
     "check-playability-message": "node _scripts/checkPlayabilityMessage.mjs",
+    "check-watch-response-resilience": "node _scripts/checkWatchResponseResilience.mjs",
     "check-subscription-video-details": "node _scripts/checkSubscriptionVideoDetails.mjs",
     "check-subscription-recovery-groups": "node _scripts/checkSubscriptionRecoveryGroups.mjs",
     "ci": "pnpm install --frozen-lockfile"

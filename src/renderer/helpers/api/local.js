@@ -4,6 +4,7 @@ import { parseLooseJSON } from 'bgutils-js/utils'
 
 import { SEARCH_CHAR_LIMIT } from '../../../constants'
 import { PlayerCache } from './PlayerCache'
+import { traceWatch } from '../watchTrace'
 import {
   CHANNEL_HANDLE_REGEX,
   calculatePublishedDate,
@@ -616,6 +617,14 @@ async function fetchHtmlPage(url) {
     }
   })
 
+  traceWatch('watch-page-response', {
+    url,
+    responseUrl: response.url,
+    redirected: response.redirected,
+    status: response.status,
+    contentType: response.headers.get('content-type')
+  })
+
   return { url, finalUrl: response.url, html: await response.text() }
 }
 
@@ -820,6 +829,14 @@ export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
 
     responseTime = Date.now()
 
+    traceWatch('player-response', {
+      url: response.url,
+      redirected: response.redirected,
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      body: responseText
+    })
+
     const json = JSON.parse(responseText)
 
     totalAdTimeMilliseconds = extractTotalAdTimeMilliseconds(json)
@@ -920,6 +937,14 @@ export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
       contentCheckOk: true
     })
   }
+
+  traceWatch('video-response-shape', {
+    videoId: id,
+    playerKeys: Object.keys(playerResponse.data ?? {}),
+    nextKeys: Object.keys(nextResponse.data ?? {}),
+    playabilityStatus: playerResponse.data?.playabilityStatus,
+    hasStreamingData: !!playerResponse.data?.streamingData
+  })
 
   const cpn = Utils.generateRandomString(16)
 
@@ -2214,7 +2239,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         }
       }
 
-      const maybeAuthorText = lockupView.metadata.metadata?.metadata_rows[0].metadata_parts?.[0].text?.text
+      const maybeAuthorText = lockupView.metadata?.metadata?.metadata_rows?.[0]?.metadata_parts?.[0]?.text?.text
       let author = channelName
       if (maybeAuthorText && !isViewCountText(maybeAuthorText) && !isPremieresTimeText(maybeAuthorText)) {
         author = maybeAuthorText
@@ -2222,7 +2247,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
 
       // I think this is only used for stations at the moment
       if (author == null) {
-        author = lockupView.metadata?.metadata?.metadata_rows[0].metadata_parts?.[0].avatar_stack.text?.text
+        author = lockupView.metadata?.metadata?.metadata_rows?.[0]?.metadata_parts?.[0]?.avatar_stack?.text?.text
       }
 
       return {
@@ -2230,7 +2255,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         // saying which one this is lets the card mark it. See `parseShort`.
         type: lockupView.content_type === 'SHORT' ? 'shortVideo' : 'video',
         videoId: lockupView.content_id,
-        title: lockupView.metadata.title.text?.trim(),
+        title: lockupView.metadata?.title?.text?.trim(),
         author,
         authorId: lockupView.metadata.image?.renderer_context?.command_context?.on_tap?.payload.browseId ?? channelId,
         viewCount,
@@ -2364,14 +2389,41 @@ function parseListItem(item, channelId, channelName) {
 }
 
 /**
+ * One unreadable recommendation must not cost the watch page. YouTube keeps
+ * changing the shape of these cards, and any field that is suddenly absent
+ * used to throw all the way out of the watch page's metadata extraction, so
+ * the video would not play at all. An item that cannot be read is dropped
+ * instead: the caller already discards `null`.
  * @param {YTNodes.CompactVideo | YTNodes.CompactMovie | YTNodes.LockupView} video
  */
 export function parseLocalWatchNextVideo(video) {
+  try {
+    return parseWatchNextVideo(video)
+  } catch (error) {
+    console.error(
+      `Dropping an unreadable ${video?.type ?? 'unknown'} recommendation.`,
+      error
+    )
+    traceWatch('unreadable-recommendation', {
+      itemType: video?.type,
+      contentType: video?.content_type,
+      error: error.toString(),
+      stack: error.stack
+    })
+
+    return null
+  }
+}
+
+/**
+ * @param {YTNodes.CompactVideo | YTNodes.CompactMovie | YTNodes.LockupView} video
+ */
+function parseWatchNextVideo(video) {
   if (video.is(YTNodes.CompactMovie)) {
     return {
       type: 'video',
       videoId: video.id,
-      title: video.title.text?.trim(),
+      title: video.title?.text?.trim(),
       author: video.author.name,
       authorId: video.author.id,
       lengthSeconds: video.duration.seconds
