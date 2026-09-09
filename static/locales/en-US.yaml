@@ -900,12 +900,17 @@ Channel:
     Video hidden by FreeTube: Video hidden by FreeTube
 Video:
   IP block: 'YouTube has blocked your IP address from watching videos. Please try switching to a different VPN or proxy.'
+  Unexplained playback refusal: YouTube refused playback without giving a reason. If you use a VPN or proxy, try another server or disable it.
   MembersOnly: Members-only videos cannot be watched with FreeTube as they require Google login and paid membership to the uploader's channel.
   AgeRestricted: Age-restricted videos cannot be watched with FreeTube as they require Google login and using an age-verified YouTube account.
   DRMProtected: DRM protected videos cannot be played in FreeTube, as they require proprietary, closed source components. If you want to watch this video please watch it on the official YouTube website in a DRM enabled web browser.
   Private: Private videos cannot be watched in FreeTube as they require Google login and ownership of the video.
   # Shown on the video error screen, for errors that reopening the video can clear
   Try Again: Try Again
+  # Shown when no backend returned a source that the player can load
+  No playable video source: No playable source was returned for this video. Try reopening it; YouTube may return one on the next request.
+  # Shown when neither the normal nor fallback live request returned a manifest
+  No playable livestream source: YouTube did not return a playable source for this livestream. Try reopening it; YouTube may return one on the next request.
   # Shown when playback failed and the video has no other format left to fall back to
   This video stopped playing and there is no other format to try: This video stopped playing, and it has no other format to fall back to. Reopening it usually works, since that starts a new session with YouTube.
   More Options: More Options

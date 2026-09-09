@@ -933,6 +933,42 @@ export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
 
   let hasTrailer = info.has_trailer
   let trailerIsAgeRestricted = info.getTrailerInfo() === null
+  const streamingData = info.streaming_data
+
+  if (
+    info.playability_status.status === 'OK' &&
+    info.basic_info.is_live &&
+    streamingData &&
+    !streamingData.dash_manifest_url &&
+    !streamingData.hls_manifest_url
+  ) {
+    try {
+      const androidInfo = await htmlExtracts.session.actions.execute('/player', {
+        videoId: id,
+        racyCheckOk: true,
+        contentCheckOk: true,
+        client: 'ANDROID',
+        playbackContext: {
+          contentPlaybackContext: {
+            vis: 0,
+            splay: false,
+            lactMilliseconds: '-1',
+            signatureTimestamp: player.signature_timestamp
+          }
+        },
+        serviceIntegrityDimensions: {
+          poToken: contentPoToken
+        }
+      })
+      const androidVideoInfo = new YT.VideoInfo([androidInfo], htmlExtracts.session.actions, cpn)
+
+      if (androidVideoInfo.playability_status.status === 'OK' && androidVideoInfo.streaming_data?.hls_manifest_url) {
+        streamingData.hls_manifest_url = androidVideoInfo.streaming_data.hls_manifest_url
+      }
+    } catch (error) {
+      console.warn(`ANDROID live manifest fallback errored for ${id}, using the original response instead`, error)
+    }
+  }
 
   if (
     ((info.playability_status.status === 'UNPLAYABLE' || info.playability_status.status === 'LOGIN_REQUIRED') &&
