@@ -17,7 +17,7 @@
     >
       <div class="videoAreaMargin">
         <ft-shaka-video-player
-          v-if="!isLoading && (!isUpcoming || playabilityStatus === 'OK') && !errorMessage"
+          v-if="!isLoading && (!isUpcoming || playabilityStatus === 'OK') && !errorMessage && (activeFormat === 'legacy' || manifestSrc)"
           ref="player"
           :manifest-src="manifestSrc"
           :manifest-mime-type="manifestMimeType"

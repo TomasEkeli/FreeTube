@@ -692,9 +692,6 @@ function extractNextResponse(htmlPage) {
 async function getWatchHTMLWatchPage(videoId, fetchFunc) {
   let attestation = readCachedAttestation()
 
-  // TEMPORARY PROBE (personal/unplayable-probe)
-  const attestationFromCache = !!attestation
-
   /** @type {string | undefined} */
   let playerId
   let playerResponse
@@ -744,9 +741,7 @@ async function getWatchHTMLWatchPage(videoId, fetchFunc) {
     session,
     playerId,
     playerResponse,
-    nextResponse,
-    // TEMPORARY PROBE (personal/unplayable-probe)
-    attestationFromCache
+    nextResponse
   }
 }
 
@@ -916,33 +911,6 @@ export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
     })
   }
 
-  // TEMPORARY PROBE (personal/unplayable-probe): youtubei.js drops whatever
-  // YouTube puts in nodes it has no class for, and the explanation for a
-  // refusal appears to have moved into one of those (PlayerInterstitial /
-  // InterstitialView). Log the unparsed status so nothing is lost on the way.
-  const rawPlayabilityStatus = playerResponse.data?.playabilityStatus
-
-  if (rawPlayabilityStatus && rawPlayabilityStatus.status !== 'OK') {
-    const rawStreamingData = playerResponse.data?.streamingData
-
-    console.warn('[FT_UNPLAYABLE_PROBE] ' + JSON.stringify({
-      videoId: id,
-      status: rawPlayabilityStatus.status,
-      reason: rawPlayabilityStatus.reason,
-      playerResponseFrom: (htmlExtracts.playerResponse && !reloadPlaybackContext) ? 'watch page HTML' : '/player',
-      attestationFromCache: htmlExtracts.attestationFromCache,
-      poTokenMinted: !!contentPoToken,
-      gl: context.client?.gl,
-      remoteHost: context.client?.remoteHost,
-      originalUrl: context.client?.originalUrl,
-      clientVersion: context.client?.clientVersion,
-      hasStreamingData: !!rawStreamingData,
-      adaptiveFormatCount: rawStreamingData?.adaptiveFormats?.length ?? 0,
-      responseKeys: Object.keys(playerResponse.data ?? {}),
-      playabilityStatus: rawPlayabilityStatus
-    }, null, 2))
-  }
-
   if (htmlExtracts.nextResponse) {
     nextResponse = { data: htmlExtracts.nextResponse }
   } else {
@@ -965,6 +933,42 @@ export async function getLocalVideoInfo(id, { reloadPlaybackContext } = {}) {
 
   let hasTrailer = info.has_trailer
   let trailerIsAgeRestricted = info.getTrailerInfo() === null
+  const streamingData = info.streaming_data
+
+  if (
+    info.playability_status.status === 'OK' &&
+    info.basic_info.is_live &&
+    streamingData &&
+    !streamingData.dash_manifest_url &&
+    !streamingData.hls_manifest_url
+  ) {
+    try {
+      const androidInfo = await htmlExtracts.session.actions.execute('/player', {
+        videoId: id,
+        racyCheckOk: true,
+        contentCheckOk: true,
+        client: 'ANDROID',
+        playbackContext: {
+          contentPlaybackContext: {
+            vis: 0,
+            splay: false,
+            lactMilliseconds: '-1',
+            signatureTimestamp: player.signature_timestamp
+          }
+        },
+        serviceIntegrityDimensions: {
+          poToken: contentPoToken
+        }
+      })
+      const androidVideoInfo = new YT.VideoInfo([androidInfo], htmlExtracts.session.actions, cpn)
+
+      if (androidVideoInfo.playability_status.status === 'OK' && androidVideoInfo.streaming_data?.hls_manifest_url) {
+        streamingData.hls_manifest_url = androidVideoInfo.streaming_data.hls_manifest_url
+      }
+    } catch (error) {
+      console.warn(`ANDROID live manifest fallback errored for ${id}, using the original response instead`, error)
+    }
+  }
 
   if (
     ((info.playability_status.status === 'UNPLAYABLE' || info.playability_status.status === 'LOGIN_REQUIRED') &&

@@ -40,6 +40,8 @@ import {
   youtubeImageUrlToInvidious
 } from '../../helpers/api/invidious'
 import { sortCaptions } from '../../helpers/player/utils'
+import { selectLiveManifest } from '../../helpers/player/liveManifest'
+import { classifyPlayabilityError, getPlayabilityExplanation } from '../../helpers/player/playability'
 import { buildFormatId, MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
 import { createSabrRegulator, SabrGiveUpError } from '../../helpers/player/SabrRegulator'
 import { useI18n } from 'vue-i18n'
@@ -61,6 +63,12 @@ import { useI18n } from 'vue-i18n'
 
 const MANIFEST_TYPE_DASH = 'application/dash+xml'
 const MANIFEST_TYPE_HLS = 'application/x-mpegurl'
+class NoPlayableLiveStreamError extends Error {
+  constructor(videoId) {
+    super(`No playable livestream source for ${videoId}`)
+    this.name = 'NoPlayableLiveStreamError'
+  }
+}
 const UNAVAILABLE_VIDEO_THUMBNAILS = {
   light: 'https://www.youtube.com/img/desktop/unavailable/unavailable_video.png',
   dark: 'https://www.youtube.com/img/desktop/unavailable/unavailable_video_dark_theme.png'
@@ -741,9 +749,6 @@ export default defineComponent({
         this.videoChapters = chapters
         this.videoChaptersKind = chaptersKind
 
-        // The apostrophe is intentionally that one (char code 8217), because that is the one YouTube uses
-        const BOT_MESSAGE = 'Sign in to confirm you’re not a bot'
-
         const isDrmProtected = result.streaming_data?.adaptive_formats.some(format => format.drm_families || format.drm_track_type)
 
         if (playabilityStatus.status === 'UNPLAYABLE' || playabilityStatus.status === 'LOGIN_REQUIRED' || isDrmProtected) {
@@ -772,14 +777,18 @@ export default defineComponent({
           }
 
           let errorText
+          const errorKind = classifyPlayabilityError(playabilityStatus)
 
-          if (playabilityStatus.reason === BOT_MESSAGE || playabilityStatus.reason === 'Please sign in') {
+          if (errorKind === 'ip-block') {
             errorText = this.t('Video.IP block')
+          } else if (errorKind === 'unexplained-refusal') {
+            errorText = this.t('Video.Unexplained playback refusal')
           } else {
             errorText = `[${playabilityStatus.status}] ${playabilityStatus.reason}`
+            const explanation = getPlayabilityExplanation(playabilityStatus)
 
-            if (playabilityStatus.error_screen?.subreason) {
-              errorText += `: ${playabilityStatus.error_screen.subreason.text}`
+            if (explanation && explanation !== playabilityStatus.reason) {
+              errorText += `: ${explanation}`
             }
           }
 
@@ -821,13 +830,14 @@ export default defineComponent({
           }
 
           if (useRemoteManifest) {
-            if (result.streaming_data.dash_manifest_url) {
-              this.manifestSrc = result.streaming_data.dash_manifest_url
-              this.manifestMimeType = MANIFEST_TYPE_DASH
-            } else {
-              this.manifestSrc = result.streaming_data.hls_manifest_url
-              this.manifestMimeType = MANIFEST_TYPE_HLS
+            const liveManifest = selectLiveManifest(result.streaming_data)
+
+            if (!liveManifest) {
+              throw new NoPlayableLiveStreamError(this.videoId)
             }
+
+            this.manifestSrc = liveManifest.src
+            this.manifestMimeType = liveManifest.mimeType
           }
 
           this.streamingDataExpiryDate = result.streaming_data.expires
@@ -1021,6 +1031,10 @@ export default defineComponent({
           this.handleActiveFormatUnavailable()
         }
 
+        if (!this.isUpcoming && this.activeFormat !== 'legacy' && !this.manifestSrc) {
+          this.showRetryableError(this.t('Video.No playable video source'))
+        }
+
         this.isLoading = false
         this.updateTitle()
       } catch (err) {
@@ -1038,7 +1052,11 @@ export default defineComponent({
           if (!this.thumbnail) {
             this.thumbnail = this.getUnavailableVideoThumbnail()
           }
-          this.errorMessage = err.message || err.toString()
+          if (err instanceof NoPlayableLiveStreamError) {
+            this.showRetryableError(this.t('Video.No playable livestream source'))
+          } else {
+            this.errorMessage = err.message || err.toString()
+          }
         }
       }
     },
@@ -1159,9 +1177,13 @@ export default defineComponent({
             // // https://github.com/iv-org/invidious/pull/4589
             // if (this.proxyVideos) {
 
-            this.streamingDataExpiryDate = this.extractExpiryDateFromStreamingUrl(result.adaptiveFormats[0].url)
-
             let hlsManifestUrl = result.hlsUrl
+
+            if (!hlsManifestUrl) {
+              throw new NoPlayableLiveStreamError(this.videoId)
+            }
+
+            this.streamingDataExpiryDate = this.extractExpiryDateFromStreamingUrl(result.adaptiveFormats[0]?.url ?? hlsManifestUrl)
 
             if (this.proxyVideos) {
               const url = new URL(hlsManifestUrl)
@@ -1229,7 +1251,11 @@ export default defineComponent({
             if (!this.thumbnail) {
               this.thumbnail = this.getUnavailableVideoThumbnail()
             }
-            this.errorMessage = err.message || err.toString()
+            if (err instanceof NoPlayableLiveStreamError) {
+              this.showRetryableError(this.t('Video.No playable livestream source'))
+            } else {
+              this.errorMessage = err.message || err.toString()
+            }
           }
         })
     },

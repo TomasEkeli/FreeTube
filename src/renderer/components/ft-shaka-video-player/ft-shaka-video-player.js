@@ -689,6 +689,10 @@ export default defineComponent({
         return true
       }
 
+      if (!props.manifestSrc) {
+        return false
+      }
+
       const match = props.manifestSrc.match(/\/(?:manifest|playlist)_duration\/(\d+)\//)
 
       // Check how many seconds we are allowed to seek, 30 is too short, 3600 is an hour which is great
