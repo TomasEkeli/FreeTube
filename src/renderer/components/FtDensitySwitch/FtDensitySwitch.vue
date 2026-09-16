@@ -2,7 +2,7 @@
   How much room a card gets, chosen on the page it is chosen for.
 
   The setting is global, so this writes it globally: every grid in the app
-  answers to the same three modes, and a switch on one page moves them all.
+  answers to the same modes, and a switch on one page moves them all.
   Seeing the stream while you change it is the whole difference between
   choosing a density and guessing at one, which is why the switch stands over
   the stream and the settings entry is only a second way in.
@@ -24,10 +24,10 @@
   answer to: the switch is worth a corner of a row that exists and is not worth
   a band of its own above every grid in the app.
 
-  One size, not a compact variant for the tighter headings. The three words are
-  the control — a variant that shortened or dropped them would be a second
-  control to learn, and the switch already wraps under the heading when a
-  narrow window leaves no room beside it.
+  One size, not a compact variant for the tighter headings. The words are the
+  control — a variant that shortened or dropped them would be a second control
+  to learn, and the switch already wraps under the heading when a narrow window
+  leaves no room beside it.
 -->
 <template>
   <div class="densitySwitch">
@@ -77,8 +77,8 @@ const { t } = useI18n()
 
 const labelId = useId()
 
-// Named per instance: two switches on one page would otherwise be one group of
-// six radios, and choosing in either would clear the other.
+// Named per instance: two switches on one page would otherwise merge into one
+// radio group, and choosing in either would clear the other.
 const groupName = useId()
 
 const modeNames = useDensityModeNames()
@@ -88,7 +88,7 @@ const modeNames = useDensityModeNames()
  * here. Writing it persists it, and every grid in the app follows as soon as
  * the write lands.
  *
- * @type {import('vue').WritableComputedRef<'tight' | 'standard' | 'spacious'>}
+ * @type {import('vue').WritableComputedRef<'tight' | 'standard' | 'spacious' | 'wall'>}
  */
 const listDensity = computed({
   get: () => store.getters.getListDensity,

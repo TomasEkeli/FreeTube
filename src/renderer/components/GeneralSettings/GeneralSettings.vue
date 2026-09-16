@@ -396,16 +396,16 @@ function updateListType(value) {
 }
 
 // Names in the modes' own order, so this dropdown and the switch on the
-// subscriptions page always offer the same three things in the same sequence.
+// subscriptions page always offer the same things in the same sequence.
 const densityModeNames = useDensityModeNames()
 
 const densityNames = computed(() => DENSITY_MODES.map((mode) => densityModeNames.value[mode]))
 
-/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious'>} */
+/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious' | 'wall'>} */
 const listDensity = computed(() => store.getters.getListDensity)
 
 /**
- * @param {'tight' | 'standard' | 'spacious'} value
+ * @param {'tight' | 'standard' | 'spacious' | 'wall'} value
  */
 function updateListDensity(value) {
   store.dispatch('updateListDensity', value)

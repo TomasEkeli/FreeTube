@@ -237,7 +237,9 @@ const state = {
   showDistractionFreeTitles: false,
   landingPage: 'subscriptions',
   // How much room a card gets on every grid surface: 'tight' is the old
-  // sizing, 'standard' the roomier default, 'spacious' roomier still.
+  // sizing, 'standard' the roomier default, 'spacious' roomier still, and
+  // 'wall' is spacious-sized thumbnails packed edge to edge with the text
+  // overlaid on them.
   // The values themselves live in density.css, keyed on body[data-density].
   listDensity: 'standard',
   listType: 'grid',

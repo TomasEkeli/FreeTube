@@ -1,13 +1,18 @@
 /*
  * Density modes.
  *
- * One global setting, three sizes, reaching every grid surface through two
+ * One global setting, four sizes, reaching every grid surface through two
  * custom properties. The mode arrives in the DOM as body[data-density],
  * written by App.vue from the listDensity setting; the rule with no attribute
  * is standard, so the grid is already right before the settings have loaded.
  *
  * Variables rather than structure, deliberately: upstream edits the card and
  * grid styles often, and a sync branch should find nothing here to fight over.
+ * The wall mode at the bottom of this file is the one exception — it moves a
+ * card's text on top of its thumbnail, which no variable can express. Its
+ * rules stay in this fork-owned file all the same, so a sync still finds
+ * nothing to fight over; the risk it accepts instead is upstream renaming a
+ * class it points at, which a sync build would show immediately.
  */
 
 /*
@@ -29,6 +34,11 @@
  * it is what a change to any of these numbers has to keep true. Tight is
  * upstream's own grid, 262px at an 8px gap; the other two follow from it with
  * a few pixels to spare, 400 where 393 would do and 610 where 606 would.
+ *
+ * Wall stands outside the rule: it reuses spacious's column at a zero gap, so
+ * the two land on the same counts on purpose. It is not a bigger size but a
+ * different presentation of the same one, and the seam between them is the
+ * gap itself.
  *
  * Under about 530px of grid every mode is one column of the full width. That
  * one the rule cannot separate, and need not: with no second column there is
@@ -73,4 +83,113 @@ body[data-density='spacious'] {
   --ft-grid-item-min-block-size: 521px;
   --ft-card-description-lines: 3;
   --ft-card-description-gap: 6px;
+}
+
+/*
+ * Wall: spacious's columns packed edge to edge, a seamless wall of
+ * thumbnails. No gap, no page margins, and the card's text laid over the
+ * bottom of its thumbnail instead of below it.
+ *
+ * The card is only as tall as its image here — the info block is lifted out
+ * of the flow — so the pre-render reserve is just the thumbnail: 9/16 of the
+ * 610px column, rounded up.
+ */
+body[data-density='wall'] {
+  --ft-grid-min-column: 610px;
+  --ft-grid-gap: 0;
+  --ft-grid-item-min-block-size: 344px;
+  --ft-card-description-lines: 3;
+  --ft-card-description-gap: 6px;
+}
+
+/*
+ * The overlay. The card becomes the positioning context, sheds the paddings
+ * that kept cards apart, and the info block pins to its bottom edge under a
+ * half-transparent scrim, dark enough to carry white text over a bright
+ * thumbnail and subtle enough to leave the image legible through it.
+ */
+body[data-density='wall'] .ft-list-item.grid {
+  min-block-size: 0;
+  padding: 0;
+  position: relative;
+}
+
+body[data-density='wall'] .ft-list-item.grid .videoThumbnail {
+  padding-block-end: 0;
+}
+
+body[data-density='wall'] .ft-list-item.grid .info {
+  background-color: rgb(0 0 0 / 50%);
+  inset-block-end: 0;
+  inset-inline: 0;
+  padding-block: 6px 8px;
+  padding-inline: 10px;
+  position: absolute;
+  z-index: 1;
+}
+
+/*
+ * The scrim is the same dark in every theme, so the text stops following the
+ * theme and is simply light. This also outranks the watched fade, which would
+ * otherwise drop the text to a grey no scrim can carry; the watched state
+ * still shows through the dimmed thumbnail.
+ *
+ * The selectors run deeper than the compound limit allows, and must: they
+ * point into the card's own structure, and they carry the specificity that
+ * beats the watched-state rules, which are four compounds themselves.
+ */
+/* stylelint-disable selector-max-compound-selectors */
+body[data-density='wall'] .ft-list-item.grid .info .title {
+  color: #fff;
+}
+
+body[data-density='wall'] .ft-list-item.grid .info .infoLine,
+body[data-density='wall'] .ft-list-item.grid .info .infoLine .channelName,
+body[data-density='wall'] .ft-list-item.grid .info .description {
+  color: rgb(255 255 255 / 88%);
+}
+
+/*
+ * The other modes reserve the snippet's slot whether there is a snippet or
+ * not, so that a late-arriving description cannot push the cards below it
+ * down the page. Here the info block is out of the flow, nothing below it can
+ * move, and an empty reserve would just be three lines of scrim over nothing —
+ * so the slot hugs its content, still clamped to the mode's line count.
+ */
+body[data-density='wall'] .ft-list-item.grid .info .description {
+  block-size: auto;
+}
+
+/*
+ * The duration badge stays where the thumbnail put it, painted above the
+ * scrim rather than tinted by it.
+ */
+body[data-density='wall'] .ft-list-item.grid .videoThumbnail .videoDuration {
+  z-index: 2;
+}
+/* stylelint-enable selector-max-compound-selectors */
+
+/*
+ * Full bleed. Three layers of chrome stand between the viewport edge and a
+ * grid — the router view's margins, the page card's own margin and padding,
+ * and each page's scoped rule centring that card at 85% — and wall flattens
+ * all three, but only on surfaces that actually show a grid of cards:
+ * :has(.ft-list-item.grid) keeps the watch page, settings and every list-mode
+ * surface exactly as they were. The bare-class selectors lose to these on
+ * specificity even where a page's rule is scoped, since the scope attribute
+ * adds less than the body[data-density] prefix does.
+ */
+body[data-density='wall'] .routerView:has(.ft-list-item.grid) {
+  margin-inline: 0;
+}
+
+body[data-density='wall'] .ft-card:has(.ft-list-item.grid) {
+  inline-size: 100%;
+  margin-inline: 0;
+  padding-inline: 0;
+}
+
+/* The channel home tab caps its shelves at 85vw on top of the card's 85%. */
+body[data-density='wall'] .shelfContainer:has(.ft-list-item.grid) {
+  max-inline-size: none;
 }
