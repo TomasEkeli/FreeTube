@@ -21,10 +21,10 @@
         @clear="() => handleQueryChange('')"
       />
       <div
+        v-if="fullData.length > 1"
         class="optionsRow"
       >
         <FtToggleSwitch
-          v-if="fullData.length > 1"
           :label="t('History.Case Sensitive Search')"
           :compact="true"
           :default-value="doCaseSensitiveSearch"
@@ -32,7 +32,6 @@
         />
         <FtDensitySwitch />
         <FtSelect
-          v-if="fullData.length > 1"
           class="sortSelect"
           :placeholder="t('Global.Sort By')"
           :value="sortBy"

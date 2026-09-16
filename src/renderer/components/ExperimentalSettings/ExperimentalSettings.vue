@@ -13,7 +13,16 @@
         :default-value="replaceHttpCache"
         :disabled="replaceHttpCacheLoading"
         :tooltip="$t('Tooltips.Experimental Settings.Replace HTTP Cache')"
-        @change="handleRestartPrompt"
+        @change="handleToggleReplaceHttpCache"
+      />
+      <FtToggleSwitch
+        tooltip-position="top"
+        :label="$t('Settings.Experimental Settings.Disable Hardware Acceleration')"
+        compact
+        :default-value="disableHardwareAcceleration"
+        :disabled="disableHardwareAccelerationLoading"
+        :tooltip="$t('Tooltips.Experimental Settings.Disable Hardware Acceleration')"
+        @change="handleToggleDisableHardwareAcceleration"
       />
       <FtToggleSwitch
         v-if="supportsLocalApi"
@@ -30,7 +39,7 @@
       :label="$t('Settings[\'The app needs to restart for changes to take effect. Restart and apply change?\']')"
       :option-names="[$t('Yes, Restart'), $t('Cancel')]"
       :option-values="['restart', 'cancel']"
-      @click="handleReplaceHttpCache"
+      @click="handleRestartPrompt"
     />
   </FtSettingsSection>
 </template>
@@ -47,6 +56,12 @@ import store from '../../store/index'
 
 const replaceHttpCacheLoading = ref(true)
 const replaceHttpCache = ref(false)
+let replaceHttpCacheRunningState = null
+
+const disableHardwareAccelerationLoading = ref(true)
+const disableHardwareAcceleration = ref(false)
+let disableHardwareAccelerationRunningState = null
+
 const showRestartPrompt = ref(false)
 
 /**
@@ -67,33 +82,49 @@ function handleRegulatedStreaming(value) {
 
 onMounted(async () => {
   if (process.env.IS_ELECTRON) {
-    replaceHttpCache.value = await window.ftElectron.getReplaceHttpCache()
+    [replaceHttpCache.value, disableHardwareAcceleration.value] =
+      [replaceHttpCacheRunningState, disableHardwareAccelerationRunningState] =
+        await Promise.all([window.ftElectron.getReplaceHttpCache(), window.ftElectron.getDisableHardwareAcceleration()])
   }
 
   replaceHttpCacheLoading.value = false
+  disableHardwareAccelerationLoading.value = false
 })
 
 /**
  * @param {boolean} value
  */
-function handleRestartPrompt(value) {
+function handleToggleReplaceHttpCache(value) {
   replaceHttpCache.value = value
+  showRestartPrompt.value = true
+}
+
+/**
+ * @param {boolean} value
+ */
+function handleToggleDisableHardwareAcceleration(value) {
+  disableHardwareAcceleration.value = value
   showRestartPrompt.value = true
 }
 
 /**
  * @param {'restart' | 'cancel' | null} value
  */
-function handleReplaceHttpCache(value) {
+function handleRestartPrompt(value) {
   showRestartPrompt.value = false
 
   if (value === null || value === 'cancel') {
-    replaceHttpCache.value = !replaceHttpCache.value
+    replaceHttpCache.value = replaceHttpCacheRunningState
+    disableHardwareAcceleration.value = disableHardwareAccelerationRunningState
     return
   }
 
   if (process.env.IS_ELECTRON) {
-    window.ftElectron.toggleReplaceHttpCache()
+    if (replaceHttpCache.value !== replaceHttpCacheRunningState) {
+      window.ftElectron.toggleReplaceHttpCache()
+    } else if (disableHardwareAcceleration.value !== disableHardwareAccelerationRunningState) {
+      window.ftElectron.toggleDisableHardwareAcceleration()
+    }
   }
 }
 </script>

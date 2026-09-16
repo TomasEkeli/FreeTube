@@ -680,7 +680,13 @@ async function doRequest(
         switch (part.type) {
           case UMPPartId.STREAM_PROTECTION_STATUS: {
             const streamProtectionStatus = decodePart(part, StreamProtectionStatus)
-            protectionStatus = streamProtectionStatus?.status ?? 0
+            // A part that would not decode says nothing about the session, so
+            // the last status we did read stands. Reading on from it would
+            // also throw, and the throw lands in the part loop and abandons
+            // the rest of the response, which is how a playback hangs.
+            if (!streamProtectionStatus) break
+
+            protectionStatus = streamProtectionStatus.status ?? 0
 
             // A trusted status used to clear the recovery budget here. It is
             // not proof of anything on its own: a session can keep answering
@@ -702,7 +708,7 @@ async function doRequest(
           }
           case UMPPartId.SABR_REDIRECT: {
             const sabrRedirect = decodePart(part, SabrRedirect)
-            if (!sabrRedirect) break
+            if (!sabrRedirect?.url) break
 
             // The server sometimes sends a redirect part with an empty URL.
             // Applying it breaks every request in the session with

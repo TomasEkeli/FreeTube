@@ -68,7 +68,13 @@
       v-else-if="showComments && !isLoading"
     >
       <h3
-        v-if="isPostComments"
+        v-if="areCommentsDisabled"
+        class="noCommentMsg"
+      >
+        {{ $t("Comments.Comments are turned off") }}
+      </h3>
+      <h3
+        v-else-if="isPostComments"
         class="noCommentMsg"
       >
         {{ $t("Comments.There are no comments available for this post") }}
@@ -167,6 +173,7 @@ function onTimestamp(timestamp) {
 const isLoading = ref(false)
 const isMoreCommentsLoading = ref(false)
 const showComments = ref(false)
+const areCommentsDisabled = ref(false)
 const nextPageToken = shallowRef(null)
 
 /**
@@ -293,6 +300,7 @@ function handleSortChange() {
 
 function getCommentData() {
   isLoading.value = true
+  areCommentsDisabled.value = false
 
   if (!process.env.SUPPORTS_LOCAL_API || backendPreference.value === 'invidious') {
     if (!props.isPostComments) {
@@ -374,6 +382,7 @@ async function getCommentDataLocal(more = false) {
       nextPageToken.value = null
       isLoading.value = false
       showComments.value = true
+      areCommentsDisabled.value = true
       localCommentsInstance = undefined
       loadedBackend.value = 'local'
       return
@@ -423,6 +432,7 @@ async function getCommentDataInvidious() {
       isLoading.value = false
       showComments.value = true
       loadedBackend.value = 'invidious'
+      areCommentsDisabled.value = true
       return
     }
     // endregion No comment detection
@@ -456,6 +466,15 @@ async function getPostCommentsInvidious() {
     showComments.value = true
     loadedBackend.value = 'invidious'
   } catch (err) {
+    if (err.message.includes('Comments not found')) {
+      commentData.value = []
+      nextPageToken.value = null
+      isLoading.value = false
+      showComments.value = true
+      areCommentsDisabled.value = true
+      return
+    }
+
     console.error(err)
     const errorMessage = t('Invidious API Error (Click to copy)')
     showToast(`${errorMessage}: ${err}`, 10000, () => {
