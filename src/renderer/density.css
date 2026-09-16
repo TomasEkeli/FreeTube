@@ -107,11 +107,30 @@ body[data-density='wall'] {
  * that kept cards apart, and the info block pins to its bottom edge under a
  * half-transparent scrim, dark enough to carry white text over a bright
  * thumbnail and subtle enough to leave the image legible through it.
+ *
+ * block-size auto, against the shared layout's 100%: a grid row is as tall as
+ * its tallest cell, and a post card in the row is taller than 16:9. A card
+ * that filled that cell would carry its bottom-pinned scrim down with it, off
+ * the thumbnail and into the blank space below — so the card hugs its image
+ * instead, and a mixed row shows background under the shorter tiles.
  */
 body[data-density='wall'] .ft-list-item.grid {
+  block-size: auto;
   min-block-size: 0;
   padding: 0;
   position: relative;
+}
+
+/*
+ * Community posts keep their flowing layout: their card is mostly text, often
+ * with no thumbnail at all, and there is nothing to overlay it on. What the
+ * shared rule above takes from them — they are .ft-list-item.grid too — this
+ * gives back, so their text does not press against the tiles around it. The
+ * values are the ordinary card's own: 6px around, 20px below.
+ */
+body[data-density='wall'] .ft-list-post.grid {
+  padding-block: 6px 20px;
+  padding-inline: 6px;
 }
 
 body[data-density='wall'] .ft-list-item.grid .videoThumbnail {
@@ -187,6 +206,18 @@ body[data-density='wall'] .ft-card:has(.ft-list-item.grid) {
   inline-size: 100%;
   margin-inline: 0;
   padding-inline: 0;
+}
+
+/*
+ * The control row over the stream stretches its background to the card's
+ * edges with negative margins that mirror the card's 16px inline padding.
+ * With that padding gone the mirror image is 16px of overhang past a card
+ * that is already the full viewport, which is a horizontal scrollbar and a
+ * sliver of grid cut off at the edge — so the margins go with the padding
+ * they mirrored.
+ */
+body[data-density='wall'] .ft-card:has(.ft-list-item.grid) .controlRow {
+  margin-inline: 0;
 }
 
 /* The channel home tab caps its shelves at 85vw on top of the card's 85%. */
