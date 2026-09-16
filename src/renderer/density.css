@@ -122,13 +122,15 @@ body[data-density='wall'] .ft-list-item.grid {
 }
 
 /*
- * Community posts keep their flowing layout: their card is mostly text, often
- * with no thumbnail at all, and there is nothing to overlay it on. What the
- * shared rule above takes from them — they are .ft-list-item.grid too — this
- * gives back, so their text does not press against the tiles around it. The
- * values are the ordinary card's own: 6px around, 20px below.
+ * A community post with a picture is the same tile as a video — its card
+ * cover-crops the image to 16:9 — so it joins the overlay below, and only a
+ * post with no picture keeps its flowing text layout. That one has nothing to
+ * overlay onto, so what the shared rule above takes from it — it is
+ * .ft-list-item.grid too — this gives back, and its text does not press
+ * against the tiles around it. The values are the ordinary card's own: 6px
+ * around, 20px below.
  */
-body[data-density='wall'] .ft-list-post.grid {
+body[data-density='wall'] .ft-list-post.grid.noThumbnail {
   padding-block: 6px 20px;
   padding-inline: 6px;
 }
@@ -137,7 +139,9 @@ body[data-density='wall'] .ft-list-item.grid .videoThumbnail {
   padding-block-end: 0;
 }
 
-body[data-density='wall'] .ft-list-item.grid .info {
+/* A post's text block is .postInfo, but it is the same overlay. */
+body[data-density='wall'] .ft-list-item.grid .info,
+body[data-density='wall'] .ft-list-post.grid:not(.noThumbnail) .postInfo {
   background-color: rgb(0 0 0 / 50%);
   inset-block-end: 0;
   inset-inline: 0;
@@ -158,13 +162,16 @@ body[data-density='wall'] .ft-list-item.grid .info {
  * beats the watched-state rules, which are four compounds themselves.
  */
 /* stylelint-disable selector-max-compound-selectors */
-body[data-density='wall'] .ft-list-item.grid .info .title {
+body[data-density='wall'] .ft-list-item.grid .info .title,
+body[data-density='wall'] .ft-list-post.grid:not(.noThumbnail) .postSnippet {
   color: #fff;
 }
 
 body[data-density='wall'] .ft-list-item.grid .info .infoLine,
 body[data-density='wall'] .ft-list-item.grid .info .infoLine .channelName,
-body[data-density='wall'] .ft-list-item.grid .info .description {
+body[data-density='wall'] .ft-list-item.grid .info .description,
+body[data-density='wall'] .ft-list-post.grid:not(.noThumbnail) .postHeader,
+body[data-density='wall'] .ft-list-post.grid:not(.noThumbnail) .counts {
   color: rgb(255 255 255 / 88%);
 }
 
