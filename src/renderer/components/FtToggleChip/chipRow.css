@@ -15,14 +15,35 @@
  * each of them gets at the other. The two sides break onto separate lines when
  * the window is too narrow to hold them side by side, and each of them wraps
  * within itself after that.
+ *
+ * The row sticks below the refresh strip so the controls stay reachable
+ * however far down the stream the user has scrolled. Both pages that use this
+ * file also show FtRefreshWidget's fixed-top-bar: the top nav's 60px
+ * (hardcoded everywhere in this codebase) plus the strip's measured ~42.5px
+ * (5px block padding around a 32px icon button). 102px tucks the row's top
+ * half a pixel under the strip, which is later in the DOM at the same
+ * z-index, so it paints over the seam rather than leaving a gap.
+ *
+ * The negative inline margins mirror the card's 16px inline padding,
+ * stretching the row's background to the card's edges so the cards scrolling
+ * underneath don't peek through at the sides. z-index 3 sits above the list
+ * items' hover overlays and progress bars (up to 2), below the top nav (4) —
+ * same layering as the Playlist page's sticky header.
  */
 .controlRow {
   align-items: center;
+  background-color: var(--card-bg-color);
   display: flex;
   flex-wrap: wrap;
   gap: 10px 20px;
+  inset-block-start: 102px;
   justify-content: space-between;
-  margin-block: 4px 16px;
+  margin-block: 0 8px;
+  margin-inline: -16px;
+  padding-block: 4px 8px;
+  padding-inline: 16px;
+  position: sticky;
+  z-index: 3;
 }
 
 .chipRow {
