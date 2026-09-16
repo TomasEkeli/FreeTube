@@ -547,7 +547,7 @@ const showsDescriptionSlot = computed(() => {
 /** @type {import('vue').ComputedRef<'' | 'start' | 'middle' | 'end' | 'hidden' | 'blur'>} */
 const thumbnailPreference = computed(() => store.getters.getThumbnailPreference)
 
-/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious'>} */
+/** @type {import('vue').ComputedRef<'tight' | 'standard' | 'spacious' | 'wall'>} */
 const listDensity = computed(() => store.getters.getListDensity)
 
 /** @type {import('vue').ComputedRef<boolean>} */
@@ -821,8 +821,9 @@ function handleOptionsClick(option) {
  * Whether this card is big enough to be worth the large thumbnail.
  *
  * A grid column stretches, so a card is not its mode's minimum: a standard one
- * runs from 400 to 816px wide and a spacious one from 610 to 1240, and a 320px
- * image spread over either of those is the soft, blocky thing it looks like.
+ * runs from 400 to 816px wide, a spacious one from 610 to 1240, and a wall one
+ * wider still with the page chrome gone, and a 320px image spread over any of
+ * those is the soft, blocky thing it looks like.
  * Tight tops out at 530px and is the mode that puts the most cards on screen at
  * once, so it is the one that can least afford eight times the bytes, and a
  * list card's thumbnail is 336px whatever the mode.

@@ -67,6 +67,7 @@ Global:
     Tight: Tight
     Standard: Standard
     Spacious: Spacious
+    Wall: Wall
   Counts:
     Video Count: 1 video | {count} videos
     Channel Count: 1 channel | {count} channels

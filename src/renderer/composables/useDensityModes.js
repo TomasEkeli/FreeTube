@@ -10,7 +10,7 @@ import { useI18n } from 'vue-i18n'
  * stream and the entry in the general settings, and they read the modes and
  * their words from here so that they cannot come to disagree about either.
  */
-export const DENSITY_MODES = ['tight', 'standard', 'spacious']
+export const DENSITY_MODES = ['tight', 'standard', 'spacious', 'wall']
 
 /**
  * The modes as the reader sees them, keyed by mode.
@@ -27,6 +27,7 @@ export function useDensityModeNames() {
   return computed(() => ({
     tight: t('Global.Density.Tight'),
     standard: t('Global.Density.Standard'),
-    spacious: t('Global.Density.Spacious')
+    spacious: t('Global.Density.Spacious'),
+    wall: t('Global.Density.Wall')
   }))
 }
