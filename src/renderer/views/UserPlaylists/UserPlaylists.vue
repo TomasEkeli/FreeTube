@@ -34,10 +34,10 @@
           />
         </div>
         <div
+          v-if="fullData.length > 1"
           class="optionsRow"
         >
           <FtToggleSwitch
-            v-if="fullData.length > 1"
             :label="$t('User Playlists.Playlists with Matching Videos')"
             :compact="true"
             :default-value="doSearchPlaylistsWithMatchingVideos"
@@ -45,7 +45,6 @@
           />
           <FtDensitySwitch />
           <FtSelect
-            v-if="fullData.length > 1"
             class="sortSelect"
             :value="sortBy"
             :select-names="sortByNames"

@@ -14,6 +14,7 @@ import {
   getChannelPlaylistId,
   getRelativeTimeFromDate,
 } from '../utils'
+import { parseVideoClipsParams } from './shared'
 
 const TRACKING_PARAM_NAMES = [
   'utm_source',
@@ -2007,6 +2008,11 @@ export function parseLocalListVideo(item, channelId, channelName) {
     /** @type {import('youtubei.js').YTNodes.GridVideo} */
     const video = item
 
+    // This can happen for unavailable clip on channel home page
+    if (!video.video_id) {
+      return null
+    }
+
     let publishedText
 
     if (video.published != null && !video.published.isEmpty()) {
@@ -2093,6 +2099,7 @@ export function parseLocalListVideo(item, channelId, channelName) {
       liveNow: video.is_live,
       isUpcoming: video.is_upcoming || video.is_premiere,
       premiereDate: video.upcoming,
+      isPremiere: video.is_premiere,
       is4k: video.is_4k,
       is8k: video.badges.some(badge => badge.label === '8K'),
       isNew: video.badges.some(badge => badge.label === 'New'),
@@ -2184,6 +2191,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       let lengthSeconds = ''
       let liveNow = false
       let isUpcoming = false
+      let isPremiere = false
       let premiereDate
 
       const isMemberOnly = lockupView.metadata.metadata?.metadata_rows.some(row => {
@@ -2200,6 +2208,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
       if (thumbnailBottomOverlayView) {
         if (thumbnailBottomOverlayView.badges.some(badge => badge.badge_style === 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE')) {
           liveNow = true
+          isPremiere = thumbnailBottomOverlayView.badges.some(badge => badge.text === 'PREMIERE')
         } else if (thumbnailBottomOverlayView.badges.some(badge => badge.text?.toLowerCase() === 'upcoming')) {
           isUpcoming = true
 
@@ -2276,6 +2285,7 @@ function parseLockupView(lockupView, channelId = undefined, channelName = undefi
         liveNow,
         isUpcoming,
         isStation,
+        isPremiere,
         premiereDate
       }
     }
@@ -2876,4 +2886,14 @@ export async function getLocalCommunityPostComments(postId, channelId) {
   const innertube = await createInnertube({ generateSessionLocally: false })
 
   return await innertube.getPostComments(postId, channelId)
+}
+
+export async function getLocalClip(clipId) {
+  const innertube = await createInnertube()
+
+  const clipResponse = await innertube.resolveURL('https://www.youtube.com/clip/' + clipId)
+
+  const videoId = clipResponse?.payload?.videoId
+
+  return parseVideoClipsParams(videoId, clipResponse.payload.params)
 }
