@@ -74,7 +74,7 @@
       />
       <FtElementList
         v-else-if="shownCategories.length > 0"
-        :data="stream"
+        :data="activeStream"
       />
       <p
         v-else
@@ -82,6 +82,19 @@
       >
         {{ categories.length > 0 ? $t("Explore.No Categories Shown") : $t("Explore.Nothing to Explore") }}
       </p>
+      <FtAutoLoadNextPageWrapper
+        v-if="!isLoading && stream.length > dataLimit"
+        @load-next-page="increaseLimit"
+      >
+        <FtFlexBox>
+          <FtButton
+            :label="$t('Explore.Load More')"
+            background-color="var(--primary-color)"
+            text-color="var(--text-with-main-color)"
+            @click="increaseLimit"
+          />
+        </FtFlexBox>
+      </FtAutoLoadNextPageWrapper>
     </FtCard>
     <FtRefreshWidget
       :disable-refresh="isLoading"
@@ -97,9 +110,12 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import FtAutoLoadNextPageWrapper from '../../components/FtAutoLoadNextPageWrapper.vue'
+import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
 import FtElementList from '../../components/FtElementList/FtElementList.vue'
+import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
 import FtLoader from '../../components/FtLoader/FtLoader.vue'
 import FtRefreshWidget from '../../components/FtRefreshWidget/FtRefreshWidget.vue'
 import FtToggleChip from '../../components/FtToggleChip/FtToggleChip.vue'
@@ -237,6 +253,35 @@ const shownCategories = computed(() => {
 const stream = computed(() => {
   return mergeByRank(shownCategories.value.map(category => category.videos))
 })
+
+/*
+ * The window onto the stream, the same machinery as the subscriptions page:
+ * a hundred cards, and a hundred more each time the reader asks — by the
+ * button, or just by reaching it when the auto-load-next-page setting is on.
+ * Everything is already fetched, so widening the window costs no traffic;
+ * the cap only spares the page rendering a few hundred cards nobody has
+ * scrolled to. Session storage for the same reason as there: coming back to
+ * the page mid-session reopens the window as wide as the reader had it.
+ */
+const PAGE_SIZE = 100
+
+const savedLimit = sessionStorage.getItem('exploreLimit')
+
+const dataLimit = ref(savedLimit !== null ? parseInt(savedLimit) : PAGE_SIZE)
+
+/** @type {import('vue').ComputedRef<any[]>} */
+const activeStream = computed(() => {
+  if (stream.value.length < dataLimit.value) {
+    return stream.value
+  }
+
+  return stream.value.slice(0, dataLimit.value)
+})
+
+function increaseLimit() {
+  dataLimit.value += PAGE_SIZE
+  sessionStorage.setItem('exploreLimit', dataLimit.value.toFixed(0))
+}
 
 /** @type {import('vue').ComputedRef<string>} */
 const lastRefreshTimestamp = computed(() => {
