@@ -124,12 +124,6 @@
           :default-value="hidePlaylists"
           @change="updateHidePlaylists"
         />
-        <FtToggleSwitch
-          :label="t('Settings.Distraction Free Settings.Hide Active Subscriptions')"
-          :compact="true"
-          :default-value="hideActiveSubscriptions"
-          @change="updateHideActiveSubscriptions"
-        />
       </div>
     </div>
     <h4
@@ -373,16 +367,6 @@ const hideLiveChat = computed(() => store.getters.getHideLiveChat)
  */
 function updateHideLiveChat(value) {
   store.dispatch('updateHideLiveChat', value)
-}
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideActiveSubscriptions = computed(() => store.getters.getHideActiveSubscriptions)
-
-/**
- * @param {boolean} value
- */
-function updateHideActiveSubscriptions(value) {
-  store.dispatch('updateHideActiveSubscriptions', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

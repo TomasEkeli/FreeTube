@@ -21,21 +21,12 @@
   inline-size: 100%;
   z-index: 4;
 
-  @media only screen and (width >= 961px) {
-    display: grid;
-    grid-template-columns: 1fr 440px 1fr;
-  }
-
   @include top-nav-is-colored {
     background-color: var(--primary-color);
   }
 
   @media only screen and (width <= 680px) {
     position: fixed;
-
-    &:has(+ .sideNav + .routerView .floatingRefreshSection) {
-      box-shadow: none;
-    }
   }
 }
 
@@ -85,6 +76,92 @@
   inline-size: 1em;
 }
 
+/*
+ * The app's pages, which used to be a bar down the left-hand side. They sit
+ * between the window controls and the search box, so the page below them gets
+ * the window's full width.
+ */
+.navLinks {
+  align-items: stretch;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+
+  /*
+   * The side before it brings its own margin, so only the trailing side needs
+   * one: enough of a gap that the icons read as their own group rather than as
+   * decoration on the front of the search box.
+   */
+  margin-inline: 0 28px;
+
+  /* Below the mobile threshold the pages live in SideNav's bottom bar instead */
+  @media only screen and (width <= 680px) {
+    display: none;
+  }
+}
+
+.navLink {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--primary-text-color);
+  display: flex;
+  flex-direction: column;
+  font-size: 20px;
+  justify-content: center;
+  line-height: 1.1;
+  padding-block: 4px;
+  padding-inline: 10px;
+  text-decoration: none;
+  transition: background 0.2s ease-out;
+  -webkit-user-drag: none;
+
+  &:hover {
+    background-color: var(--side-nav-hover-color);
+    color: var(--side-nav-hover-text-color);
+    transition: background 0.2s ease-in;
+  }
+
+  &:active {
+    background-color: var(--side-nav-active-color);
+    color: var(--side-nav-active-text-color);
+    transition: background 0.2s ease-in;
+  }
+}
+
+/*
+ * Which page this is. The pages stopped writing their own name over their
+ * content, so this is the only thing that says it — hence the accent colour
+ * rather than something subtler.
+ */
+.navLink.router-link-active {
+  color: var(--primary-color);
+}
+
+/* On a coloured bar the accent is the background, so the mark has to invert */
+.topNavBarColor .navLink.router-link-active {
+  background-color: var(--primary-color-active);
+  color: var(--text-with-main-color);
+}
+
+/*
+ * Named icons need a fixed width to sit in a tidy row, since the names differ
+ * wildly in length. Wide enough for "Playlists" at 11px, and anything longer
+ * wraps onto a second line the way it did in the old side bar.
+ */
+.showLabels .navLink {
+  inline-size: 74px;
+  padding-inline: 2px;
+}
+
+.navLinkLabel {
+  font-size: 11px;
+  margin-block-start: 3px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+
+.topNavBarColor .navLink,
 .topNavBarColor .navButton,
 .topNavBarColor :deep(.ftIconButton:not(.arrowDisabled) .iconButton) {
   color: var(--text-with-main-color);
@@ -125,6 +202,9 @@
 
   &.profiles {
     justify-content: flex-end;
+
+    /* Pinned to the trailing edge, whatever is left over in the middle */
+    margin-inline-start: auto;
   }
 
   .navSearchButton {
@@ -200,8 +280,14 @@
   }
 }
 
+/*
+ * The first thing to give when the window is too narrow to hold everything:
+ * min-inline-size: 0 lets it shrink past its content, so the page icons keep
+ * their room and the search box narrows instead of pushing them off the bar.
+ */
 .middle {
-  flex: 1;
+  flex: 1 1 auto;
+  min-inline-size: 0;
   max-inline-size: 440px;
 
   .searchContainer {

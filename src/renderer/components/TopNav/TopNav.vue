@@ -81,6 +81,126 @@
         />
       </RouterLink>
     </div>
+    <div
+      class="navLinks"
+      :class="{ showLabels }"
+    >
+      <RouterLink
+        class="navLink"
+        to="/subscriptions"
+        :title="t('Subscriptions.Subscriptions')"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'rss']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('Subscriptions.Subscriptions') }}</span>
+      </RouterLink>
+      <RouterLink
+        class="navLink"
+        to="/subscribedchannels"
+        :title="t('Channels.Channels')"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'user-check']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('Channels.Channels') }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="exploreVisible"
+        class="navLink"
+        to="/explore"
+        :title="t('Explore.Explore')"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'compass']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('Explore.Explore') }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="popularVisible"
+        class="navLink"
+        to="/popular"
+        :title="t('Most Popular')"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'users']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('Most Popular') }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="!hidePlaylists"
+        class="navLink"
+        to="/userplaylists"
+        :title="t('Playlists')"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'bookmark']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('Playlists') }}</span>
+      </RouterLink>
+      <RouterLink
+        class="navLink"
+        to="/history"
+        :title="historyTitle"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'history']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('History.History') }}</span>
+      </RouterLink>
+      <RouterLink
+        class="navLink"
+        to="/settings"
+        :title="settingsTitle"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'sliders-h']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('Settings.Settings') }}</span>
+      </RouterLink>
+      <RouterLink
+        class="navLink"
+        to="/about"
+        :title="t('About.About')"
+      >
+        <FontAwesomeIcon
+          class="navIcon"
+          :icon="['fas', 'info-circle']"
+        />
+        <span
+          v-if="showLabels"
+          class="navLinkLabel"
+        >{{ t('About.About') }}</span>
+      </RouterLink>
+    </div>
     <div class="middle">
       <div
         v-if="!hideSearchBar"
@@ -159,8 +279,47 @@ const enableSearchSuggestions = computed(() => store.getters.getEnableSearchSugg
 /** @type {import('vue').ComputedRef<string>} */
 const barColor = computed(() => store.getters.getBarColor)
 
+/**
+ * The hamburger's only remaining job: the navigation itself lives in this bar,
+ * so there is nothing left to expand, and the flag now says whether each icon
+ * carries its name underneath it.
+ * @type {import('vue').ComputedRef<boolean>}
+ */
+const showLabels = computed(() => store.getters.getIsSideNavOpen)
+
 const expandCollapseSideBarLabel = computed(() => {
-  return store.getters.getIsSideNavOpen ? t('Compact side navigation') : t('Expand side navigation')
+  return showLabels.value ? t('Compact side navigation') : t('Expand side navigation')
+})
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const exploreVisible = computed(() => {
+  return process.env.SUPPORTS_LOCAL_API &&
+    !store.getters.getHideExplore &&
+    (store.getters.getBackendFallback || store.getters.getBackendPreference === 'local')
+})
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const popularVisible = computed(() => {
+  return !store.getters.getHidePopularVideos &&
+    (store.getters.getBackendFallback || store.getters.getBackendPreference === 'invidious')
+})
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const hidePlaylists = computed(() => store.getters.getHidePlaylists)
+
+const historyTitle = computed(() => {
+  const shortcut = process.platform === 'darwin'
+    ? KeyboardShortcuts.APP.GENERAL.NAVIGATE_TO_HISTORY_MAC
+    : KeyboardShortcuts.APP.GENERAL.NAVIGATE_TO_HISTORY
+
+  return localizeAndAddKeyboardShortcutToActionTitle(t('History.History'), shortcut)
+})
+
+const settingsTitle = computed(() => {
+  return localizeAndAddKeyboardShortcutToActionTitle(
+    t('Settings.Settings'),
+    KeyboardShortcuts.APP.GENERAL.NAVIGATE_TO_SETTINGS
+  )
 })
 
 const landingPage = computed(() => '/' + store.getters.getLandingPage)
