@@ -10,9 +10,16 @@
   block-size: 100%;
 }
 
+/*
+ * No margin above: a page's first line sits against the top bar. The band that
+ * margin used to make was the window's own dark background showing between two
+ * bars, and the card below it already brings its own padding. Below the mobile
+ * threshold it comes back, because the top nav is fixed rather than sticky
+ * there and this margin is what keeps the page out from under it.
+ */
 .routerView {
   flex: 1 1 0%;
-  margin-block: 18px;
+  margin-block: 0 18px;
   margin-inline: 10px;
 }
 

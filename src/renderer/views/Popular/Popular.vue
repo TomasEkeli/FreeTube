@@ -9,30 +9,27 @@
       class="card"
     >
       <div class="headingRow">
-        <h2>
-          <FontAwesomeIcon
-            :icon="['fas', 'users']"
-            class="headingIcon"
-          />
+        <h2 class="visuallyHidden">
           {{ $t("Most Popular") }}
         </h2>
-        <FtDensitySwitch />
+        <div class="pageControls">
+          <FtDensitySwitch />
+          <ft-refresh-widget
+            :disable-refresh="isLoading"
+            :last-refresh-at="lastPopularRefreshAt"
+            :title="$t('Most Popular')"
+            @click="fetchPopularInfo"
+          />
+        </div>
       </div>
       <ft-element-list
         :data="shownResults"
       />
     </ft-card>
-    <ft-refresh-widget
-      :disable-refresh="isLoading"
-      :last-refresh-timestamp="lastPopularRefreshTimestamp"
-      :title="$t('Most Popular')"
-      @click="fetchPopularInfo"
-    />
   </div>
 </template>
 
 <script setup>
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 
 import FtLoader from '../../components/FtLoader/FtLoader.vue'
@@ -43,7 +40,7 @@ import FtRefreshWidget from '../../components/FtRefreshWidget/FtRefreshWidget.vu
 import store from '../../store/index'
 
 import { getInvidiousPopularFeed } from '../../helpers/api/invidious'
-import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../../helpers/utils'
+import { copyToClipboard, showToast } from '../../helpers/utils'
 import { useI18n } from 'vue-i18n'
 import { KeyboardShortcuts } from '../../../constants'
 
@@ -51,8 +48,10 @@ const { t } = useI18n()
 
 const isLoading = ref(false)
 
-const lastPopularRefreshTimestamp = computed(() => {
-  return getRelativeTimeFromDate(store.getters.getLastPopularRefreshTimestamp, true)
+/** @type {import('vue').ComputedRef<number | null>} */
+const lastPopularRefreshAt = computed(() => {
+  // Empty string until this page has ever been refreshed in this session
+  return store.getters.getLastPopularRefreshTimestamp || null
 })
 
 /** @type {import('vue').ComputedRef<Array | null>} */
@@ -80,7 +79,7 @@ async function fetchPopularInfo() {
   try {
     const items = await getInvidiousPopularFeed()
 
-    store.commit('setLastPopularRefreshTimestamp', new Date())
+    store.commit('setLastPopularRefreshTimestamp', Date.now())
     shownResults.value = items
     isLoading.value = false
     store.commit('setPopularCache', items)

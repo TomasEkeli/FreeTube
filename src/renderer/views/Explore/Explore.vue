@@ -3,11 +3,7 @@
     <FtCard
       class="card"
     >
-      <h2>
-        <FontAwesomeIcon
-          :icon="['fas', 'compass']"
-          class="exploreIcon"
-        />
+      <h2 class="visuallyHidden">
         {{ $t("Explore.Explore") }}
       </h2>
       <div class="controlRow">
@@ -25,6 +21,12 @@
             @toggle="toggleCategory(category.id)"
           />
         </div>
+        <FtRefreshWidget
+          :disable-refresh="isLoading"
+          :last-refresh-at="lastRefreshAt"
+          :title="$t('Explore.Explore')"
+          @click="refresh"
+        />
         <div class="pageControls">
           <div
             v-if="regionNames.length > 0"
@@ -96,17 +98,10 @@
         </FtFlexBox>
       </FtAutoLoadNextPageWrapper>
     </FtCard>
-    <FtRefreshWidget
-      :disable-refresh="isLoading"
-      :last-refresh-timestamp="lastRefreshTimestamp"
-      :title="$t('Explore.Explore')"
-      @click="refresh"
-    />
   </div>
 </template>
 
 <script setup>
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -133,7 +128,7 @@ import {
   noteExploreRegionUsed,
   toggleExploreRegionPinned
 } from '../../helpers/exploreRegions'
-import { copyToClipboard, getRelativeTimeFromDate, showToast } from '../../helpers/utils'
+import { copyToClipboard, showToast } from '../../helpers/utils'
 import { KeyboardShortcuts } from '../../../constants'
 
 /**
@@ -283,12 +278,8 @@ function increaseLimit() {
   sessionStorage.setItem('exploreLimit', dataLimit.value.toFixed(0))
 }
 
-/** @type {import('vue').ComputedRef<string>} */
-const lastRefreshTimestamp = computed(() => {
-  const fetchedAt = found.value?.fetchedAt
-
-  return fetchedAt ? getRelativeTimeFromDate(fetchedAt, true) : ''
-})
+/** @type {import('vue').ComputedRef<number | null>} */
+const lastRefreshAt = computed(() => found.value?.fetchedAt ?? null)
 
 /**
  * Ask YouTube what it has, unless this region has already been asked in this
@@ -313,7 +304,7 @@ async function discover(refetch = false) {
 
     store.commit('setExploreCache', {
       region: region.value,
-      value: { fetchedAt: new Date(), categories }
+      value: { fetchedAt: Date.now(), categories }
     })
   } catch (error) {
     console.error(error)

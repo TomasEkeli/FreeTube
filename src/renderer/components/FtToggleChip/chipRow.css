@@ -11,18 +11,24 @@
  */
 
 /*
- * The page's one control row: which kinds are shown at one end, how much room
- * each of them gets at the other. The two sides break onto separate lines when
- * the window is too narrow to hold them side by side, and each of them wraps
- * within itself after that.
+ * The page's one control row, and now the page's first line: which kinds are
+ * shown at one end, how much room each of them gets at the other, and how fresh
+ * this all is in the middle.
  *
- * The row sticks below the refresh strip so the controls stay reachable
- * however far down the stream the user has scrolled. Both pages that use this
- * file also show FtRefreshWidget's fixed-top-bar: the top nav's 60px
- * (hardcoded everywhere in this codebase) plus the strip's measured ~42.5px
- * (5px block padding around a 32px icon button). 102px tucks the row's top
- * half a pixel under the strip, which is later in the DOM at the same
- * z-index, so it paints over the seam rather than leaving a gap.
+ * A grid rather than a flex row, for where the refresh button lands. Its
+ * column is sized to its content and follows the chips' column across a fixed
+ * gap, so the button stands at the same place on the row however the age
+ * beside it is worded — a centred column, or one after a column that stretched,
+ * moved the button every time the clock ticked from "Fresh" to "2 minutes ago".
+ * The last column takes the slack and holds the density switch at the far end.
+ * Each of the three wraps within itself as the window narrows, and below the
+ * mobile threshold they stack instead.
+ *
+ * The row sticks directly below the top nav so the controls stay reachable
+ * however far down the stream the user has scrolled. 60px is that nav's height,
+ * hardcoded everywhere in this codebase. It used to be 102px, clearing a strip
+ * of its own that carried the refresh button; the button is in this row now and
+ * the band it cost the grid is gone.
  *
  * The negative inline margins mirror the card's 16px inline padding,
  * stretching the row's background to the card's edges so the cards scrolling
@@ -33,21 +39,47 @@
 .controlRow {
   align-items: center;
   background-color: var(--card-bg-color);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-  inset-block-start: 102px;
-  justify-content: space-between;
+  display: grid;
+  gap: 10px 32px;
+  grid-template-columns: auto auto 1fr;
+  inset-block-start: 60px;
   margin-block: 0 8px;
   margin-inline: -16px;
-  padding-block: 4px 8px;
+  padding-block: 10px 8px;
   padding-inline: 16px;
   position: sticky;
   z-index: 3;
+}
+
+/* The far end is the far end, not the start of the last column */
+.controlRow > :last-child {
+  justify-self: end;
+}
+
+@media only screen and (width <= 680px) {
+  .controlRow {
+    grid-template-columns: 1fr;
+  }
+
+  .controlRow > :last-child {
+    justify-self: start;
+  }
 }
 
 .chipRow {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/*
+ * The far end of the row: the settings about what is on the page and how it is
+ * shown. Kept together and wrapping as one, so the row breaks between the chips
+ * and the controls rather than between the controls.
+ */
+.pageControls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }

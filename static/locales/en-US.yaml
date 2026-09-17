@@ -199,6 +199,10 @@ Most Popular: Most Popular
 Feed:
   Feed Last Updated: '{feedName} feed last updated: {date}'
   Refresh Feed: Refresh {subscriptionName}
+  # Stands in for the age of a feed refreshed less than a minute ago, beside the
+  # refresh button over a stream. A state rather than an age, since "less than a
+  # minute ago" is a lot of words for "you are looking at the latest".
+  Fresh: Fresh
 Playlists: Playlists
 User Playlists:
   Your Playlists: Your Playlists

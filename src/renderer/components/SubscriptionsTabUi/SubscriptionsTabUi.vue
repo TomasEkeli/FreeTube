@@ -57,22 +57,11 @@
         />
       </FtFlexBox>
     </FtAutoLoadNextPageWrapper>
-
-    <FtRefreshWidget
-      :disable-refresh="isLoading || !activeProfileHasSubscriptions"
-      :last-refresh-timestamp="lastRefreshTimestamp"
-      :title="title"
-      :activity-label="activityLabel"
-      :activity-progress="activityProgress"
-      :can-stop-activity="canStopActivity"
-      @click="refresh"
-      @stop-activity="stopActivity"
-    />
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import FtAutoLoadNextPageWrapper from '../FtAutoLoadNextPageWrapper.vue'
 import FtButton from '../FtButton/FtButton.vue'
@@ -80,16 +69,11 @@ import FtChannelBubble from '../FtChannelBubble/FtChannelBubble.vue'
 import FtElementList from '../FtElementList/FtElementList.vue'
 import FtFlexBox from '../ft-flex-box/ft-flex-box.vue'
 import FtLoader from '../FtLoader/FtLoader.vue'
-import FtRefreshWidget from '../FtRefreshWidget/FtRefreshWidget.vue'
 
 import store from '../../store/index'
 
-import { useSubscriptionActivity } from '../../composables/useSubscriptionActivity'
-
 import { debounce } from '../../helpers/utils'
 import { entryVideoId } from '../../helpers/subscriptions'
-
-import { KeyboardShortcuts } from '../../../constants'
 
 /**
  * The subscriptions stream, as a list on a page.
@@ -98,17 +82,13 @@ import { KeyboardShortcuts } from '../../../constants'
  * of videos, shorts, live streams and posts. The name is left alone because
  * upstream carries this file too and a rename buys nothing but merge conflicts.
  *
- * Everything here is about display: which slice is on screen, which of the
- * viewing preferences hide entries, and the widget over the top. What the
- * entries are and where they came from is the composable's business.
+ * Everything here is about display: which slice is on screen, and which of the
+ * viewing preferences hide entries. What the entries are and where they came
+ * from is the composable's business; refreshing them is the page's, since that
+ * is where the control row holding the button is.
  */
 const props = defineProps({
   isLoading: {
-    type: Boolean,
-    default: false
-  },
-  /** A remote refresh is running, whether or not the feed is empty meanwhile. */
-  isRefreshing: {
     type: Boolean,
     default: false
   },
@@ -123,25 +103,10 @@ const props = defineProps({
   attemptedFetch: {
     type: Boolean,
     default: false
-  },
-  lastRefreshTimestamp: {
-    type: String,
-    required: true
-  },
-  title: {
-    type: String,
-    required: true
   }
 })
 
-const emit = defineEmits(['refresh', 'visible-entries'])
-
-const {
-  label: activityLabel,
-  progress: activityProgress,
-  canStop: canStopActivity,
-  stop: stopActivity
-} = useSubscriptionActivity({ isRefreshing: toRef(props, 'isRefreshing') })
+const emit = defineEmits(['visible-entries'])
 
 /**
  * How much of the stream is rendered at once, and how much each "load more"
@@ -245,39 +210,6 @@ const reportVisibleEntries = debounce(() => {
 }, 500)
 
 watch(activeVideoList, reportVisibleEntries)
-
-/**
- * @param {KeyboardEvent} event
- */
-function keyboardShortcutHandler(event) {
-  if (document.activeElement.classList.contains('ft-input')) {
-    return
-  }
-  // Avoid handling events due to user holding a key (not released)
-  // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/repeat
-  if (event.repeat) { return }
-
-  switch (event.key.toLowerCase()) {
-    case 'f5':
-    case KeyboardShortcuts.APP.SITUATIONAL.REFRESH:
-      if (!props.isLoading && activeProfileHasSubscriptions.value) {
-        refresh()
-      }
-      break
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', keyboardShortcutHandler)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', keyboardShortcutHandler)
-})
-
-function refresh() {
-  emit('refresh')
-}
 </script>
 
 <style scoped src="./SubscriptionsTabUi.css" />

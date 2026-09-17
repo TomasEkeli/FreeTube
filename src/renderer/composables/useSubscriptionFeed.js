@@ -18,7 +18,7 @@ import {
   backfillDetailsForVisibleVideos,
   detailBackfillRevision
 } from '../helpers/subscriptionDetailBackfill'
-import { debounce, getRelativeTimeFromDate } from '../helpers/utils'
+import { debounce } from '../helpers/utils'
 import { mergeSubscriptionFeedEntries, splitUpcomingEntries } from '../../subscriptionFeedMerge'
 
 /**
@@ -272,9 +272,12 @@ export function useSubscriptionFeed() {
    * ago and another three days ago there is no true answer, and of the two
    * available lies the older one cannot make anything look fresher than it is.
    *
-   * @type {import('vue').ComputedRef<string>}
+   * Raw rather than worded: how long ago that was is a question for whoever
+   * shows it, against a clock that keeps moving after this is computed.
+   *
+   * @type {import('vue').ComputedRef<number | null>}
    */
-  const lastRefreshTimestamp = computed(() => {
+  const lastRefreshAt = computed(() => {
     let oldest = null
 
     for (const feed of feeds.value) {
@@ -285,7 +288,7 @@ export function useSubscriptionFeed() {
       }
     }
 
-    return oldest == null ? '' : getRelativeTimeFromDate(oldest, true)
+    return oldest
   })
 
   /**
@@ -709,7 +712,7 @@ export function useSubscriptionFeed() {
     upcomingList,
     errorChannels,
     attemptedFetch,
-    lastRefreshTimestamp,
+    lastRefreshAt,
     noteVisibleEntries,
     refresh
   }

@@ -1,11 +1,7 @@
 <template>
   <div>
     <FtCard class="card">
-      <h2>
-        <FontAwesomeIcon
-          :icon="['fas', 'rss']"
-          class="subscriptionIcon"
-        />
+      <h2 class="visuallyHidden">
         {{ $t("Subscriptions.Subscriptions") }}
       </h2>
       <div class="controlRow">
@@ -23,7 +19,19 @@
             @toggle="toggleFeed(feed)"
           />
         </div>
-        <FtDensitySwitch />
+        <FtRefreshWidget
+          :disable-refresh="isLoading || !activeProfileHasSubscriptions"
+          :last-refresh-at="lastRefreshAt"
+          :title="$t('Subscriptions.Subscriptions')"
+          :activity-label="activityLabel"
+          :activity-progress="activityProgress"
+          :can-stop-activity="canStopActivity"
+          @click="refresh"
+          @stop-activity="stopActivity"
+        />
+        <div class="pageControls">
+          <FtDensitySwitch />
+        </div>
       </div>
       <SubscriptionsUpcomingShelf
         v-if="anyFeedEnabled && !isLoading"
@@ -32,13 +40,9 @@
       <SubscriptionsTabUi
         v-if="anyFeedEnabled"
         :is-loading="isLoading"
-        :is-refreshing="isRefreshing"
         :video-list="entryList"
         :error-channels="errorChannels"
         :attempted-fetch="attemptedFetch"
-        :last-refresh-timestamp="lastRefreshTimestamp"
-        :title="$t('Subscriptions.Subscriptions')"
-        @refresh="refresh"
         @visible-entries="noteVisibleEntries"
       />
       <p
@@ -52,15 +56,18 @@
 </template>
 
 <script setup>
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtDensitySwitch from '../../components/FtDensitySwitch/FtDensitySwitch.vue'
+import FtRefreshWidget from '../../components/FtRefreshWidget/FtRefreshWidget.vue'
 import FtToggleChip from '../../components/FtToggleChip/FtToggleChip.vue'
 import SubscriptionsTabUi from '../../components/SubscriptionsTabUi/SubscriptionsTabUi.vue'
 import SubscriptionsUpcomingShelf from '../../components/SubscriptionsUpcomingShelf/SubscriptionsUpcomingShelf.vue'
 
+import store from '../../store/index'
+
+import { useSubscriptionActivity } from '../../composables/useSubscriptionActivity'
 import { useSubscriptionFeed } from '../../composables/useSubscriptionFeed'
 import { useSubscriptionFeedTitle } from '../../composables/useSubscriptionFeedTitle'
 
@@ -70,6 +77,8 @@ import {
   setSubscriptionFeedShown,
   subscriptionFeedIsShown
 } from '../../helpers/subscriptionFeeds'
+
+import { KeyboardShortcuts } from '../../../constants'
 
 /**
  * The subscriptions page: one stream, not four tabs.
@@ -105,10 +114,56 @@ const {
   upcomingList,
   errorChannels,
   attemptedFetch,
-  lastRefreshTimestamp,
+  lastRefreshAt,
   noteVisibleEntries,
   refresh
 } = useSubscriptionFeed()
+
+/*
+ * How fresh the stream is and what is being done about it, in the control row
+ * over it. Here rather than down in the stream component because the row is
+ * here, and because refreshing is the page's business: the button, the
+ * keyboard shortcut and the one condition that disables both belong together.
+ */
+const {
+  label: activityLabel,
+  progress: activityProgress,
+  canStop: canStopActivity,
+  stop: stopActivity
+} = useSubscriptionActivity({ isRefreshing })
+
+const activeProfileHasSubscriptions = computed(() => {
+  return store.getters.getActiveProfile.subscriptions.length > 0
+})
+
+/**
+ * @param {KeyboardEvent} event
+ */
+function keyboardShortcutHandler(event) {
+  if (document.activeElement.classList.contains('ft-input')) {
+    return
+  }
+  // Avoid handling events due to user holding a key (not released)
+  // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/repeat
+  if (event.repeat) { return }
+
+  switch (event.key.toLowerCase()) {
+    case 'f5':
+    case KeyboardShortcuts.APP.SITUATIONAL.REFRESH:
+      if (!isLoading.value && activeProfileHasSubscriptions.value) {
+        refresh()
+      }
+      break
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', keyboardShortcutHandler)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', keyboardShortcutHandler)
+})
 
 /**
  * The same icons the cards' kind markers carry, so a kind looks the same

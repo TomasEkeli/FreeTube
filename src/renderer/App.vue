@@ -4,9 +4,7 @@
     class="app"
     :class="{
       hideOutlines: outlinesHidden,
-      isLocaleRightToLeft: isLocaleRightToLeft,
-      isSideNavOpen: isSideNavOpen,
-      hideLabelsSideBar: hideLabelsSideBar && !isSideNavOpen
+      isLocaleRightToLeft: isLocaleRightToLeft
     }"
   >
     <TopNav
@@ -141,12 +139,6 @@ const backendPreference = computed(() => store.getters.getBackendPreference)
 
 /** @type {import('vue').ComputedRef<boolean>} */
 const backendFallback = computed(() => store.getters.getBackendFallback)
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const isSideNavOpen = computed(() => store.getters.getIsSideNavOpen)
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const hideLabelsSideBar = computed(() => store.getters.getHideLabelsSideBar)
 
 /** @type {import('vue').ComputedRef<boolean>} */
 const isAnyPromptOpen = computed(() => store.getters.isAnyPromptOpen)
@@ -790,4 +782,5 @@ async function getClip(clipId) {
 
 <style src="./themes.css" />
 <style src="./density.css" />
+<style src="./layout.css" />
 <style scoped src="./App.css" />

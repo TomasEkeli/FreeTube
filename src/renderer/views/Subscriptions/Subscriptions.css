@@ -11,10 +11,6 @@
 /* The control row and the chips in it are shared with Explore; they live in
    components/FtToggleChip/chipRow.css. */
 
-.subscriptionIcon {
-  color: var(--primary-color);
-}
-
 @media only screen and (width <= 680px) {
   .card {
     inline-size: 90%;

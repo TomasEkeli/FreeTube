@@ -4,18 +4,22 @@
   margin-inline: auto;
 }
 
-/* The heading carries the density switch, because this page has no row of
-   controls and no page grows one to hold it; see FtDensitySwitch.vue. */
+/* The heading is in the page for a screen reader but not on it, so this row
+   carries only the density switch and how fresh the page is: this page has no
+   row of controls and no page grows one to hold them; see FtDensitySwitch.vue. */
 .headingRow {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0 16px;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
-.headingIcon {
-  color: var(--primary-color);
+.pageControls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }
 
 @media only screen and (width <= 680px) {

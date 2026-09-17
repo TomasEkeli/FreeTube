@@ -26,7 +26,7 @@ const state = {
   // they were fetched — because they arrive together. Finding out which
   // destinations have videos in them *is* fetching them.
   //
-  // `{ [region]: { fetchedAt: Date, categories: ExploreCategory[] } }`
+  // `{ [region]: { fetchedAt: number, categories: ExploreCategory[] } }`
   exploreCache: {},
   cachedPlaylist: null,
   deArrowCache: {},
@@ -720,12 +720,16 @@ const mutations = {
 
   /**
    * @param {typeof state} state
-   * @param {{region: string, value: {fetchedAt: Date, categories: any[]}}} param1
+   * @param {{region: string, value: {fetchedAt: number, categories: any[]}}} param1
    */
   setExploreCache (state, { region, value }) {
     state.exploreCache = { ...state.exploreCache, [region]: value }
   },
 
+  /**
+   * @param {typeof state} state
+   * @param {number} timestamp epoch milliseconds
+   */
   setLastPopularRefreshTimestamp (state, timestamp) {
     state.lastPopularRefreshTimestamp = timestamp
   },
