@@ -1,55 +1,35 @@
-@use '../../scss-partials/utils';
-
-.floatingRefreshSection {
-  box-sizing: border-box;
-  padding-block: 5px;
-  padding-inline: 10px;
-  box-shadow: 0 2px 1px 0 var(--primary-shadow-color);
-  background-color: var(--card-bg-color);
-  border-inline-start: 2px solid var(--primary-shadow-color);
-  display: flex;
+/*
+ * Sized to sit in a row of page controls, not to be a band of its own: no
+ * background, no shadow, nothing that draws a line across the page above the
+ * grid.
+ */
+.refreshControl {
   align-items: center;
-  gap: 5px;
-  justify-content: flex-end;
-
-  @include utils.fixed-top-bar;
+  display: flex;
+  gap: 12px;
 }
 
-.floatingRefreshSection:has(.lastRefreshTimestamp + .refreshButton) {
-  justify-content: space-between;
-}
-
-.lastRefreshTimestamp {
-  margin-block: 0;
-  text-align: center;
-  font-size: 16px;
-}
-
-/*
-  Pushed hard against the leading edge so the buttons stay together at the
-  trailing one. Space-between would not do: with the stop button present there
-  are three children, and the middle one lands somewhere near the centre rather
-  than beside the control it belongs with.
-*/
-.activityLabel {
-  margin-block: 0;
-  margin-inline-end: auto;
-  text-align: start;
-  font-size: 16px;
+.statusLabel {
   color: var(--tertiary-text-color);
+  font-size: 0.85rem;
+  margin-block: 0;
+  white-space: nowrap;
 }
 
 /*
-  A thin bar along the bottom edge of the strip, the same idiom as the app's
-  global progress bar. Deliberately without a figure beside it: how far along it
-  is worth knowing, the channel counts behind it are not.
-*/
+ * In the line, after the words it belongs to, rather than pinned under them:
+ * the row is one control tall and there is no room beneath it for a bar of its
+ * own. The unfilled part of the track is drawn as well as the filled part —
+ * without it there is a growing line and no way to see how far it has to go.
+ *
+ * Deliberately without a figure beside it: how far along it is worth knowing,
+ * the channel counts behind it are not.
+ */
 .activityProgressTrack {
-  position: absolute;
-  inset-block-end: 0;
-  inset-inline: 0;
-  block-size: 2px;
   background-color: var(--secondary-card-bg-color);
+  block-size: 4px;
+  border-radius: 2px;
+  inline-size: 90px;
   overflow: hidden;
 }
 
@@ -85,14 +65,5 @@
 
   .activityProgressFill {
     transition: none;
-  }
-}
-
-@media only screen and (width <= 680px) {
-  .floatingRefreshSection,
-  .floatingRefreshSection.sideNavOpen,
-  .floatingRefreshSection.hideLabelsSideBar {
-    inline-size: 100%;
-    border-inline-start: none;
   }
 }
