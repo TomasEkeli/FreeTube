@@ -30,6 +30,7 @@ import {
   removeFromArrayIfExists,
   copyToClipboard,
 } from '../../helpers/utils'
+import { isSponsorBlockMarkOnlyChannel } from '../../helpers/sponsorblock'
 import { AudioGainStage, loudnessDbToGain } from '../../helpers/player/audioGain'
 import { MANIFEST_TYPE_SABR } from '../../helpers/player/SabrManifestParser'
 import { sabrWallInjectionEnabled, shouldAbandonRefresh } from '../../helpers/player/sabrWallInjection'
@@ -142,6 +143,12 @@ export default defineComponent({
       default: ''
     },
     videoId: {
+      type: String,
+      default: ''
+    },
+    // Only used to ask whether this channel is one of the ones SponsorBlock
+    // marks but never skips.
+    channelId: {
       type: String,
       default: ''
     },
@@ -502,6 +509,11 @@ export default defineComponent({
         'filler'
       ]
 
+      // Some channels' sponsor reads are part of the show, so the reader can put
+      // the channel on a list that holds every skip back. The segments are still
+      // asked for and still drawn on the seek bar: what is dropped is the jump.
+      const markOnly = isSponsorBlockMarkOnlyChannel(props.channelId)
+
       /** @type {Set<SponsorBlockCategory>} */
       const autoSkip = new Set()
 
@@ -553,11 +565,11 @@ export default defineComponent({
           seekBar.push(x)
         }
 
-        if (sponsorVal.skip === 'autoSkip') {
+        if (sponsorVal.skip === 'autoSkip' && !markOnly) {
           autoSkip.add(x)
         }
 
-        if (sponsorVal.skip === 'promptToSkip') {
+        if (sponsorVal.skip === 'promptToSkip' && !markOnly) {
           promptSkip.add(x)
         }
 

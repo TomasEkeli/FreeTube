@@ -1,5 +1,63 @@
 import store from '../store/index'
 
+/**
+ * Whether this channel's segments are only ever marked, never skipped.
+ * Reads the setting through the store getter, so callers that ask inside a
+ * computed stay reactive to the list changing.
+ * @param {string} channelId
+ * @returns {boolean}
+ */
+export function isSponsorBlockMarkOnlyChannel(channelId) {
+  if (!channelId) {
+    return false
+  }
+
+  return store.getters.getSponsorBlockMarkOnlyChannels
+    .some(channel => channel.id === channelId)
+}
+
+/**
+ * Add the channel to the never-skip list, or take it off again if it is already
+ * on it. The name is stored alongside the id purely so the settings list has
+ * something to show.
+ * @param {string} channelId
+ * @param {string} channelName
+ * @returns {boolean} whether the channel is on the list afterwards
+ */
+export function toggleSponsorBlockMarkOnlyChannel(channelId, channelName) {
+  if (!channelId) {
+    return false
+  }
+
+  const channels = store.getters.getSponsorBlockMarkOnlyChannels
+
+  if (channels.some(channel => channel.id === channelId)) {
+    store.dispatch(
+      'updateSponsorBlockMarkOnlyChannels',
+      channels.filter(channel => channel.id !== channelId)
+    )
+    return false
+  }
+
+  store.dispatch(
+    'updateSponsorBlockMarkOnlyChannels',
+    [...channels, { id: channelId, name: channelName || channelId }]
+  )
+  return true
+}
+
+/**
+ * @param {string[]} channelIds
+ */
+export function removeSponsorBlockMarkOnlyChannels(channelIds) {
+  const removing = new Set(channelIds)
+
+  store.dispatch(
+    'updateSponsorBlockMarkOnlyChannels',
+    store.getters.getSponsorBlockMarkOnlyChannels.filter(channel => !removing.has(channel.id))
+  )
+}
+
 async function getVideoHash(videoId) {
   const videoIdBuffer = new TextEncoder().encode(videoId)
 

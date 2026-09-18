@@ -30,6 +30,7 @@
           :format="activeFormat"
           :thumbnail="thumbnail"
           :video-id="videoId"
+          :channel-id="channelId"
           :chapters="videoChapters"
           :current-chapter-index="videoCurrentChapterIndex"
           :chapters-src="chaptersSrc"

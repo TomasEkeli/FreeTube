@@ -1104,6 +1104,22 @@ Chapters:
   Chapters: Chapters
   Key Moments: Key Moments
 
+SponsorBlock:
+  Never Skip On This Channel: Never skip SponsorBlock segments on this channel
+  Resume Skipping On This Channel: Skip SponsorBlock segments on this channel again
+  Segments Will Be Marked Only: Segments on {channelName} are now marked, not skipped
+  Segments Will Be Skipped Again: Segments on {channelName} are skipped again
+  Channels That Are Never Skipped: Channels that are never skipped
+  Channels That Are Never Skipped Explanation: Segments on these channels are shown
+    on the seek bar but never skipped past, whatever the categories above say. Add
+    and remove channels from a channel page, or from the video you are watching.
+  No Channels Are On The List: No channels are on the list.
+  Select Channels To Remove: Select channels to remove
+  Select All: Select all
+  Select None: Select none
+  Remove Selected: Remove selected
+  Remove All: Remove all
+
 Mini Player: Mini Player
 Comments:
   Comments: Comments
