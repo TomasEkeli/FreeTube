@@ -104,6 +104,10 @@
           />
         </span>
         <span class="videoOptionsMobileRow">
+          <FtSponsorBlockMarkOnlyButton
+            :channel-id="channelId"
+            :channel-name="channelName"
+          />
           <FtIconButton
             v-if="USING_ELECTRON && externalPlayer !== ''"
             :title="t('Video.External Player.OpenInTemplate', { externalPlayer })"
@@ -139,6 +143,7 @@ import { useI18n } from 'vue-i18n'
 import FtCard from '../ft-card/ft-card.vue'
 import FtIconButton from '../FtIconButton/FtIconButton.vue'
 import FtShareButton from '../FtShareButton/FtShareButton.vue'
+import FtSponsorBlockMarkOnlyButton from '../FtSponsorBlockMarkOnlyButton/FtSponsorBlockMarkOnlyButton.vue'
 import FtSubscribeButton from '../FtSubscribeButton/FtSubscribeButton.vue'
 
 import store from '../../store'
