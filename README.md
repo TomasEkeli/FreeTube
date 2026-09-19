@@ -46,6 +46,8 @@ You can now easily change region on the page, and the last four you looked at st
 
 Navigation has moved to the top bar, which gives the page back the width the sidebar was taking. Cards come in tight, standard, spacious and wall density. I use wall. Wall packs spacious-sized thumbnails edge to edge with the text over them. The control row stays on screen while you scroll. With wall and full window as the default viewing mode the app gets mostly out of the way and the content is king.
 
+Hovering a video card shows a checkmark beside the playlist buttons, which marks the video as watched, or takes it back out of the history if it is already there. The external player button is gone from the cards, since I never used it.
+
 ### Comments
 
 On the local API, comments load themselves as you scroll to them, keep paging, and open each thread to its first few replies with the rest behind a button. Loading follows what is visible, so a page of twenty threads does not fire twenty requests at once. Invidious keeps click-to-load. This is essentially a limited endless-scroll for comments. It remains impossible to comment, as there is no login functionality, but it is easier to read the comments now.

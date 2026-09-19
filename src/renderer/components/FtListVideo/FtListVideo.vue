@@ -69,23 +69,20 @@
           {{ displayDuration }}
         </template>
       </div>
-      <FtIconButton
-        v-if="externalPlayer !== '' && !externalPlayerIsDefaultViewingMode"
-        :title="t('Video.External Player.OpenInTemplate', { externalPlayer })"
-        :icon="['fas', 'external-link-alt']"
-        class="externalPlayerIcon"
-        theme="base"
-        :padding="appearance === 'watchPlaylistItem' ? 6 : 7"
-        :size="appearance === 'watchPlaylistItem' ? 12 : 16"
-        draggable="true"
-        @click="handleExternalPlayer"
-        @dragstart="onDragStart"
-      />
       <span
         class="playlistIcons"
         draggable="true"
         @dragstart="onDragStart"
       >
+        <FtIconButton
+          :title="markWatchedIconText"
+          :icon="['fas', 'check']"
+          class="markWatchedIcon"
+          :theme="markWatchedIconTheme"
+          :padding="playlistIconPadding"
+          :size="playlistIconSize"
+          @click="toggleWatched"
+        />
         <FtIconButton
           v-if="showPlaylists"
           :title="t('User Playlists.Add to Playlist')"
@@ -1023,6 +1020,16 @@ const quickBookmarkIconText = computed(() => {
 
 const quickBookmarkIconTheme = computed(() => isInQuickBookmarkPlaylist.value ? 'base favorite' : 'base')
 
+const markWatchedIconText = computed(() => {
+  return historyEntryExists.value
+    ? t('Video.Remove From History')
+    : t('Video.Mark As Watched')
+})
+
+// A watched card is already dimmed and badged, so the filled state is here to
+// say what the click will undo, not to announce that the video was watched.
+const markWatchedIconTheme = computed(() => historyEntryExists.value ? 'primary' : 'base')
+
 const playlistIconPadding = computed(() => props.appearance === 'watchPlaylistItem' ? 5 : 6)
 const playlistIconSize = computed(() => props.appearance === 'watchPlaylistItem' ? 14 : 18)
 
@@ -1274,6 +1281,14 @@ function removeFromWatched() {
   store.dispatch('removeFromHistory', id.value)
 
   showToast(t('Video.Video has been removed from your history'))
+}
+
+function toggleWatched() {
+  if (historyEntryExists.value) {
+    removeFromWatched()
+  } else {
+    markAsWatched()
+  }
 }
 
 function moveVideoToTheTop() {
