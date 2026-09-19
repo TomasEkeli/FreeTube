@@ -79,7 +79,6 @@ $watched-transition-duration: 0.5s;
     .thumbnailLink,
     .videoWatched,
     .videoDuration,
-    .externalPlayerIcon,
     .playlistIcons,
     .watchedProgressBar,
     .videoCountContainer,
@@ -139,13 +138,6 @@ $watched-transition-duration: 0.5s;
       }
     }
 
-    .externalPlayerIcon {
-      place-self: flex-end start;
-      font-size: 17px;
-      margin-block-end: 4px;
-      margin-inline-start: 4px;
-    }
-
     .playlistIcons {
       justify-self: end;
       margin-inline-end: 3px;
@@ -154,10 +146,21 @@ $watched-transition-duration: 0.5s;
       grid-auto-flow: column;
       justify-content: flex-end;
       block-size: fit-content;
+
+      // The round buttons touch each other without this, and read as one
+      // smeared control rather than three.
+      gap: 4px;
+
+      // A playlist item is a smaller thumbnail carrying more of these icons,
+      // so it can afford less room between them.
+      @include is-watch-playlist-item {
+        gap: 2px;
+      }
     }
 
     .quickBookmarkVideoIcon,
     .addToPlaylistIcon,
+    .markWatchedIcon,
     .trashIcon,
     .upArrowIcon,
     .downArrowIcon {
@@ -436,8 +439,7 @@ $watched-transition-duration: 0.5s;
     }
   }
 
-  .playlistIcons,
-  .externalPlayerIcon {
+  .playlistIcons {
     opacity: $thumbnail-overlay-opacity;
   }
 
@@ -445,10 +447,10 @@ $watched-transition-duration: 0.5s;
     &:hover .quickBookmarkVideoIcon:not(.alwaysVisible),
     .quickBookmarkVideoIcon.bookmarked:not(.alwaysVisible),
     &:hover .addToPlaylistIcon:not(.alwaysVisible),
-    &:hover .externalPlayerIcon,
+    &:hover .markWatchedIcon,
     &:has(:focus-visible) .addToPlaylistIcon:not(.alwaysVisible),
     &:has(:focus-visible) .quickBookmarkVideoIcon:not(.alwaysVisible),
-    &:has(:focus-visible) .externalPlayerIcon {
+    &:has(:focus-visible) .markWatchedIcon {
       opacity: 1;
     }
 
@@ -461,7 +463,7 @@ $watched-transition-duration: 0.5s;
 
     .quickBookmarkVideoIcon:not(.alwaysVisible),
     .addToPlaylistIcon:not(.alwaysVisible),
-    .externalPlayerIcon,
+    .markWatchedIcon,
     .optionsButton {
       opacity: 0;
       transition: visibility 0s, opacity 0.2s linear;
