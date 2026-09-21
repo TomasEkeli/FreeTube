@@ -65,6 +65,25 @@ const AdvancedRequestType = shaka.net.NetworkingEngine.AdvancedRequestType
 const TrackLabelFormat = shaka.ui.Overlay.TrackLabelFormat
 const { Severity: ErrorSeverity, Category: ErrorCategory, Code: ErrorCode } = shaka.util.Error
 
+/**
+ * How many times running we let shaka-player's own recovery keep the video
+ * before we stop standing aside for it.
+ *
+ * It resets the media source and carries on, but nothing in shaka bounds how
+ * often: `resetMediaSource(force)` skips its own `minTimeBetweenRecoveries`
+ * when the streaming engine calls it for a failed append. A segment that is
+ * rejected every time it is fetched would otherwise cycle forever, which is a
+ * worse outcome for the viewer than the format fallback they used to get.
+ */
+const SHAKA_HANDLED_ERROR_LIMIT = 3
+
+/**
+ * A failure this long after the previous one is a fresh incident rather than a
+ * loop, so the count above starts over. One bad segment every few minutes is
+ * exactly what we want to keep absorbing; several within seconds is the loop.
+ */
+const SHAKA_HANDLED_ERROR_WINDOW_MS = 30_000
+
 /*
   Mapping of Shaka localization keys for control labels to FreeTube shortcuts.
   See: https://github.com/shaka-project/shaka-player/blob/main/ui/locales/en.json
@@ -3108,6 +3127,12 @@ export default defineComponent({
 
     let ignoreErrors = false
 
+    /** Consecutive errors shaka-player said it had already dealt with */
+    let shakaHandledErrors = 0
+
+    /** When the last of those arrived, to tell a loop from separate incidents */
+    let lastShakaHandledErrorAt = 0
+
     /**
      * @param {shaka.util.Error} error
      * @param {string} context
@@ -3138,6 +3163,43 @@ export default defineComponent({
       }
 
       logShakaError(error, context, props.videoId, details)
+
+      // shaka-player sets `handled` when it has already taken its own remedy
+      // for this error: for a failed SourceBuffer append that means it reset
+      // the media source and is carrying on from the same position, and for a
+      // network failure that it dropped the offending stream for a sibling.
+      // It fires the error event either way, so acting on one of these used to
+      // undo a recovery that was already under way. What the viewer saw was a
+      // video replaced by audio at the start over a single rejected segment,
+      // which YouTube may well have served badly only once.
+      //
+      // Standing aside has to happen before `ignoreErrors` latches below,
+      // because that latch is only ever released by a format switch or a
+      // session reload. Setting it here without changing format would mean
+      // every later error in the video went unanswered.
+      if (error.handled === true) {
+        const now = Date.now()
+
+        if (now - lastShakaHandledErrorAt > SHAKA_HANDLED_ERROR_WINDOW_MS) {
+          shakaHandledErrors = 0
+        }
+
+        shakaHandledErrors += 1
+        lastShakaHandledErrorAt = now
+
+        if (shakaHandledErrors <= SHAKA_HANDLED_ERROR_LIMIT) {
+          console.warn(
+            `shaka-player reports it has already handled this error, leaving it to recover (${shakaHandledErrors}/${SHAKA_HANDLED_ERROR_LIMIT})`
+          )
+          return
+        }
+
+        // Out of patience: its recovery is not converging, so fall through and
+        // let the format fallback have its turn after all.
+        console.error(
+          `shaka-player has handled ${shakaHandledErrors} errors in a row without recovering, so treating this one as fatal`
+        )
+      }
 
       // text related errors aren't serious (captions and seek bar thumbnails), so we should just log them
       // TODO: consider only emitting when the severity is crititcal?

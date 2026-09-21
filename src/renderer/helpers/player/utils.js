@@ -6,6 +6,22 @@ import { sponsorBlockSkipSegments } from '../sponsorblock'
 /** @typedef {import('../sponsorblock').SponsorBlockCategory} SponsorBlockCategory */
 
 /**
+ * The `code` of the `MediaError` that the video element was carrying when a
+ * SourceBuffer operation failed. Shaka passes it through as the first element
+ * of `data` without saying what it is, and 3 (a decode failure, meaning the
+ * bytes we appended were rejected by the demuxer) has to be told apart from 2
+ * (the network dropped underneath the append) before either can be acted on.
+ * https://developer.mozilla.org/en-US/docs/Web/API/MediaError/code
+ */
+const MEDIA_ERROR_NAMES = {
+  0: 'NONE (the video element was not carrying an error)',
+  1: 'MEDIA_ERR_ABORTED',
+  2: 'MEDIA_ERR_NETWORK',
+  3: 'MEDIA_ERR_DECODE (the appended bytes were rejected)',
+  4: 'MEDIA_ERR_SRC_NOT_SUPPORTED'
+}
+
+/**
  * @param {shaka.util.Error} error
  * @param {string} context
  * @param {string} videoId
@@ -25,14 +41,42 @@ export function logShakaError(error, context, videoId, details) {
   /** @type {keyof Code} */
   const codeText = Object.keys(Code).find((/** @type {keyof Code} */ key) => Code[key] === error.code)
 
-  const message =
+  let message =
     'Player Error (category and code explainations here: https://shaka-player-demo.appspot.com/docs/api/shaka.util.Error.html)\n' +
     `Video ID: "${videoId}"\n` +
     `FreeTube player context: "${context}"\n\n` +
     `Severity: ${severityText} (${error.severity})\n` +
     `Category: ${categoryText} (${error.category})\n` +
     `Code: ${codeText} (${error.code})\n` +
-    `Stack trace:\n${error.stack}`
+    // Whether shaka-player has already made its own attempt at recovery for
+    // this error, which for a failed SourceBuffer append means it has reset the
+    // media source and is carrying on. It fires the event either way, so
+    // without this line the log cannot tell a dead player from a recovering one
+    `Handled by shaka-player: ${error.handled === true}\n`
+
+  // The media source codes carry their detail positionally, so spell it out
+  // rather than leaving a collapsed `Array(2)` that only devtools can open.
+  // Under WSLg devtools crash the renderer, so the log file is all there is.
+  //
+  // The two codes do not agree on a layout: FAILED, raised from the
+  // SourceBuffer's own error event, is [mediaErrorCode, uri], while THREW,
+  // raised when the append call itself threw, is [exception, message, uri].
+  if (error.code === Code.MEDIA_SOURCE_OPERATION_FAILED) {
+    const mediaErrorCode = error.data?.[0]
+
+    message +=
+      `Video element error: ${MEDIA_ERROR_NAMES[mediaErrorCode] ?? 'unrecognised'} (${mediaErrorCode})\n` +
+      `Failing segment: ${error.data?.[1] ?? 'none reported'}\n`
+  } else if (error.code === Code.MEDIA_SOURCE_OPERATION_THREW) {
+    const exception = error.data?.[0]
+
+    message +=
+      `Append threw: ${exception?.name ?? 'unknown'}: ${exception?.message ?? 'no message'}\n` +
+      `Shaka note: ${error.data?.[1] ?? 'none'}\n` +
+      `Failing segment: ${error.data?.[2] ?? 'none reported'}\n`
+  }
+
+  message += `Stack trace:\n${error.stack}`
 
   /** @type {*[]} */
   const args = [message]
