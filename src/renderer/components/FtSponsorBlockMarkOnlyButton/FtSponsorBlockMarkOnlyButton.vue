@@ -50,9 +50,9 @@ const title = computed(() => {
     : t('SponsorBlock.Never Skip On This Channel')
 })
 
-function toggle() {
+async function toggle() {
   const channelName = props.channelName || props.channelId
-  const nowMarkOnly = toggleSponsorBlockMarkOnlyChannel(props.channelId, channelName)
+  const nowMarkOnly = await toggleSponsorBlockMarkOnlyChannel(props.channelId, channelName)
 
   showToast(
     nowMarkOnly
