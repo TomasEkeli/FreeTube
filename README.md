@@ -22,6 +22,8 @@ The player runs shaka-player 5.2, a minor version ahead of upstream's. This is t
 
 Another change is that the volume bar runs past 100%. Some videos are mastered so quietly that they are inaudible at FreeTube's maximum volume. In this version the volume can go up to a configurable ceiling of 1000% (+20 dB). Optional loudness normalisation corrects each video for how loud it was mastered (YouTube provides this information). This also lowers the volume on very loud videos automatically. The feature is off by default, but I have it enabled.
 
+A small pin on the control bar keeps the player's controls on screen instead of letting them fade, and the choice sticks between videos.
+
 ### SponsorBlock
 
 Some channels read their sponsors as part of the show. Skipping SponsorBlock's categories can now be set per-channel. This is for channels where ads are actually fun and cool. The switch for this is on the channel page and on the video you are watching, and there is a list in the SponsorBlock settings, where you can take any of them out again.

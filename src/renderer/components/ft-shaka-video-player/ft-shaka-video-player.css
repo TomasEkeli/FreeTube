@@ -233,6 +233,24 @@
 }
 
 /*
+  The pin button is the one control that stays on screen whenever it is on, so it
+  is drawn smaller and fainter than its neighbours and only comes up to full
+  strength under the pointer.
+ */
+:deep(.shaka-controls-button-panel>.pin-controls-button) {
+  opacity: 0.5;
+}
+
+:deep(.shaka-controls-button-panel>.pin-controls-button:hover),
+:deep(.shaka-controls-button-panel>.pin-controls-button:focus-visible) {
+  opacity: 1;
+}
+
+:deep(.shaka-controls-button-panel>.pin-controls-button .shaka-ui-icon) {
+  font-size: 18px;
+}
+
+/*
   The part of the volume bar past 100%, where the gain stage rather than the video
   element supplies the volume.
  */
