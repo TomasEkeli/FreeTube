@@ -256,6 +256,10 @@ const state = {
   onlyShowLatestFromChannel: false,
   onlyShowLatestFromChannelNumber: 1,
   openDeepLinksInNewWindow: false,
+  // Keeps the player's controls on screen instead of letting them fade once the
+  // mouse goes still. Toggled from the pin button on the player itself, so the
+  // choice is made where it is felt and outlives the video it was made on.
+  pinPlayerControls: false,
   playNextVideo: false,
   proxyHostname: '127.0.0.1',
   proxyPort: '9050',

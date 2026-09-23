@@ -68,6 +68,12 @@
           @change="updateDisplayVideoPlayButton"
         />
         <FtToggleSwitch
+          :label="t('Settings.Player Settings.Pin Player Controls')"
+          :compact="true"
+          :default-value="pinPlayerControls"
+          @change="updatePinPlayerControls"
+        />
+        <FtToggleSwitch
           :label="t('Settings.Player Settings.Enter Fullscreen on Display Rotate')"
           :compact="true"
           :default-value="enterFullscreenOnDisplayRotate"
@@ -390,6 +396,16 @@ const displayVideoPlayButton = computed(() => store.getters.getDisplayVideoPlayB
  */
 function updateDisplayVideoPlayButton(value) {
   store.dispatch('updateDisplayVideoPlayButton', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const pinPlayerControls = computed(() => store.getters.getPinPlayerControls)
+
+/**
+ * @param {boolean} value
+ */
+function updatePinPlayerControls(value) {
+  store.dispatch('updatePinPlayerControls', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

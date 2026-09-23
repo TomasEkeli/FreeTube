@@ -7,6 +7,7 @@ import { KeyboardShortcuts } from '../../../constants'
 import { AudioTrackSelection } from './player-components/AudioTrackSelection'
 import { FullWindowButton } from './player-components/FullWindowButton'
 import { LegacyQualitySelection } from './player-components/LegacyQualitySelection'
+import { PinControlsButton } from './player-components/PinControlsButton'
 import { ScreenshotButton } from './player-components/ScreenshotButton'
 import { StatsButton } from './player-components/StatsButton'
 import { TheatreModeButton } from './player-components/TheatreModeButton'
@@ -347,6 +348,66 @@ export default defineComponent({
         showBufferingSpinner: !newValue
       })
     })
+
+    /** @type {import('vue').ComputedRef<boolean>} */
+    const pinPlayerControls = computed(() => {
+      return store.getters.getPinPlayerControls
+    })
+
+    watch(pinPlayerControls, (newValue) => {
+      if (!ui) {
+        return
+      }
+
+      // shaka's `showUIAlways` stops both the fade and the mouse-still timer
+      // from hiding the controls. Reconfiguring rebuilds them, which is also
+      // what gives the pin button its new state.
+      ui.configure({
+        showUIAlways: newValue
+      })
+
+      // Pinning while the controls are hidden has to bring them up, since
+      // shaka only stops hiding them and never shows them for this. Unpinning
+      // has to restart the mouse-still timer, which shaka stopped rearming
+      // while pinned, or the controls stay up until the mouse next moves.
+      showOverlayControls()
+
+      // showing the controls also shows the cursor, so arm the timer that
+      // hides it again (or, when unpinning, disarm it and leave that to shaka)
+      hideCursorWhenStillWhilePinned()
+    })
+
+    /**
+     * shaka hides the cursor from the same mouse-still callback that hides the
+     * controls, and `showUIAlways` returns from it before either happens. Left
+     * at that, pinning the controls would pin the cursor over the video too, so
+     * the cursor gets its own timer while the controls are pinned, matching
+     * shaka's three seconds.
+     */
+    const PINNED_CURSOR_HIDE_DELAY_MS = 3000
+
+    /** @type {number | null} */
+    let pinnedCursorTimeout = null
+
+    function clearPinnedCursorTimeout() {
+      if (pinnedCursorTimeout !== null) {
+        clearTimeout(pinnedCursorTimeout)
+        pinnedCursorTimeout = null
+      }
+    }
+
+    function hideCursorWhenStillWhilePinned() {
+      clearPinnedCursorTimeout()
+
+      if (!pinPlayerControls.value) {
+        return
+      }
+
+      pinnedCursorTimeout = setTimeout(() => {
+        pinnedCursorTimeout = null
+        container.value?.classList.add('no-cursor')
+      }, PINNED_CURSOR_HIDE_DELAY_MS)
+    }
 
     /** @type {import('vue').ComputedRef<number>} */
     const defaultSkipInterval = computed(() => {
@@ -969,6 +1030,7 @@ export default defineComponent({
           'ft_screenshot',
           'picture_in_picture',
           'ft_full_window',
+          'ft_pin_controls',
           'recenter_vr',
           'toggle_stereoscopic',
         ]
@@ -978,6 +1040,9 @@ export default defineComponent({
         uiConfig.controlPanelElements.push('overflow_menu', 'fullscreen')
       } else {
         uiConfig.controlPanelElements.push(
+          // first of the right-hand group, next to the spacer: the least
+          // important button there, and the one that stays on screen when on
+          'ft_pin_controls',
           'ft_screenshot',
           'ft_autoplay_toggle',
           'overflow_menu',
@@ -1015,6 +1080,9 @@ export default defineComponent({
 
       if (props.format === 'audio') {
         removeFromArrayIfExists(elementList, 'picture_in_picture')
+        // shaka already keeps the controls up for audio only playback
+        // (`showUIAlwaysOnAudioOnly`), so pinning would change nothing
+        removeFromArrayIfExists(elementList, 'ft_pin_controls')
       }
 
       if (isLive.value) {
@@ -1088,6 +1156,7 @@ export default defineComponent({
           // which is where the presets start too
           playbackRates: playbackRates.value,
           tapSeekDistance: defaultSkipInterval.value,
+          showUIAlways: pinPlayerControls.value,
 
           // we have our own ones (shaka-player's ones are quite limited)
           enableKeyboardPlaybackControls: false,
@@ -2380,6 +2449,24 @@ export default defineComponent({
       shakaOverflowMenu.registerElement('ft_theatre_mode', new TheatreModeButtonFactory())
     }
 
+    function registerPinControlsButton() {
+      events.addEventListener('setPinControls', (/** @type {CustomEvent} */ event) => {
+        store.dispatch('updatePinPlayerControls', event.detail)
+      })
+
+      /**
+       * @implements {shaka.extern.IUIElement.Factory}
+       */
+      class PinControlsButtonFactory {
+        create(rootElement, controls) {
+          return new PinControlsButton(pinPlayerControls.value, events, rootElement, controls)
+        }
+      }
+
+      shakaControls.registerElement('ft_pin_controls', new PinControlsButtonFactory())
+      shakaOverflowMenu.registerElement('ft_pin_controls', new PinControlsButtonFactory())
+    }
+
     function registerFullWindowButton() {
       events.addEventListener('setFullWindow', (/** @type {CustomEvent} */ event) => {
         if (event.detail) {
@@ -2548,6 +2635,9 @@ export default defineComponent({
 
       shakaControls.registerElement('ft_full_window', null)
       shakaOverflowMenu.registerElement('ft_full_window', null)
+
+      shakaControls.registerElement('ft_pin_controls', null)
+      shakaOverflowMenu.registerElement('ft_pin_controls', null)
 
       shakaControls.registerElement('ft_legacy_quality', null)
       shakaOverflowMenu.registerElement('ft_legacy_quality', null)
@@ -3409,6 +3499,7 @@ export default defineComponent({
 
       registerTheatreModeButton()
       registerFullWindowButton()
+      registerPinControlsButton()
       registerLegacyQualitySelection()
       registerStatsButton()
       registerSkipButtons()
@@ -3425,6 +3516,12 @@ export default defineComponent({
 
       controls.addEventListener('uiupdated', addUICustomizations)
       configureUI(true)
+
+      if (pinPlayerControls.value) {
+        // shaka's `showUIAlways` only keeps shown controls from hiding, so
+        // bring them up once for pinning to hold on to
+        showOverlayControls()
+      }
 
       document.removeEventListener('keydown', keyboardShortcutHandler)
       document.addEventListener('keydown', keyboardShortcutHandler)
@@ -3461,6 +3558,7 @@ export default defineComponent({
       // shaka-player doesn't start with the cursor hidden, so hide it here for instances in which the
       // cursor is in the video player area when the video first loads
       container.value.classList.add('no-cursor')
+      container.value.addEventListener('mousemove', hideCursorWhenStillWhilePinned)
 
       await performFirstLoad()
       // Whatever runs after `performFirstLoad` might be after switching to another page due to SABR backoff
@@ -3845,6 +3943,9 @@ export default defineComponent({
       }
 
       cleanUpCustomPlayerControls()
+
+      container.value?.removeEventListener('mousemove', hideCursorWhenStillWhilePinned)
+      clearPinnedCursorTimeout()
 
       gainStage?.release()
       gainStage = null

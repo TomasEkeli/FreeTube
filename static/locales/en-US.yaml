@@ -513,6 +513,7 @@ Settings:
     Scroll Playback Rate Over Video Player: Scroll Playback Rate Over Video Player
     Skip by Scrolling Over Video Player: Skip by Scrolling Over Video Player
     Display Play Button In Video Player: Display Play Button In Video Player
+    Pin Player Controls: Keep Player Controls Visible
     Enter Fullscreen on Display Rotate: Enter Fullscreen on Display Rotate
     Normalize Loudness: Normalize Loudness
     Next Video Interval: Autoplay Countdown Timer
@@ -1018,6 +1019,8 @@ Video:
     Take Screenshot: Take Screenshot
     Show Stats: Show Stats
     Hide Stats: Hide Stats
+    Pin Controls: Pin Controls
+    Unpin Controls: Unpin Controls
     Stats:
       Stats: Stats
       Video ID: 'Video ID: {videoId}'
