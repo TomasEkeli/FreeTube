@@ -434,27 +434,37 @@ export function selectionAfterTransfer(selection, dragged, targetProfileId, copy
 }
 
 /**
- * Unsubscribing from channels: for each, every profile it is in, the primary
- * one included. One removal per channel across all its profiles, the way the
- * subscribe button unsubscribes, so each goes out of every profile at once.
+ * Unsubscribing from channels: out of every profile any of them is in, the
+ * primary one included, as one removal. One write for the lot, however many
+ * channels: taken out one at a time, each channel would rewrite every profile
+ * it leaves.
  * @param {Profile[]} profileList
  * @param {string[]} channelIds
- * @returns {{ channelId: string, profileIds: string[] }[]}
+ * @returns {{ channelIds: string[], profileIds: string[] } | null} null when none of them is subscribed to
  */
 export function planUnsubscribe(profileList, channelIds) {
-  const removals = []
+  const wanted = new Set(channelIds)
+  const found = new Set()
+  const profileIds = []
 
-  for (const channelId of new Set(channelIds)) {
-    const profileIds = profileList
-      .filter(profile => profile.subscriptions.some(channel => channel.id === channelId))
-      .map(profile => profile._id)
+  for (const profile of profileList) {
+    let inProfile = false
 
-    if (profileIds.length > 0) {
-      removals.push({ channelId, profileIds })
+    for (const channel of profile.subscriptions) {
+      if (wanted.has(channel.id)) {
+        found.add(channel.id)
+        inProfile = true
+      }
+    }
+
+    if (inProfile) {
+      profileIds.push(profile._id)
     }
   }
 
-  return removals
+  if (found.size === 0) { return null }
+
+  return { channelIds: [...found], profileIds }
 }
 
 /**
@@ -581,4 +591,35 @@ export function duplicateCounts(profileList, memberships = channelMemberships(pr
  */
 export function profilesOutsideHome(memberships, channelId, homeProfileId) {
   return (memberships.get(channelId) ?? []).filter(profileId => profileId !== homeProfileId)
+}
+
+/**
+ * How many channels a planned transfer actually files: those it adds to the
+ * target, and for a move also those it only takes out of where they were
+ * dragged from, as a channel already in the target does.
+ * @param {Profile[]} profileList before the transfer
+ * @param {Profile[]} updated what `planTransfer` returned
+ * @param {string | null} targetProfileId
+ * @returns {number}
+ */
+export function countTransferred(profileList, updated, targetProfileId) {
+  const byId = new Map(profileList.map(profile => [profile._id, profile]))
+  const transferred = new Set()
+
+  for (const profile of updated) {
+    const before = new Set(byId.get(profile._id)?.subscriptions.map(channel => channel.id) ?? [])
+    const after = new Set(profile.subscriptions.map(channel => channel.id))
+
+    if (profile._id === targetProfileId) {
+      for (const channelId of after) {
+        if (!before.has(channelId)) { transferred.add(channelId) }
+      }
+    } else {
+      for (const channelId of before) {
+        if (!after.has(channelId)) { transferred.add(channelId) }
+      }
+    }
+  }
+
+  return transferred.size
 }

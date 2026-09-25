@@ -1,20 +1,20 @@
 <!--
-  The mark on a channel that is in more than one profile, and the two ways out
-  it offers: take the channel out of this profile only, or keep it here and
-  take it out of every other.
+  A button that opens a menu of choices, for the Channels page: the mark on a
+  channel in more than one profile, and the move and copy menus over the
+  columns.
 
-  A button and a menu, both reachable and usable from the keyboard: this and
-  dropping on a palette bubble are how channels are sorted without dragging.
-  The menu is put over the page instead of inside the row, as a column clips
-  whatever sticks out of it.
+  Both the button and the menu are usable from the keyboard, as these menus
+  are how channels are sorted without dragging. The menu is put over the page
+  instead of beside the button, as a column clips whatever sticks out of it.
 -->
 <template>
   <button
     ref="button"
     type="button"
-    class="duplicateButton"
+    class="menuButton"
+    :class="variant"
     :title="label"
-    :aria-label="label"
+    :aria-label="variant === 'icon' ? label : null"
     aria-haspopup="menu"
     :aria-expanded="open ? 'true' : 'false'"
     draggable="false"
@@ -22,7 +22,7 @@
     @keydown.enter.space.stop.prevent="openMenu(true)"
     @keydown.down.stop.prevent="openMenu(true)"
   >
-    <FontAwesomeIcon :icon="['fas', 'clone']" />
+    <slot />
   </button>
   <Teleport
     v-if="open"
@@ -30,7 +30,7 @@
   >
     <ul
       ref="menu"
-      class="duplicateMenu"
+      class="menu"
       role="menu"
       tabindex="-1"
       :aria-label="label"
@@ -38,26 +38,19 @@
       @keydown.stop="handleMenuKeydown"
       @focusout="handleFocusOut"
     >
-      <li role="none">
+      <li
+        v-for="item in items"
+        :key="item.value"
+        role="none"
+      >
         <button
           type="button"
           role="menuitem"
           class="menuItem"
           tabindex="-1"
-          @click.stop="choose('remove-here')"
+          @click.stop="choose(item.value)"
         >
-          {{ t('Channels.Overview.Remove This Duplicate') }}
-        </button>
-      </li>
-      <li role="none">
-        <button
-          type="button"
-          role="menuitem"
-          class="menuItem"
-          tabindex="-1"
-          @click.stop="choose('keep-here')"
-        >
-          {{ t('Channels.Overview.Keep Here Only') }}
+          {{ item.label }}
         </button>
       </li>
     </ul>
@@ -65,21 +58,27 @@
 </template>
 
 <script setup>
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
-import { useI18n } from 'vue-i18n'
 
-defineProps({
-  /** Says which profiles the channel is in */
+const props = defineProps({
+  /** What the menu is for: the button's tooltip, and the menu's name */
   label: {
     type: String,
     required: true
+  },
+  /** @type {import('vue').PropType<{ value: string, label: string }[]>} */
+  items: {
+    type: Array,
+    required: true
+  },
+  /** 'icon' for a small round button with only an icon in it, 'button' for one with text */
+  variant: {
+    type: String,
+    default: 'icon'
   }
 })
 
-const emit = defineEmits(['remove-here', 'keep-here'])
-
-const { t } = useI18n()
+const emit = defineEmits(['choose'])
 
 const button = useTemplateRef('button')
 const menu = useTemplateRef('menu')
@@ -96,17 +95,24 @@ function toggle() {
 }
 
 /**
- * Below the button, or above it where there is no room below; aligned to its
- * end so it stays inside the window.
+ * Below the button, or above it where there is no room below. Lined up with
+ * whichever side of the button leaves the menu inside the window. Physical
+ * sides, as the button's position is measured in them.
  */
 function positionMenu() {
   const rect = button.value.getBoundingClientRect()
+  const width = document.documentElement.clientWidth
   const roomBelow = window.innerHeight - rect.bottom
+  const roomAbove = rect.top
+  const below = roomBelow >= Math.min(props.items.length * 36 + 12, roomAbove) || roomBelow >= roomAbove
+  const fromLeft = rect.left + rect.width / 2 < width / 2
 
   menuPosition.value = {
-    insetBlockStart: roomBelow > 110 ? `${rect.bottom + 4}px` : null,
-    insetBlockEnd: roomBelow > 110 ? null : `${window.innerHeight - rect.top + 4}px`,
-    insetInlineEnd: `${Math.max(8, document.documentElement.clientWidth - rect.right)}px`
+    top: below ? `${rect.bottom + 4}px` : null,
+    bottom: below ? null : `${window.innerHeight - rect.top + 4}px`,
+    left: fromLeft ? `${Math.max(8, rect.left)}px` : null,
+    right: fromLeft ? null : `${Math.max(8, width - rect.right)}px`,
+    maxHeight: `${Math.max(120, (below ? roomBelow : roomAbove) - 16)}px`
   }
 }
 
@@ -124,7 +130,7 @@ async function openMenu(focusFirst) {
   await nextTick()
 
   if (focusFirst) {
-    items()[0]?.focus()
+    menuItems()[0]?.focus()
   }
 }
 
@@ -146,7 +152,7 @@ function closeMenu(returnFocus) {
 }
 
 /** @returns {HTMLButtonElement[]} */
-function items() {
+function menuItems() {
   return menu.value ? [...menu.value.querySelectorAll('.menuItem')] : []
 }
 
@@ -154,7 +160,7 @@ function items() {
  * @param {KeyboardEvent} event
  */
 function handleMenuKeydown(event) {
-  const all = items()
+  const all = menuItems()
   const index = all.indexOf(document.activeElement)
 
   switch (event.key) {
@@ -215,19 +221,14 @@ function closeOnScroll(event) {
 }
 
 /**
- * @param {'remove-here' | 'keep-here'} action
+ * @param {string} value
  */
-function choose(action) {
+function choose(value) {
   closeMenu(true)
-
-  if (action === 'remove-here') {
-    emit('remove-here')
-  } else {
-    emit('keep-here')
-  }
+  emit('choose', value)
 }
 
 onBeforeUnmount(() => closeMenu(false))
 </script>
 
-<style scoped src="./ChannelsOverviewDuplicateMenu.css" />
+<style scoped src="./ChannelsOverviewMenuButton.css" />

@@ -246,6 +246,15 @@ const actions = {
     }
   },
 
+  async removeChannelsFromProfiles({ commit }, { channelIds, profileIds }) {
+    try {
+      await DBProfileHandlers.removeChannelsFromProfiles(channelIds, profileIds)
+      commit('removeChannelsFromProfiles', { channelIds, profileIds })
+    } catch (errMessage) {
+      console.error(errMessage)
+    }
+  },
+
   async removeProfile({ commit }, profileId) {
     try {
       await DBProfileHandlers.delete(profileId)
@@ -301,6 +310,18 @@ const mutations = {
       // use filter instead of splice in case the subscription appears multiple times
       // https://github.com/FreeTubeApp/FreeTube/pull/3468#discussion_r1179290877
       profile.subscriptions = profile.subscriptions.filter(channel => channel.id !== channelId)
+    }
+  },
+
+  removeChannelsFromProfiles(state, { channelIds, profileIds }) {
+    const removed = new Set(channelIds)
+
+    for (const id of profileIds) {
+      const profile = state.profileList.find(profile => profile._id === id)
+
+      if (profile) {
+        profile.subscriptions = profile.subscriptions.filter(channel => !removed.has(channel.id))
+      }
     }
   },
 

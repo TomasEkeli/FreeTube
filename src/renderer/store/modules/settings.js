@@ -670,6 +670,10 @@ const customActions = {
             commit('removeChannelFromProfiles', data)
             break
 
+          case SyncEvents.PROFILES.REMOVE_CHANNELS:
+            commit('removeChannelsFromProfiles', data)
+            break
+
           case SyncEvents.GENERAL.DELETE:
             commit('removeProfileFromList', data)
             break

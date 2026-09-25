@@ -13,6 +13,7 @@
 import {
   assignCalloutColours,
   channelMemberships,
+  countTransferred,
   duplicateCounts,
   filterChannels,
   isDuplicate,
@@ -202,6 +203,17 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('a mixed drop updates each profile once', many.length === 2 && touched(many) === 'p1,p2')
   check('a mixed drop moves everything across', subs(many, 'p2') === 'c,a,b,d' && subs(many, 'p1') === '')
 
+  check('a move counts what it moved', countTransferred(profiles(), moved, 'p2') === 1)
+  check('a copy counts what it added', countTransferred(profiles(), copied, 'p2') === 1)
+  const alreadyThereCopy = planTransfer(profiles(), [{ channelId: 'a', profileId: null }], 'p1', true)
+  check('a channel already there counts nothing when copied', countTransferred(profiles(), alreadyThereCopy, 'p1') === 0)
+  check('a channel already there counts when moved out of its column', countTransferred([
+    profile(MAIN_PROFILE_ID, 'All Channels', ['a']),
+    profile('p1', 'Gaming', ['a']),
+    profile('p2', 'Science', ['a'])
+  ], alreadyMove, 'p2') === 1)
+  check('a mixed move counts each channel once', countTransferred(profiles(), many, 'p2') === 3)
+
   const original = profiles()
   planTransfer(original, [{ channelId: 'a', profileId: 'p1' }], 'p2', false)
   check('planning leaves the profile list alone', ids(original[1].subscriptions) === 'a,b' && ids(original[2].subscriptions) === 'c')
@@ -248,14 +260,16 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   const profiles = [
     profile(MAIN_PROFILE_ID, 'All Channels', ['a', 'b', 'c']),
     profile('p1', 'Gaming', ['a', 'b']),
-    profile('p2', 'Science', ['a'])
+    profile('p2', 'Science', ['a']),
+    profile('p3', 'Music', ['b'])
   ]
   const plan = planUnsubscribe(profiles, ['a', 'c', 'a', 'gone'])
 
-  check('each channel is removed once', plan.length === 2)
-  check('a channel goes out of every profile it is in', plan[0].channelId === 'a' && plan[0].profileIds.join(',') === `${MAIN_PROFILE_ID},p1,p2`)
-  check('an unassigned channel goes out of the primary profile', plan[1].channelId === 'c' && plan[1].profileIds.join(',') === MAIN_PROFILE_ID)
-  check('a channel no profile has is left out', !plan.some(r => r.channelId === 'gone'))
+  check('the channels go in one removal, each once', plan.channelIds.sort().join(',') === 'a,c')
+  check('out of every profile any of them is in, the primary one too', plan.profileIds.join(',') === `${MAIN_PROFILE_ID},p1,p2`)
+  check('a profile none of them is in is left alone', !plan.profileIds.includes('p3'))
+  check('a channel no profile has is left out', !plan.channelIds.includes('gone'))
+  check('nothing subscribed to is nothing to do', planUnsubscribe(profiles, ['gone']) === null)
 }
 
 // Search

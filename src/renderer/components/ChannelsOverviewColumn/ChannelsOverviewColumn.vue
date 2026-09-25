@@ -5,7 +5,7 @@
   A column can hold a couple of thousand channels, and drawing them all at once
   is what made the old channel list slow to open. So it draws the first
   screenful and a little more, and each time the end of what it has drawn
-  scrolls into view it draws the next batch. The marker at the end is keyed on
+  scrolls into view it draws the next batch. A new search starts it over. The marker at the end is keyed on
   how many are drawn, so a batch that still leaves the end in view triggers the
   next one as soon as it lands.
 -->
@@ -31,7 +31,10 @@
         {{ countLabel }}
       </span>
     </header>
-    <div class="columnBody">
+    <div
+      ref="body"
+      class="columnBody"
+    >
       <p
         v-if="channels.length === 0"
         class="emptyColumn"
@@ -62,7 +65,7 @@
 </template>
 
 <script setup>
-import { computed, ref, useId } from 'vue'
+import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
 
@@ -98,6 +101,14 @@ const props = defineProps({
     type: Array,
     required: true
   },
+  /**
+   * Starts the column over from the top, drawing only the first rows, when it
+   * changes: the search does this, as what was scrolled to is gone.
+   */
+  resetKey: {
+    type: String,
+    default: ''
+  },
   /** @type {import('vue').PropType<Set<string>>} */
   selectedIds: {
     type: Set,
@@ -127,11 +138,23 @@ const headingId = useId()
 
 /** Rows drawn before any scrolling: a tall window's worth, with some to spare. */
 const FIRST_BATCH = 60
-const NEXT_BATCH = 120
+const NEXT_BATCH = 80
 
 const drawLimit = ref(FIRST_BATCH)
 
 const drawnChannels = computed(() => props.channels.slice(0, drawLimit.value))
+
+const body = useTemplateRef('body')
+
+// Otherwise a search cleared after scrolling far down would draw every row
+// scrolled past in one go, and on a column of thousands that is a long wait
+watch(() => props.resetKey, () => {
+  drawLimit.value = FIRST_BATCH
+
+  if (body.value) {
+    body.value.scrollTop = 0
+  }
+})
 
 const { dragOver, handlers: dropHandlers } = useChannelDropTarget({
   onDrop: (dragged, copy) => emit('drop-channels', dragged, copy),

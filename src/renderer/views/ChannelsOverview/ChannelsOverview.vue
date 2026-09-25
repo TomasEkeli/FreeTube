@@ -61,13 +61,39 @@
           :label="searching ? t('Channels.Overview.Select All Matches') : t('Channels.Overview.Select All')"
           @click="selectAllShown"
         />
-        <template v-if="selectedCount > 0">
-          <span
-            class="selectedCount"
-            aria-live="polite"
-          >
+        <!-- Always there, so that a screen reader is listening before the count changes -->
+        <span
+          class="selectedCount"
+          aria-live="polite"
+        >
+          <template v-if="selectedCount > 0">
             {{ t('Channels.Overview.Selected Count', { count: selectedCount }, selectedCount) }}
-          </span>
+            <span
+              v-if="hiddenSelectedCount > 0"
+              class="hiddenSelected"
+            >
+              {{ t('Channels.Overview.Hidden by Search', { count: hiddenSelectedCount }, hiddenSelectedCount) }}
+            </span>
+          </template>
+        </span>
+        <template v-if="selectedCount > 0">
+          <!-- The same as dragging the selection, for the keyboard -->
+          <ChannelsOverviewMenuButton
+            variant="button"
+            :label="t('Channels.Overview.Move Selection To')"
+            :items="moveTargets"
+            @choose="(target) => fileSelection(target, false)"
+          >
+            {{ t('Channels.Overview.Move Selection To') }}
+          </ChannelsOverviewMenuButton>
+          <ChannelsOverviewMenuButton
+            variant="button"
+            :label="t('Channels.Overview.Copy Selection To')"
+            :items="copyTargets"
+            @choose="(target) => fileSelection(target, true)"
+          >
+            {{ t('Channels.Overview.Copy Selection To') }}
+          </ChannelsOverviewMenuButton>
           <FtButton
             :label="t('Channels.Overview.Clear Selection')"
             @click="clearSelection"
@@ -77,12 +103,14 @@
           v-else
           class="toolbarHint"
         >
-          {{ t('Channels.Overview.Selection Hint') }}
+          {{ isMac ? t('Channels.Overview.Selection Hint Mac') : t('Channels.Overview.Selection Hint') }}
         </span>
         <ChannelsOverviewTrash
           v-if="!hideUnsubscribeButton"
           class="trash"
+          :has-selection="selectedCount > 0"
           @drop-channels="askToUnsubscribe"
+          @unsubscribe-selection="askToUnsubscribe(selectedChannels(selection))"
         />
       </div>
       <div class="columns">
@@ -97,6 +125,7 @@
           :background-color="column.profile?.bgColor"
           :text-color="column.profile?.textColor"
           :channels="column.channels"
+          :reset-key="normalisedQuery"
           :selected-ids="selection.get(column.id)"
           :duplicate-profiles="duplicateProfiles"
           :callout-colours="calloutColours"
@@ -138,6 +167,7 @@ import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
+import ChannelsOverviewMenuButton from '../../components/ChannelsOverviewMenuButton/ChannelsOverviewMenuButton.vue'
 import ChannelsOverviewTrash from '../../components/ChannelsOverviewTrash/ChannelsOverviewTrash.vue'
 
 import store from '../../store/index'
@@ -148,6 +178,7 @@ import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
   assignCalloutColours,
   channelMemberships,
+  countTransferred,
   duplicateCounts,
   filterChannels,
   isSelected,
@@ -237,7 +268,7 @@ async function saveOpenProfileIds(profileIds) {
  * @property {string | null} id the profile's, or null for the pool
  * @property {Profile | null} profile
  * @property {Channel[]} channels shown, in the order shown
- * @property {Channel[]} [allChannels] every channel in the column, shown or not
+ * @property {Channel[]} allChannels every channel in the column, shown or not
  * @property {number} total how many channels the column has, shown or not
  */
 
@@ -251,21 +282,28 @@ const normalisedQuery = computed(() => normaliseQuery(query.value))
 
 const searching = computed(() => normalisedQuery.value !== '')
 
-/** @type {import('vue').ComputedRef<Column[]>} */
-const openColumns = computed(() => {
+/**
+ * The open columns in full and in order. Apart from the search, so that
+ * typing only filters and never sorts again.
+ */
+const sortedOpenColumns = computed(() => {
   return openProfileIds.value
     .map(id => profiles.value.find(profile => profile._id === id))
-    .map(profile => {
-      const channels = sortColumn(uniqueChannels(profile.subscriptions), memberships.value, collator.value)
+    .map(profile => ({
+      profile,
+      allChannels: sortColumn(uniqueChannels(profile.subscriptions), memberships.value, collator.value)
+    }))
+})
 
-      return {
-        id: profile._id,
-        profile,
-        channels: filterChannels(channels, normalisedQuery.value),
-        allChannels: channels,
-        total: channels.length
-      }
-    })
+/** @type {import('vue').ComputedRef<Column[]>} */
+const openColumns = computed(() => {
+  return sortedOpenColumns.value.map(({ profile, allChannels }) => ({
+    id: profile._id,
+    profile,
+    channels: filterChannels(allChannels, normalisedQuery.value),
+    allChannels,
+    total: allChannels.length
+  }))
 })
 
 /**
@@ -283,6 +321,7 @@ const columns = computed(() => {
     id: null,
     profile: null,
     channels: filterChannels(pool.value, normalisedQuery.value),
+    allChannels: pool.value,
     total: pool.value.length
   }
 
@@ -312,7 +351,7 @@ const duplicateProfiles = computed(() => {
  * from the columns in full, so a search does not change a channel's colour.
  */
 const calloutColours = computed(() => {
-  return assignCalloutColours(openColumns.value.map(column => column.allChannels.map(channel => channel.id)))
+  return assignCalloutColours(sortedOpenColumns.value.map(column => column.allChannels.map(channel => channel.id)))
 })
 
 const duplicateCountsByProfile = computed(() => duplicateCounts(profileList.value, memberships.value))
@@ -359,12 +398,45 @@ const selectionAnchors = new Map()
 
 const selectedCount = computed(() => selectionSize(selection.value))
 
-// A channel that leaves its column, or a column that closes, is no longer selected
-watch(columns, (columns) => {
-  selection.value = pruneSelection(selection.value, new Map(columns.map(column => {
-    return [column.id, column.channels.map(channel => channel.id)]
-  })))
+/**
+ * Selected channels the search is hiding. They stay selected, so that a
+ * selection can be gathered over several searches, and go along with a drag;
+ * the count over the columns says how many of them there are.
+ */
+const hiddenSelectedCount = computed(() => {
+  const shown = pruneSelection(selection.value, columnContents(columns.value, 'channels'))
+
+  return selectedCount.value - selectionSize(shown)
 })
+
+/**
+ * @param {Column[]} columns
+ * @param {'channels' | 'allChannels'} which shown, or all of them
+ * @returns {Map<string | null, Set<string>>}
+ */
+function columnContents(columns, which) {
+  return new Map(columns.map(column => [column.id, new Set(column[which].map(channel => channel.id))]))
+}
+
+/**
+ * Only what is in the open columns: a channel that leaves its column, or a
+ * column that closes, is no longer selected, and a Shift-click range no
+ * longer starts from it. A search hiding a channel leaves it selected.
+ * @param {import('../../helpers/channelsOverview').Selection} next
+ */
+function setPrunedSelection(next) {
+  const contents = columnContents(columns.value, 'allChannels')
+
+  selection.value = pruneSelection(next, contents)
+
+  for (const [columnId, channelId] of selectionAnchors) {
+    if (!contents.get(columnId)?.has(channelId)) {
+      selectionAnchors.delete(columnId)
+    }
+  }
+}
+
+watch(columns, () => setPrunedSelection(selection.value))
 
 /**
  * @param {Column} column
@@ -374,12 +446,15 @@ watch(columns, (columns) => {
 function selectChannel(column, channel, extend) {
   const anchor = selectionAnchors.get(column.id)
 
-  if (extend && anchor !== undefined && anchor !== channel.id) {
-    const order = column.channels.map(channel => channel.id)
-    selection.value = selectRange(selection.value, column.id, order, anchor, channel.id)
-  } else {
-    selection.value = toggleSelected(selection.value, column.id, channel.id)
-  }
+  // A range runs through the rows as shown; an anchor the search now hides
+  // has no place in that, and the click toggles the row instead
+  const range = extend && anchor !== undefined && anchor !== channel.id
+    ? selectRange(selection.value, column.id, column.channels.map(channel => channel.id), anchor, channel.id)
+    : selection.value
+
+  selection.value = range !== selection.value
+    ? range
+    : toggleSelected(selection.value, column.id, channel.id)
 
   selectionAnchors.set(column.id, channel.id)
 }
@@ -453,6 +528,24 @@ function dragChannel(event, channel, profileId) {
   }
 }
 
+let pendingChanges = Promise.resolve()
+
+/**
+ * Runs a change to the profiles once every earlier one from this page has
+ * landed. A drop saves whole profiles worked out from the profile list as it
+ * stands, and two drops in quick succession would otherwise both start from
+ * the list before either, the second putting back what the first took out.
+ * @template T
+ * @param {() => Promise<T>} change
+ * @returns {Promise<T>}
+ */
+function afterPendingChanges(change) {
+  const run = pendingChanges.then(change)
+  pendingChanges = run.catch(error => console.error(error))
+
+  return run
+}
+
 /**
  * Files dropped channels into a profile, or back into the pool with
  * `targetProfileId` null, saving each changed profile once. Through the
@@ -461,21 +554,64 @@ function dragChannel(event, channel, profileId) {
  * @param {DraggedChannel[]} dragged
  * @param {string | null} targetProfileId
  * @param {boolean} copy
+ * @returns {Promise<number>} how many channels were filed
  */
-async function fileChannels(dragged, targetProfileId, copy) {
-  const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
+function fileChannels(dragged, targetProfileId, copy) {
+  return afterPendingChanges(async () => {
+    const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
 
-  if (updated.length === 0) { return }
+    if (updated.length === 0) { return 0 }
 
-  const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
+    // Counted before saving, as saving changes the profile list in place
+    const count = countTransferred(profileList.value, updated, targetProfileId)
+    const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
 
-  await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
+    await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
 
-  // Only now, with the channels in their new columns: sooner, and they would
-  // be pruned for not being there yet
-  selection.value = pruneSelection(selectionAfter, new Map(columns.value.map(column => {
-    return [column.id, column.channels.map(channel => channel.id)]
-  })))
+    // Only now, with the channels in their new columns: sooner, and they would
+    // be pruned for not being there yet
+    setPrunedSelection(selectionAfter)
+
+    return count
+  })
+}
+
+/** The pool's place in the move menu, as a profile id can never be empty */
+const POOL_TARGET = ''
+
+/**
+ * Where the move menu can send the selection: every profile, and while it is
+ * there, the pool, the same places a drag can.
+ */
+const moveTargets = computed(() => {
+  const targets = profiles.value.map(profile => ({ value: profile._id, label: profile.name }))
+
+  if (pool.value.length > 0) {
+    targets.push({ value: POOL_TARGET, label: t('Channels.Overview.Unassigned') })
+  }
+
+  return targets
+})
+
+/** A copy into the pool means nothing, so only the profiles */
+const copyTargets = computed(() => profiles.value.map(profile => ({ value: profile._id, label: profile.name })))
+
+const isMac = process.platform === 'darwin'
+
+/**
+ * The selection filed from the menus: what a drag of it onto a bubble does,
+ * or onto the pool.
+ * @param {string} target a profile id, or `POOL_TARGET`
+ * @param {boolean} copy
+ */
+function fileSelection(target, copy) {
+  const dragged = selectedChannels(selection.value)
+
+  if (target === POOL_TARGET) {
+    fileChannels(dragged, null, false)
+  } else {
+    fileChannelsFromPalette(target, dragged, copy)
+  }
 }
 
 /**
@@ -490,16 +626,14 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
 
   if (!profile) { return }
 
-  const arriving = new Set(dragged.filter(channel => channel.profileId !== profileId).map(channel => channel.channelId))
+  const count = await fileChannels(dragged, profileId, copy)
 
-  await fileChannels(dragged, profileId, copy)
-
-  if (arriving.size === 0) {
+  if (count === 0) {
     showToast(t('Channels.Overview.Already in Profile', { profile: profile.name }))
   } else if (copy) {
-    showToast(t('Channels.Overview.Copied to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+    showToast(t('Channels.Overview.Copied to Profile', { count, profile: profile.name }, count))
   } else {
-    showToast(t('Channels.Overview.Moved to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+    showToast(t('Channels.Overview.Moved to Profile', { count, profile: profile.name }, count))
   }
 }
 
@@ -509,7 +643,9 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
  * @param {string} profileId
  */
 function removeDuplicate(channel, profileId) {
-  store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds: [profileId] })
+  afterPendingChanges(() => {
+    return store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds: [profileId] })
+  })
 }
 
 /**
@@ -519,11 +655,13 @@ function removeDuplicate(channel, profileId) {
  * @param {string} homeProfileId
  */
 function keepOnlyIn(channel, homeProfileId) {
-  const profileIds = profilesOutsideHome(memberships.value, channel.id, homeProfileId)
+  afterPendingChanges(async () => {
+    const profileIds = profilesOutsideHome(memberships.value, channel.id, homeProfileId)
 
-  if (profileIds.length > 0) {
-    store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
-  }
+    if (profileIds.length > 0) {
+      await store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
+    }
+  })
 }
 
 /**
@@ -547,10 +685,9 @@ function askToUnsubscribe(dragged) {
 }
 
 /**
- * Unsubscribes the way the subscribe button does, one removal per channel
- * covering every profile it is in, so it leaves them all at once and other
- * windows hear of it. Cancelling leaves everything as it was, the selection
- * included.
+ * Unsubscribes as the subscribe button does, out of every profile at once,
+ * but for all the channels in one removal, so other windows hear of it once.
+ * Cancelling leaves everything as it was, the selection included.
  * @param {'unsubscribe' | 'cancel' | null} value
  */
 async function handleUnsubscribePrompt(value) {
@@ -559,14 +696,28 @@ async function handleUnsubscribePrompt(value) {
 
   if (value !== 'unsubscribe') { return }
 
-  const removals = planUnsubscribe(profileList.value, channelIds)
+  const count = await afterPendingChanges(async () => {
+    const removal = planUnsubscribe(profileList.value, channelIds)
 
-  await Promise.all(removals.map(removal => store.dispatch('removeChannelFromProfiles', removal)))
+    if (removal === null) { return 0 }
 
-  showToast(t('Channels.Overview.Unsubscribed', { count: removals.length }, removals.length))
+    await store.dispatch('removeChannelsFromProfiles', removal)
+
+    return removal.channelIds.length
+  })
+
+  if (count > 0) {
+    showToast(t('Channels.Overview.Unsubscribed', { count }, count))
+  }
 }
 
-let thumbnailErrorCount = 0
+/**
+ * Channels whose thumbnail has been fetched again already. A row is drawn
+ * again every time a search hides and shows it, and its broken image would
+ * ask again each time.
+ * @type {Set<string>}
+ */
+const thumbnailsRefetched = new Set()
 
 /**
  * A stored thumbnail that no longer loads is fetched again from the channel
@@ -575,7 +726,9 @@ let thumbnailErrorCount = 0
  * @param {Channel} channel
  */
 function updateThumbnail(channel) {
-  thumbnailErrorCount += 1
+  if (thumbnailsRefetched.has(channel.id)) { return }
+
+  thumbnailsRefetched.add(channel.id)
 
   setTimeout(async () => {
     try {
@@ -601,7 +754,7 @@ function updateThumbnail(channel) {
     } catch (error) {
       console.error(error)
     }
-  }, thumbnailErrorCount * 500)
+  }, thumbnailsRefetched.size * 500)
 }
 </script>
 

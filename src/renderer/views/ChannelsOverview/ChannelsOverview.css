@@ -44,6 +44,15 @@
   font-weight: bold;
 }
 
+.selectedCount:empty {
+  display: none;
+}
+
+.hiddenSelected {
+  font-weight: normal;
+  color: var(--tertiary-text-color);
+}
+
 .toolbarHint {
   flex: 1 1 0;
   min-inline-size: 0;

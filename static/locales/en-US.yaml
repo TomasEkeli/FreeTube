@@ -71,16 +71,6 @@ Global:
   Counts:
     Video Count: 1 video | {count} videos
     Channel Count: 1 channel | {count} channels
-    # After channels are dropped on a profile's bubble in the palette
-    Moved to Profile: Moved 1 channel to {profile} | Moved {count} channels to {profile}
-    Copied to Profile: Copied 1 channel to {profile} | Copied {count} channels to {profile}
-    Already in Profile: Already in {profile}
-    # A drop target for channels; dropping them on it unsubscribes, after asking
-    Trash: Drop here to unsubscribe
-    Trash Hint: Channels dropped here are unsubscribed from, and leave every profile
-    Unsubscribe Prompt: Unsubscribe from 1 channel? | Unsubscribe from {count} channels?
-    Unsubscribe Prompt Detail: They will be removed from every profile.
-    Unsubscribed: Unsubscribed from 1 channel | Unsubscribed from {count} channels
     Subscriber Count: 1 subscriber | {count} subscribers
     View Count: 1 view | {count} views
     Like Count: 1 like | {count} likes
@@ -224,8 +214,13 @@ Channels:
     Profile Matches: 1 channel matches | {count} channels match
     Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'
     Selected Count: 1 channel selected | {count} channels selected
+    Hidden by Search: (1 hidden by the search) | ({count} hidden by the search)
     Clear Selection: Clear Selection
     Selection Hint: Click to select, Shift-click to select a range. Drag to move, hold Ctrl to copy.
+    Selection Hint Mac: Click to select, Shift-click to select a range. Drag to move, hold Option to copy.
+    # Menus of profiles to send the selected channels to, the same as dragging them there
+    Move Selection To: Move to…
+    Copy Selection To: Copy to…
     # Shown on the cursor while dragging more than one channel
     Channel Count: 1 channel | {count} channels
     # After channels are dropped on a profile's bubble in the palette
