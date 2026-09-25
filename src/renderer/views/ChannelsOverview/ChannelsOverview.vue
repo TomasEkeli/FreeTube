@@ -130,6 +130,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 
 import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
@@ -175,6 +176,8 @@ import {
 /** @import { DraggedChannel } from '../../helpers/channelDragAndDrop' */
 
 const { locale, t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
 /** @type {import('vue').ComputedRef<Profile[]>} */
 const profileList = computed(() => store.getters.getProfileList)
@@ -408,6 +411,21 @@ function handleKeydown(event) {
 
 onMounted(() => document.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
+
+/**
+ * A link here can ask for a profile's column to be open, as the one from that
+ * profile's settings does. The request is taken off the address once met, so
+ * that closing the column afterwards sticks.
+ */
+watch(() => route.query.open, (profileId) => {
+  if (typeof profileId !== 'string' || profileId === '') { return }
+
+  if (profiles.value.some(profile => profile._id === profileId) && !openProfileIds.value.includes(profileId)) {
+    saveOpenProfileIds(toggleOpenProfile(openProfileIds.value, profileId))
+  }
+
+  router.replace({ query: { ...route.query, open: undefined } })
+}, { immediate: true })
 
 /**
  * @param {string} profileId

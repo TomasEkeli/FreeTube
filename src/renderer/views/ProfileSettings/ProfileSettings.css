@@ -30,6 +30,23 @@ h2 {
   margin-inline: auto;
 }
 
+.channelsCard {
+  padding-block: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.channelsMessage {
+  margin: 0;
+}
+
+.channelsLink {
+  font-weight: bold;
+}
+
 @media only screen and (width <= 680px) {
   .card {
     inline-size: 90%;
