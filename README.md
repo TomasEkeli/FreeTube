@@ -1,6 +1,6 @@
 # A personal fork of FreeTube
 
-This is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, and one subscriptions feed in place of four tabs. It is not the official FreeTube repository, and the FreeTube team does not support or endorse it.
+This is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, one subscriptions feed in place of four tabs, and a page for sorting channels into profiles by drag and drop. It is not the official FreeTube repository, and the FreeTube team does not support or endorse it.
 
 If you want FreeTube, you almost certainly want the official project: [FreeTubeApp/FreeTube](https://github.com/FreeTubeApp/FreeTube), with downloads at [freetubeapp.io](https://freetubeapp.io/#download). All credit for the application belongs to its contributors.
 
@@ -37,6 +37,18 @@ The subscription list does not empty on refresh. Old entries are kept around and
 A channel is no longer declared terminated on one service's word. A gone verdict has to be corroborated by an independent endpoint, and an uncorroborated one counts as a failed fetch: retried later, with the cache left alone. Past a threshold of them in a single refresh the guard stops believing verdicts at all, and stops probing, which during an outage saves several hundred pointless requests.
 
 Scheduled premieres and live streams are in a shelf over the other videos, collapsed by default. "Hide Upcoming Premieres" does what it says again: the rule never worked well in the official version. Now it does.
+
+### Channels and profiles
+
+The Channels page is where subscriptions are sorted into profiles, and it replaces the flat list of every channel. With a few hundred subscriptions the checkbox lists in the profile settings were unusable, and my profiles went stale.
+
+Every profile is a bubble along the top. Click one to open its column; open as many as you like, and the row of columns scrolls sideways once they do not fit. Each window keeps its own set of open columns, so one window can work on two profiles and another on three others. Channels that belong to no profile sit in an Unassigned column on the left, and once that is empty it goes away. That is the point: every channel in a profile.
+
+Drag a channel to another column to move it, hold Ctrl to copy it instead, or drop it on a bubble to file it without opening that column. Click to select, Shift-click for a range, or use Select all on a column, and a drag takes the whole selection along. The search box narrows every column at once, and each bubble shows how many of its channels match. Dropping on the trash unsubscribes, after asking. The Move to and Copy to menus do what a drag does, for the keyboard.
+
+A channel in more than one profile sorts to the top of each column it is in, and when two of those columns are open both copies share a colour, so they can be matched at a glance. Right-click it to remove this copy, or to make this profile its home and remove it from the others. Double-click a channel to go to it.
+
+Profile settings keep a profile's name, colour, default and deletion. The channel lists there are gone.
 
 ### Explore
 
