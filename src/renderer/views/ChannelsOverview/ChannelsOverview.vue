@@ -105,6 +105,7 @@
           :background-color="column.profile?.bgColor"
           :text-color="column.profile?.textColor"
           :channels="column.channels"
+          :reset-key="normalisedQuery"
           :selected-ids="selection.get(column.id)"
           :duplicate-profiles="duplicateProfiles"
           :callout-colours="calloutColours"
@@ -259,21 +260,28 @@ const normalisedQuery = computed(() => normaliseQuery(query.value))
 
 const searching = computed(() => normalisedQuery.value !== '')
 
-/** @type {import('vue').ComputedRef<Column[]>} */
-const openColumns = computed(() => {
+/**
+ * The open columns in full and in order. Apart from the search, so that
+ * typing only filters and never sorts again.
+ */
+const sortedOpenColumns = computed(() => {
   return openProfileIds.value
     .map(id => profiles.value.find(profile => profile._id === id))
-    .map(profile => {
-      const channels = sortColumn(uniqueChannels(profile.subscriptions), memberships.value, collator.value)
+    .map(profile => ({
+      profile,
+      allChannels: sortColumn(uniqueChannels(profile.subscriptions), memberships.value, collator.value)
+    }))
+})
 
-      return {
-        id: profile._id,
-        profile,
-        channels: filterChannels(channels, normalisedQuery.value),
-        allChannels: channels,
-        total: channels.length
-      }
-    })
+/** @type {import('vue').ComputedRef<Column[]>} */
+const openColumns = computed(() => {
+  return sortedOpenColumns.value.map(({ profile, allChannels }) => ({
+    id: profile._id,
+    profile,
+    channels: filterChannels(allChannels, normalisedQuery.value),
+    allChannels,
+    total: allChannels.length
+  }))
 })
 
 /**
@@ -321,7 +329,7 @@ const duplicateProfiles = computed(() => {
  * from the columns in full, so a search does not change a channel's colour.
  */
 const calloutColours = computed(() => {
-  return assignCalloutColours(openColumns.value.map(column => column.allChannels.map(channel => channel.id)))
+  return assignCalloutColours(sortedOpenColumns.value.map(column => column.allChannels.map(channel => channel.id)))
 })
 
 const duplicateCountsByProfile = computed(() => duplicateCounts(profileList.value, memberships.value))
@@ -611,7 +619,13 @@ async function handleUnsubscribePrompt(value) {
   showToast(t('Channels.Overview.Unsubscribed', { count }, count))
 }
 
-let thumbnailErrorCount = 0
+/**
+ * Channels whose thumbnail has been fetched again already. A row is drawn
+ * again every time a search hides and shows it, and its broken image would
+ * ask again each time.
+ * @type {Set<string>}
+ */
+const thumbnailsRefetched = new Set()
 
 /**
  * A stored thumbnail that no longer loads is fetched again from the channel
@@ -620,7 +634,9 @@ let thumbnailErrorCount = 0
  * @param {Channel} channel
  */
 function updateThumbnail(channel) {
-  thumbnailErrorCount += 1
+  if (thumbnailsRefetched.has(channel.id)) { return }
+
+  thumbnailsRefetched.add(channel.id)
 
   setTimeout(async () => {
     try {
@@ -646,7 +662,7 @@ function updateThumbnail(channel) {
     } catch (error) {
       console.error(error)
     }
-  }, thumbnailErrorCount * 500)
+  }, thumbnailsRefetched.size * 500)
 }
 </script>
 
