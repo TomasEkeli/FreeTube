@@ -44,10 +44,6 @@
   font-weight: bold;
 }
 
-.selectedCount:empty {
-  display: none;
-}
-
 .hiddenSelected {
   font-weight: normal;
   color: var(--tertiary-text-color);

@@ -104,7 +104,7 @@ function positionMenu() {
   const width = document.documentElement.clientWidth
   const roomBelow = window.innerHeight - rect.bottom
   const roomAbove = rect.top
-  const below = roomBelow >= Math.min(props.items.length * 36 + 12, roomAbove) || roomBelow >= roomAbove
+  const below = roomBelow >= props.items.length * 36 + 12 || roomBelow >= roomAbove
   const fromLeft = rect.left + rect.width / 2 < width / 2
 
   menuPosition.value = {
@@ -112,7 +112,7 @@ function positionMenu() {
     bottom: below ? null : `${window.innerHeight - rect.top + 4}px`,
     left: fromLeft ? `${Math.max(8, rect.left)}px` : null,
     right: fromLeft ? null : `${Math.max(8, width - rect.right)}px`,
-    maxHeight: `${Math.max(120, (below ? roomBelow : roomAbove) - 16)}px`
+    maxHeight: `${Math.max(0, (below ? roomBelow : roomAbove) - 12)}px`
   }
 }
 

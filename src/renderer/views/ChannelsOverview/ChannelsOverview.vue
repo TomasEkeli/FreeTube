@@ -42,6 +42,7 @@
         </p>
       </FtCard>
       <div
+        ref="toolbar"
         class="toolbar"
         role="toolbar"
         :aria-label="t('Channels.Overview.Selection')"
@@ -157,7 +158,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -404,6 +405,8 @@ const selectedCount = computed(() => selectionSize(selection.value))
  * the count over the columns says how many of them there are.
  */
 const hiddenSelectedCount = computed(() => {
+  if (!searching.value) { return 0 }
+
   const shown = pruneSelection(selection.value, columnContents(columns.value, 'channels'))
 
   return selectedCount.value - selectionSize(shown)
@@ -472,6 +475,7 @@ function clearSelection() {
 }
 
 const searchInput = useTemplateRef('searchInput')
+const toolbar = useTemplateRef('toolbar')
 
 /**
  * @param {KeyboardEvent} event
@@ -604,13 +608,21 @@ const isMac = process.platform === 'darwin'
  * @param {string} target a profile id, or `POOL_TARGET`
  * @param {boolean} copy
  */
-function fileSelection(target, copy) {
+async function fileSelection(target, copy) {
   const dragged = selectedChannels(selection.value)
 
   if (target === POOL_TARGET) {
-    fileChannels(dragged, null, false)
+    await fileChannels(dragged, null, false)
   } else {
-    fileChannelsFromPalette(target, dragged, copy)
+    await fileChannelsFromPalette(target, dragged, copy)
+  }
+
+  // Moved into a closed column, the selection is gone and the menu button
+  // with it, taking the focus along; it goes to the toolbar's first button
+  await nextTick()
+
+  if (!document.activeElement || document.activeElement === document.body) {
+    toolbar.value?.querySelector('.btn')?.focus()
   }
 }
 
@@ -746,11 +758,12 @@ function updateThumbnail(channel) {
         thumbnailUrl = response.authorThumbnails[0].url
       }
 
-      store.dispatch('updateSubscriptionDetails', {
+      // It saves whole profiles too, so it waits its turn with the page's own changes
+      await afterPendingChanges(() => store.dispatch('updateSubscriptionDetails', {
         channelThumbnailUrl: thumbnailUrl,
         channelName: channel.name,
         channelId: channel.id
-      })
+      }))
     } catch (error) {
       console.error(error)
     }
