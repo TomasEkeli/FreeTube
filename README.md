@@ -40,15 +40,15 @@ Scheduled premieres and live streams are in a shelf over the other videos, colla
 
 ### Channels and profiles
 
-The Channels page is where subscriptions are sorted into profiles, and it replaces the flat list of every channel. With a few hundred subscriptions the checkbox lists in the profile settings were unusable, and my profiles went stale.
+With a few hundred subscriptions the checkbox lists in the profile settings were unusable, and my profiles went stale. The Channels page replaces the flat list of every channel with a place to sort them into profiles.
 
-Every profile is a bubble along the top. Click one to open its column; open as many as you like, and the row of columns scrolls sideways once they do not fit. Each window keeps its own set of open columns, so one window can work on two profiles and another on three others. Channels that belong to no profile sit in an Unassigned column on the left, and once that is empty it goes away. That is the point: every channel in a profile.
+Every profile is a bubble along the top. Click one to open its column, open as many as you like, and the columns scroll sideways once they do not fit. Each window keeps its own open columns, so one window can work on two profiles while another works on three others. Channels in no profile sit in an Unassigned column on the left, which goes away once it is empty. The goal is every channel in a profile.
 
-Drag a channel to another column to move it, hold Ctrl to copy it instead, or drop it on a bubble to file it without opening that column. Click to select, Shift-click for a range, or use Select all on a column, and a drag takes the whole selection along. The search box narrows every column at once, and each bubble shows how many of its channels match. Dropping on the trash unsubscribes, after asking. The Move to and Copy to menus do what a drag does, for the keyboard.
+Drag a channel to another column to move it, or hold Ctrl to copy it. Dropping it on a bubble files it without opening that column. Click to select, Shift-click for a range, or use Select all on a column; dragging any selected channel moves the whole selection. The search box narrows every column at once, and each bubble shows how many of its channels match. Dropping on the trash unsubscribes, after asking. For the keyboard, the Move to and Copy to menus do what a drag does.
 
-A channel in more than one profile sorts to the top of each column it is in, and when two of those columns are open both copies share a colour, so they can be matched at a glance. Right-click it to remove this copy, or to make this profile its home and remove it from the others. Double-click a channel to go to it.
+A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to take it out of that profile, or to make that profile its home and take it out of the others. Double-click a channel to go to it.
 
-Profile settings keep a profile's name, colour, default and deletion. The channel lists there are gone.
+Profile settings still handle a profile's name, colour, default and deletion. The channel lists there are gone.
 
 ### Explore
 
