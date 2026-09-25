@@ -46,7 +46,7 @@ Every profile is a bubble along the top. Click one to open its column, open as m
 
 Drag a channel to another column to move it, or hold Ctrl to copy it. Dropping it on a bubble files it without opening that column. Click to select, Shift-click for a range, or use Select all on a column; dragging any selected channel moves the whole selection. The search box narrows every column at once, and each bubble shows how many of its channels match. Dropping on the trash unsubscribes, after asking. For the keyboard, the Move to and Copy to menus do what a drag does.
 
-A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to take it out of that profile, or to make that profile its home and take it out of the others. Double-click a channel to go to it.
+A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to take it out of that profile, or to make that profile its home and take it out of the others. Double-click a channel to go to it, and click a column's heading to make that profile the active one.
 
 Profile settings still handle a profile's name, colour, default and deletion. The channel lists there are gone.
 
