@@ -89,11 +89,11 @@
 .columnBody > :deep(.leavingChannel) {
   position: absolute;
   pointer-events: none;
-  transition: opacity 200ms ease;
+  transition: opacity 150ms ease;
 }
 
 .columnBody > .arrivingChannel {
-  animation: channel-arrive 200ms ease 150ms backwards;
+  animation: channel-arrive 150ms ease 110ms backwards;
 }
 
 @keyframes channel-arrive {

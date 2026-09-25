@@ -300,11 +300,15 @@ const searching = computed(() => normalisedQuery.value !== '')
 
 /**
  * The open columns in full and in order. Apart from the search, so that
- * typing only filters and never sorts again.
+ * typing only filters and never sorts again. In the palette's order, which
+ * is the profiles' own, whatever order they were opened in, so that a
+ * profile's column is always in the same place among the others.
  */
 const sortedOpenColumns = computed(() => {
-  return openProfileIds.value
-    .map(id => profiles.value.find(profile => profile._id === id))
+  const open = new Set(openProfileIds.value)
+
+  return profiles.value
+    .filter(profile => open.has(profile._id))
     .map(profile => ({
       profile,
       allChannels: sortColumn(uniqueChannels(profile.subscriptions), memberships.value, collator.value)
@@ -572,7 +576,7 @@ function animateChange(count) {
 
   clearTimeout(animatingChangeTimeout)
   animatingChange.value = true
-  animatingChangeTimeout = setTimeout(() => { animatingChange.value = false }, 500)
+  animatingChangeTimeout = setTimeout(() => { animatingChange.value = false }, 400)
 }
 
 onBeforeUnmount(() => clearTimeout(animatingChangeTimeout))
