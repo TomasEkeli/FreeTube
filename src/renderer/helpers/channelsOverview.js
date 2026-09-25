@@ -614,3 +614,33 @@ export function countTransferred(profileList, updated, targetProfileId) {
 
   return transferred.size
 }
+
+/**
+ * Takes every channel of the given columns out of the selection.
+ * @param {Selection} selection
+ * @param {Map<string | null, string[]>} columns
+ * @returns {Selection}
+ */
+export function deselectAll(selection, columns) {
+  const next = new Map(selection)
+
+  for (const [profileId, channelIds] of columns) {
+    const selected = selection.get(profileId)
+
+    if (!selected) { continue }
+
+    const kept = new Set(selected)
+
+    for (const channelId of channelIds) {
+      kept.delete(channelId)
+    }
+
+    if (kept.size === 0) {
+      next.delete(profileId)
+    } else {
+      next.set(profileId, kept)
+    }
+  }
+
+  return next
+}

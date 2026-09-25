@@ -14,6 +14,7 @@ import {
   assignCalloutColours,
   channelMemberships,
   countTransferred,
+  deselectAll,
   duplicateCounts,
   filterChannels,
   isDuplicate,
@@ -239,6 +240,10 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 
   const all = selectAll(one, new Map([['p1', ['b']], [null, ['c', 'd']], ['p2', []]]))
   check('select all adds every channel of the columns', listed(all) === 'p1:a,p1:b,pool:c,pool:d')
+
+  check('select all on one column leaves the others alone', listed(selectAll(toggleSelected(empty, 'p2', 'x'), new Map([['p1', ['a', 'b']]]))) === 'p1:a,p1:b,p2:x')
+  check('select none takes out only what was shown', listed(deselectAll(all, new Map([[null, ['c']]]))) === 'p1:a,p1:b,pool:d')
+  check('select none on the whole column empties it', listed(deselectAll(all, new Map([['p1', ['a', 'b', 'z']]]))) === 'pool:c,pool:d')
 
   const pruned = pruneSelection(all, new Map([['p1', ['a']], [null, new Set(['c', 'd'])]]))
   check('a channel gone from its column is deselected', listed(pruned) === 'p1:a,pool:c,pool:d')

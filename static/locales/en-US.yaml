@@ -200,8 +200,11 @@ Channels:
     Create Profiles: Create one in Settings.
     Go to channel: Go to {channelName}
     Selection: Selection
-    Select All: Select All
-    Select All Matches: Select All Matches
+    # On each column's header, for what the column shows; while searching, its matches
+    Select All: Select all
+    Select None: Select none
+    Select All In: Select all shown in {profile}
+    Select None In: Deselect all shown in {profile}
     No Matches: No channels here match the search.
     # In a column's header while searching
     Match Count: '{matches} of {count}'
@@ -210,14 +213,17 @@ Channels:
     # The two choices offered for a channel in more than one profile
     Remove This Duplicate: Remove this duplicate
     Keep Here Only: This is home, remove the others
-    Profile Duplicates: 1 channel is in other profiles too | {count} channels are in other profiles too
+    # Under a profile's name in the palette: its channels also in some other profile
+    Shared Count: '{count} shared'
+    Profile Channels: 1 channel | {count} channels
+    Profile Duplicates: 1 of them is in other profiles too | {count} of them are in other profiles too
     Profile Matches: 1 channel matches | {count} channels match
     Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'
     Selected Count: 1 channel selected | {count} channels selected
     Hidden by Search: (1 hidden by the search) | ({count} hidden by the search)
     Clear Selection: Clear Selection
-    Selection Hint: Click to select, Shift-click to select a range. Drag to move, hold Ctrl to copy.
-    Selection Hint Mac: Click to select, Shift-click to select a range. Drag to move, hold Option to copy.
+    Selection Hint: Click to select, Shift-click for a range, or select all on a column. Drag to move, hold Ctrl to copy.
+    Selection Hint Mac: Click to select, Shift-click for a range, or select all on a column. Drag to move, hold Option to copy.
     # Menus of profiles to send the selected channels to, the same as dragging them there
     Move Selection To: Move to…
     Copy Selection To: Copy to…

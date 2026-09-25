@@ -58,10 +58,6 @@
           @input="(value) => query = value"
           @clear="query = ''"
         />
-        <FtButton
-          :label="searching ? t('Channels.Overview.Select All Matches') : t('Channels.Overview.Select All')"
-          @click="selectAllShown"
-        />
         <!-- Always there, so that a screen reader is listening before the count changes -->
         <span
           class="selectedCount"
@@ -132,6 +128,8 @@
           :callout-colours="calloutColours"
           @thumbnail-error="updateThumbnail"
           @select="(channel, extend) => selectChannel(column, channel, extend)"
+          @select-all="selectColumn(column)"
+          @select-none="deselectColumn(column)"
           @drag-start="(event, channel) => dragChannel(event, channel, column.id)"
           @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
           @remove-here="(channel) => removeDuplicate(channel, column.id)"
@@ -180,6 +178,7 @@ import {
   assignCalloutColours,
   channelMemberships,
   countTransferred,
+  deselectAll,
   duplicateCounts,
   filterChannels,
   isSelected,
@@ -461,11 +460,19 @@ function selectChannel(column, channel, extend) {
   selectionAnchors.set(column.id, channel.id)
 }
 
-/** Everything shown: with a search, exactly the matches in the open columns. */
-function selectAllShown() {
-  selection.value = selectAll(selection.value, new Map(columns.value.map(column => {
-    return [column.id, column.channels.map(channel => channel.id)]
-  })))
+/**
+ * Everything the column shows: with a search, exactly its matches.
+ * @param {Column} column
+ */
+function selectColumn(column) {
+  selection.value = selectAll(selection.value, new Map([[column.id, column.channels.map(channel => channel.id)]]))
+}
+
+/**
+ * @param {Column} column
+ */
+function deselectColumn(column) {
+  selection.value = deselectAll(selection.value, new Map([[column.id, column.channels.map(channel => channel.id)]]))
 }
 
 function clearSelection() {
@@ -617,11 +624,20 @@ async function fileSelection(target, copy) {
   }
 
   // Moved into a closed column, the selection is gone and the menu button
-  // with it, taking the focus along; it goes to the toolbar's first button
+  // with it, taking the focus along; it goes to where the channels went
   await nextTick()
 
   if (!document.activeElement || document.activeElement === document.body) {
-    toolbar.value?.querySelector('.btn')?.focus()
+    const bubble = target === POOL_TARGET
+      ? null
+      : document.querySelector(`[data-profile-id="${CSS.escape(target)}"] [role="button"]`)
+    const fallback = toolbar.value?.querySelector('input')
+
+    if (bubble) {
+      bubble.focus()
+    } else {
+      fallback?.focus()
+    }
   }
 }
 
