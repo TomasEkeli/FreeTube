@@ -175,6 +175,11 @@ const state = {
   defaultSkipInterval: 5,
   defaultViewingMode: 'default',
   defaultVideoFormat: 'dash',
+  // Which profiles are open as columns on the Channels page, by id, in the
+  // order they were opened, as last changed in any window. Each window keeps
+  // its own open columns; this is where a new window, or the first after a
+  // restart, starts from. A profile deleted since is dropped when read.
+  channelsOverviewOpenProfiles: [],
   disableSmoothScrolling: false,
   disableChannelLinks: false,
   displayVideoPlayButton: false,
@@ -664,6 +669,10 @@ const customActions = {
 
           case SyncEvents.PROFILES.REMOVE_CHANNEL:
             commit('removeChannelFromProfiles', data)
+            break
+
+          case SyncEvents.PROFILES.REMOVE_CHANNELS:
+            commit('removeChannelsFromProfiles', data)
             break
 
           case SyncEvents.GENERAL.DELETE:

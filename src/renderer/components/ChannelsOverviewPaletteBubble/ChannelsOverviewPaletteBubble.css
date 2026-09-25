@@ -1,0 +1,128 @@
+.paletteEntry {
+  position: relative;
+  border-radius: 8px;
+}
+
+/* FtProfileBubble, made smaller: the strip is a control, not the page */
+.paletteBubble {
+  inline-size: 96px;
+  block-size: auto;
+  padding-block: 6px 22px;
+  padding-inline: 6px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.paletteBubble :deep(.bubble) {
+  inline-size: 44px;
+  block-size: 44px;
+  margin-block: 0 4px;
+  transition: transform 0.15s ease-out;
+}
+
+.paletteBubble :deep(.initial) {
+  font-size: 22px;
+  padding-block: 11px;
+}
+
+.paletteBubble :deep(.profileName) {
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Open: tinted in the profile's own colour, with a ring of it round the
+   bubble, where the settings page's black would read as a hole */
+.paletteBubble.open {
+  background-color: color-mix(in srgb, var(--profile-colour) 22%, transparent);
+  color: inherit;
+}
+
+.paletteBubble.open:hover,
+.paletteBubble.open:focus-visible {
+  background-color: color-mix(in srgb, var(--profile-colour) 34%, transparent);
+  color: inherit;
+}
+
+.paletteBubble.open :deep(.bubble) {
+  box-shadow: 0 0 0 2px var(--card-bg-color), 0 0 0 5px var(--profile-colour);
+}
+
+.paletteBubble.open :deep(.profileName) {
+  font-weight: bold;
+}
+
+.badge {
+  position: absolute;
+  inset-block-start: 2px;
+  min-inline-size: 20px;
+  block-size: 20px;
+  padding-inline: 5px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 20px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--card-bg-color);
+}
+
+.matchBadge {
+  inset-inline-end: 8px;
+  background-color: var(--primary-color);
+  color: var(--text-with-main-color);
+}
+
+.matchBadge.noMatches {
+  background-color: var(--secondary-card-bg-color);
+  color: var(--tertiary-text-color);
+}
+
+.counts {
+  position: absolute;
+  inset-block-end: 6px;
+  inset-inline: 0;
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--tertiary-text-color);
+  pointer-events: none;
+}
+
+.sharedCount {
+  font-weight: bold;
+  color: #d08a00;
+}
+
+.sharedCount::before {
+  content: '· ';
+  font-weight: normal;
+}
+
+
+.dropTarget {
+  outline: 3px dashed var(--primary-color);
+  outline-offset: -3px;
+}
+
+.dropTarget .paletteBubble :deep(.bubble) {
+  transform: scale(1.15);
+}
+
+.acknowledged .paletteBubble :deep(.bubble) {
+  animation: filed 0.9s ease-out;
+}
+
+@keyframes filed {
+  0% {
+    box-shadow: 0 0 0 0 var(--primary-color);
+    transform: scale(1.2);
+  }
+
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+    transform: scale(1);
+  }
+}

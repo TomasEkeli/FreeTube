@@ -1,0 +1,158 @@
+/* The columns scroll on their own, so the page fills what the window has
+   below the top bar and stops there, instead of scrolling as a whole */
+.channelsOverview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  block-size: calc(100vh - 98px);
+  inline-size: 95%;
+  margin-block: 0;
+  margin-inline: auto;
+}
+
+.emptyCard,
+.paletteCard {
+  flex: 0 0 auto;
+  margin: 0;
+  padding-block: 10px;
+}
+
+.message {
+  color: var(--tertiary-text-color);
+  text-align: center;
+}
+
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 44px;
+}
+
+.toolbar :deep(.btn) {
+  margin: 0;
+}
+
+.channelSearch {
+  flex: 0 1 280px;
+  min-inline-size: 180px;
+}
+
+.selectedCount {
+  font-weight: bold;
+}
+
+.hiddenSelected {
+  font-weight: normal;
+  color: var(--tertiary-text-color);
+}
+
+.toolbarHint {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tertiary-text-color);
+  font-size: 14px;
+}
+
+.trash {
+  margin-inline-start: auto;
+}
+
+.columns {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex: 1 1 0;
+  min-block-size: 320px;
+  overflow-x: auto;
+
+  /* Without this the columns' combined width widens the page itself, and
+     the whole page scrolls sideways instead of just the columns */
+  contain: inline-size;
+}
+
+/*
+ * A column opening grows to its width, the others moving aside, and then
+ * fades in; one closing fades out, and then folds away, the others closing
+ * up. The gap after it folds with it.
+ */
+.column.column-enter-active {
+  animation: column-open 225ms ease-out;
+}
+
+.column.column-leave-active {
+  animation: column-close 225ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes column-open {
+  0% {
+    flex-basis: 0;
+    max-inline-size: 0;
+    margin-inline-end: -12px;
+    opacity: 0;
+  }
+
+  /* A column's own width, from ChannelsOverviewColumn.css */
+  50% {
+    flex-basis: 380px;
+    max-inline-size: 600px;
+    margin-inline-end: 0;
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes column-close {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    flex-basis: 380px;
+    max-inline-size: 600px;
+    margin-inline-end: 0;
+    opacity: 0;
+  }
+
+  100% {
+    flex-basis: 0;
+    max-inline-size: 0;
+    margin-inline-end: -12px;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .column.column-enter-active,
+  .column.column-leave-active {
+    animation-duration: 1ms;
+  }
+}
+
+/* The pool stays in view while the profile columns scroll past it */
+.poolColumn {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  box-shadow: 4px 0 8px rgb(0 0 0 / 15%);
+}
+
+.columnsHint {
+  flex: 1 1 0;
+  align-self: center;
+}
+
+@media only screen and (width <= 680px) {
+  .channelsOverview {
+    inline-size: 100%;
+  }
+}

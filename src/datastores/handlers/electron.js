@@ -71,6 +71,10 @@ class Profiles {
     return window.ftElectron.dbProfiles(DBActions.PROFILES.ADD_CHANNEL, { channel, profileIds })
   }
 
+  static removeChannelsFromProfiles(channelIds, profileIds) {
+    return window.ftElectron.dbProfiles(DBActions.PROFILES.REMOVE_CHANNELS, { channelIds, profileIds })
+  }
+
   static removeChannelFromProfiles(channelId, profileIds) {
     return window.ftElectron.dbProfiles(DBActions.PROFILES.REMOVE_CHANNEL, { channelId, profileIds })
   }

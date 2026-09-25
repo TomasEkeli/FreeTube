@@ -184,6 +184,21 @@ class Profiles {
     }
   }
 
+  /**
+   * Many channels out of many profiles in one write. Taking them out one at a
+   * time rewrites each profile once per channel, and the database file grows
+   * by a whole profile every time.
+   * @param {string[]} channelIds
+   * @param {string[]} profileIds
+   */
+  static removeChannelsFromProfiles(channelIds, profileIds) {
+    return db.profiles.updateAsync(
+      { _id: { $in: profileIds } },
+      { $pull: { subscriptions: { id: { $in: channelIds } } } },
+      { multi: true }
+    )
+  }
+
   static removeChannelFromProfiles(channelId, profileIds) {
     if (profileIds.length === 1) {
       return db.profiles.updateAsync(

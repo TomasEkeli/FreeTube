@@ -1,0 +1,35 @@
+.trash {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 8px;
+  padding-inline: 16px;
+  border: 2px dashed var(--tertiary-text-color);
+  border-radius: 8px;
+  background: none;
+  color: var(--tertiary-text-color);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-out, color 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.trashIcon {
+  font-size: 16px;
+}
+
+.trash[aria-disabled='true'] {
+  cursor: default;
+}
+
+.trash[aria-disabled='false']:hover,
+.trash:focus-visible {
+  border-color: var(--destructive-color);
+  color: var(--primary-text-color);
+}
+
+.dropTarget {
+  border-color: var(--destructive-color);
+  background-color: var(--destructive-color);
+  color: var(--destructive-text-color);
+}

@@ -187,6 +187,61 @@ Channels:
   Count: '{number} channel(s) found.'
   Empty: Your channel list is currently empty.
   Unsubscribe Prompt: Are you sure you want to unsubscribe from "{channelName}"?
+  # The Channels page, where subscriptions are sorted into profiles: a strip of
+  # profile bubbles, a column per open profile, and a column of the channels no
+  # profile has claimed yet.
+  Overview:
+    Profiles: Profiles
+    Unassigned: Unassigned
+    Unassigned Count: 1 unassigned | {count} unassigned
+    Empty Profile: No channels in this profile yet.
+    Open a Profile: Click a profile above to open its column.
+    No Profiles: Channels are sorted into profiles, and there are none yet.
+    Create Profiles: Create one in Settings.
+    Go to channel: Go to {channelName}
+    Selection: Selection
+    # On each column's header, for what the column shows; while searching, its matches
+    Select All: Select all
+    Select None: Select none
+    Select All In: Select all shown in {profile}
+    Select None In: Deselect all shown in {profile}
+    No Matches: No channels here match the search.
+    # In a column's header while searching
+    Match Count: '{matches} of {count}'
+    # Over a channel in more than one profile; {profiles} is a list of profile names
+    In Profiles: In {profiles}
+    # The two choices offered for a channel in more than one profile
+    Remove This Duplicate: Remove this duplicate
+    Keep Here Only: This is home, remove the others
+    # In the menu a right-click on a channel opens
+    Open Channel: Open channel
+    Unsubscribe Channel: Unsubscribe…
+    # Under a profile's name in the palette: its channels also in some other profile
+    Shared Count: '{count} shared'
+    Profile Channels: 1 channel | {count} channels
+    Profile Duplicates: 1 of them is in other profiles too | {count} of them are in other profiles too
+    Profile Matches: 1 channel matches | {count} channels match
+    Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'
+    Selected Count: 1 channel selected | {count} channels selected
+    Hidden by Search: (1 hidden by the search) | ({count} hidden by the search)
+    Clear Selection: Clear Selection
+    Selection Hint: Click to select, Shift-click for a range. Drag to move, hold Ctrl to copy. Double-click opens a channel, right-click for more.
+    Selection Hint Mac: Click to select, Shift-click for a range. Drag to move, hold Option to copy. Double-click opens a channel, right-click for more.
+    # Menus of profiles to send the selected channels to, the same as dragging them there
+    Move Selection To: Move to…
+    Copy Selection To: Copy to…
+    # Shown on the cursor while dragging more than one channel
+    Channel Count: 1 channel | {count} channels
+    # After channels are dropped on a profile's bubble in the palette
+    Moved to Profile: Moved 1 channel to {profile} | Moved {count} channels to {profile}
+    Copied to Profile: Copied 1 channel to {profile} | Copied {count} channels to {profile}
+    Already in Profile: Already in {profile}
+    # A drop target for channels; dropping them on it unsubscribes, after asking
+    Trash: Drop here to unsubscribe
+    Trash Hint: Channels dropped here are unsubscribed from, and leave every profile
+    Unsubscribe Prompt: Unsubscribe from 1 channel? | Unsubscribe from {count} channels?
+    Unsubscribe Prompt Detail: They will be removed from every profile.
+    Unsubscribed: Unsubscribed from 1 channel | Unsubscribed from {count} channels
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown
@@ -845,6 +900,11 @@ Profile:
   Close Profile Dropdown: Close Profile Dropdown
   Open Profile Dropdown: Open Profile Dropdown
   Go To Profile Manager: Go to Profile Manager
+  # Where the channel lists used to be: sorting channels into profiles is done
+  # on the Channels page now
+  Channels Moved: Channels are sorted into profiles on the Channels page.
+  Go to Channels: Go to Channels
+  Sort Channels: Sort channels into {profile}
 #On Channel Page
 Channel:
   Subscribe: Subscribe

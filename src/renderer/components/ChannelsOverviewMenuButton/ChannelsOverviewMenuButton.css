@@ -1,0 +1,46 @@
+.menuButton {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.menuButton.icon {
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: 50%;
+  font-size: inherit;
+}
+
+.menuButton.icon:hover,
+.menuButton.icon:focus-visible,
+.menuButton.icon[aria-expanded='true'] {
+  background-color: var(--secondary-card-bg-color);
+}
+
+/* Looks like FtButton, as it sits among them */
+.menuButton.button {
+  padding-block: 10px;
+  padding-inline: 16px;
+  border-radius: 4px;
+  background-color: var(--card-bg-color);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 50%);
+  font-family: Roboto, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.menuButton.button:hover,
+.menuButton.button:focus-visible,
+.menuButton.button[aria-expanded='true'] {
+  background-color: var(--side-nav-hover-color);
+  color: var(--side-nav-hover-text-color);
+}

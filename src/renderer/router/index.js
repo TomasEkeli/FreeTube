@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Subscriptions from '../views/Subscriptions/Subscriptions.vue'
-import SubscribedChannels from '../views/SubscribedChannels/SubscribedChannels.vue'
+import ChannelsOverview from '../views/ChannelsOverview/ChannelsOverview.vue'
 import ProfileSettings from '../views/ProfileSettings/ProfileSettings.vue'
 import Explore from '../views/Explore/Explore.vue'
 import Popular from '../views/Popular/Popular.vue'
@@ -40,7 +40,7 @@ const router = createRouter({
       meta: {
         title: 'Channels'
       },
-      component: SubscribedChannels
+      component: ChannelsOverview
     },
     ...(process.env.SUPPORTS_LOCAL_API
       ? [{
