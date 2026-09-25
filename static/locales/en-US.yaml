@@ -214,6 +214,9 @@ Channels:
     Remove This Duplicate: Remove this duplicate
     Keep Here Only: This is home, remove the others
     # In the menu a right-click on a channel opens
+    # On a profile column's heading, which makes that profile the active one
+    Active Profile: '{profile} is the active profile'
+    Make Active Profile: 'Make {profile} the active profile'
     Open Channel: Open channel
     Unsubscribe Channel: Unsubscribe…
     # Under a profile's name in the palette: its channels also in some other profile

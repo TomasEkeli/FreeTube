@@ -20,16 +20,49 @@
       class="columnHeader"
       :style="isPool ? null : { background: backgroundColor, color: headerTextColor }"
     >
+      <!-- A profile's heading makes it the active profile, the one the rest of the app shows -->
       <h3
+        v-if="!isPool"
         :id="headingId"
-        class="columnTitle"
-        dir="auto"
+        class="activateHeading"
       >
-        {{ title }}
+        <button
+          type="button"
+          class="activateButton"
+          :class="{ active }"
+          :aria-pressed="active ? 'true' : 'false'"
+          :title="active
+            ? t('Channels.Overview.Active Profile', { profile: title })
+            : t('Channels.Overview.Make Active Profile', { profile: title })"
+          @click="emit('activate')"
+        >
+          <span
+            class="columnTitle"
+            dir="auto"
+          >{{ title }}</span>
+          <FontAwesomeIcon
+            v-if="active"
+            class="activeMark"
+            :icon="['fas', 'user-check']"
+            aria-hidden="true"
+          />
+          <span class="columnCount">
+            {{ countLabel }}
+          </span>
+        </button>
       </h3>
-      <span class="columnCount">
-        {{ countLabel }}
-      </span>
+      <template v-else>
+        <h3
+          :id="headingId"
+          class="columnTitle"
+          dir="auto"
+        >
+          {{ title }}
+        </h3>
+        <span class="columnCount">
+          {{ countLabel }}
+        </span>
+      </template>
       <!-- What is shown: while searching, the matches -->
       <button
         v-if="channels.length > 0"
@@ -81,6 +114,7 @@
 <script setup>
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useI18n } from 'vue-i18n'
 
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
@@ -106,6 +140,11 @@ const props = defineProps({
     default: null
   },
   isPool: {
+    type: Boolean,
+    default: false
+  },
+  /** Whether this is the active profile */
+  active: {
     type: Boolean,
     default: false
   },
@@ -150,7 +189,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu', 'activate'])
 
 const { t } = useI18n()
 

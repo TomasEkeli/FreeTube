@@ -121,6 +121,7 @@
           :key="column.profile?._id ?? 'pool'"
           :class="{ poolColumn: column.profile === null }"
           :is-pool="column.profile === null"
+          :active="column.profile !== null && column.profile._id === activeProfileId"
           :title="column.profile?.name ?? t('Channels.Overview.Unassigned')"
           :count-label="countLabel(column)"
           :empty-label="searching ? t('Channels.Overview.No Matches') : t('Channels.Overview.Empty Profile')"
@@ -134,6 +135,7 @@
           @thumbnail-error="updateThumbnail"
           @select="(channel, extend) => selectChannel(column, channel, extend)"
           @select-all="selectColumn(column)"
+          @activate="activateProfile(column.profile)"
           @select-none="deselectColumn(column)"
           @drag-start="(event, channel) => dragChannel(event, channel, column.id)"
           @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
@@ -832,6 +834,20 @@ function chooseFromContextMenu(value) {
       askToUnsubscribe([{ channelId: channel.id, profileId: column.id }])
       break
   }
+}
+
+/** The profile the rest of the app shows, as picked in the top bar */
+const activeProfileId = computed(() => store.getters.getActiveProfile?._id)
+
+/**
+ * Makes a profile the active one, as picking it in the top bar does.
+ * @param {Profile} profile
+ */
+function activateProfile(profile) {
+  if (profile._id === activeProfileId.value) { return }
+
+  store.commit('setActiveProfile', profile._id)
+  showToast(t('Profile.{profile} is now the active profile', { profile: profile.name }))
 }
 
 /**
