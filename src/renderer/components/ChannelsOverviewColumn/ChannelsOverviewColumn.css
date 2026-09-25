@@ -35,6 +35,42 @@
   white-space: nowrap;
 }
 
+.activateHeading {
+  flex: 1 1 auto;
+  display: flex;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: 15px;
+}
+
+.activateButton {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.activateButton:hover,
+.activateButton:focus-visible {
+  background-color: color-mix(in srgb, currentcolor 15%, transparent);
+}
+
+.activeMark {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 13px;
+}
+
 .selectAllButton {
   flex: 0 0 auto;
   margin-inline-start: auto;
@@ -140,4 +176,8 @@
 
 .dropTarget .columnBody {
   background-color: var(--secondary-card-bg-color);
+}
+
+.activateButton .columnCount {
+  font-weight: normal;
 }
