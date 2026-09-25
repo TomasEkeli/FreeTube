@@ -217,6 +217,9 @@ Channels:
     Match Count: '{matches} of {count}'
     # Over a channel in more than one profile; {profiles} is a list of profile names
     In Profiles: In {profiles}
+    # The two choices offered for a channel in more than one profile
+    Remove This Duplicate: Remove this duplicate
+    Keep Here Only: This is home, remove the others
     Profile Duplicates: 1 channel is in other profiles too | {count} channels are in other profiles too
     Profile Matches: 1 channel matches | {count} channels match
     Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'

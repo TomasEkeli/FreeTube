@@ -104,6 +104,8 @@
           @select="(channel, extend) => selectChannel(column, channel, extend)"
           @drag-start="(event, channel) => dragChannel(event, channel, column.id)"
           @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
+          @remove-here="(channel) => removeDuplicate(channel, column.id)"
+          @keep-here="(channel) => keepOnlyIn(channel, column.id)"
         />
         <p
           v-if="openColumns.length === 0 && profiles.length > 0"
@@ -153,6 +155,7 @@ import {
   planTransfer,
   planUnsubscribe,
   primaryProfile,
+  profilesOutsideHome,
   pruneSelection,
   restoreOpenProfiles,
   selectAll,
@@ -479,6 +482,29 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
     showToast(t('Channels.Overview.Copied to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
   } else {
     showToast(t('Channels.Overview.Moved to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+  }
+}
+
+/**
+ * Takes a duplicated channel out of this one profile, leaving it in the rest.
+ * @param {Channel} channel
+ * @param {string} profileId
+ */
+function removeDuplicate(channel, profileId) {
+  store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds: [profileId] })
+}
+
+/**
+ * Makes this profile a duplicated channel's only one, apart from the primary
+ * profile: out of every other in one removal.
+ * @param {Channel} channel
+ * @param {string} homeProfileId
+ */
+function keepOnlyIn(channel, homeProfileId) {
+  const profileIds = profilesOutsideHome(memberships.value, channel.id, homeProfileId)
+
+  if (profileIds.length > 0) {
+    store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
   }
 }
 

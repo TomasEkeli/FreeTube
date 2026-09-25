@@ -61,11 +61,12 @@
     <span
       v-if="duplicateProfiles !== null"
       class="duplicateMark"
-      :title="duplicateTitle"
-      :aria-label="duplicateTitle"
-      role="img"
     >
-      <FontAwesomeIcon :icon="['fas', 'clone']" />
+      <ChannelsOverviewDuplicateMenu
+        :label="duplicateTitle"
+        @remove-here="emit('remove-here', channel)"
+        @keep-here="emit('keep-here', channel)"
+      />
     </span>
     <RouterLink
       v-if="showChannelLink"
@@ -85,6 +86,8 @@
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+
+import ChannelsOverviewDuplicateMenu from '../ChannelsOverviewDuplicateMenu/ChannelsOverviewDuplicateMenu.vue'
 
 import store from '../../store/index'
 import { invidiousImageUrlToInvidious, youtubeImageUrlToInvidious } from '../../helpers/api/invidious'
@@ -115,7 +118,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'select'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here'])
 
 const dragging = ref(false)
 
