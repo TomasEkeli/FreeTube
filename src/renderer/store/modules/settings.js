@@ -175,6 +175,10 @@ const state = {
   defaultSkipInterval: 5,
   defaultViewingMode: 'default',
   defaultVideoFormat: 'dash',
+  // Which profiles are open as columns on the Channels page, by id, in the
+  // order they were opened. Kept here so the page is laid out as it was left,
+  // also after a restart; a profile deleted since is dropped when read.
+  channelsOverviewOpenProfiles: [],
   disableSmoothScrolling: false,
   disableChannelLinks: false,
   displayVideoPlayButton: false,

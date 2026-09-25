@@ -14,6 +14,7 @@ import {
   channelMemberships,
   MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
+  restoreOpenProfiles,
   sortChannels,
   toggleOpenProfile,
   unassignedChannels,
@@ -114,6 +115,21 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   const full = ['p1', 'p2', 'p3', 'p4']
   check('the working set tops out at the maximum', MAX_OPEN_COLUMNS === 4)
   check('opening one more closes the longest open', toggleOpenProfile(full, 'p5').join(',') === 'p2,p3,p4,p5')
+}
+
+// Restoring the working set from the stored setting
+{
+  const profiles = [
+    profile(MAIN_PROFILE_ID, 'All Channels', []),
+    profile('p1', 'Gaming', []),
+    profile('p2', 'Science', [])
+  ]
+
+  check('stored columns come back in order', restoreOpenProfiles(['p2', 'p1'], profiles).join(',') === 'p2,p1')
+  check('a deleted profile does not come back', restoreOpenProfiles(['gone', 'p1'], profiles).join(',') === 'p1')
+  check('the primary profile never comes back as a column', restoreOpenProfiles([MAIN_PROFILE_ID, 'p1'], profiles).join(',') === 'p1')
+  check('a stored value that is not a list opens nothing', restoreOpenProfiles('p1', profiles).length === 0)
+  check('a profile stored twice opens once', restoreOpenProfiles(['p1', 'p1'], profiles).join(',') === 'p1')
 }
 
 if (failures > 0) {
