@@ -432,3 +432,27 @@ export function selectionAfterTransfer(selection, dragged, targetProfileId, copy
 
   return next
 }
+
+/**
+ * Unsubscribing from channels: for each, every profile it is in, the primary
+ * one included. One removal per channel across all its profiles, the way the
+ * subscribe button unsubscribes, so each goes out of every profile at once.
+ * @param {Profile[]} profileList
+ * @param {string[]} channelIds
+ * @returns {{ channelId: string, profileIds: string[] }[]}
+ */
+export function planUnsubscribe(profileList, channelIds) {
+  const removals = []
+
+  for (const channelId of new Set(channelIds)) {
+    const profileIds = profileList
+      .filter(profile => profile.subscriptions.some(channel => channel.id === channelId))
+      .map(profile => profile._id)
+
+    if (profileIds.length > 0) {
+      removals.push({ channelId, profileIds })
+    }
+  }
+
+  return removals
+}

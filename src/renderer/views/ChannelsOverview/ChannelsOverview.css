@@ -39,6 +39,10 @@
   font-size: 14px;
 }
 
+.trash {
+  margin-inline-start: auto;
+}
+
 .columns {
   display: flex;
   align-items: stretch;
