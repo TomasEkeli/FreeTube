@@ -210,6 +210,13 @@ Channels:
     Create Profiles: Create one in Settings.
     Go to channel: Go to {channelName}
     Selection: Selection
+    Select All: Select All
+    Select All Matches: Select All Matches
+    No Matches: No channels here match the search.
+    # In a column's header while searching
+    Match Count: '{matches} of {count}'
+    Profile Matches: 1 channel matches | {count} channels match
+    Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'
     Selected Count: 1 channel selected | {count} channels selected
     Clear Selection: Clear Selection
     Selection Hint: Click to select, Shift-click to select a range. Drag to move, hold Ctrl to copy.

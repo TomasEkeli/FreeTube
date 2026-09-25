@@ -12,9 +12,11 @@
 
 import {
   channelMemberships,
+  filterChannels,
   isSelected,
   MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
+  normaliseQuery,
   planTransfer,
   planUnsubscribe,
   pruneSelection,
@@ -249,6 +251,24 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('a channel goes out of every profile it is in', plan[0].channelId === 'a' && plan[0].profileIds.join(',') === `${MAIN_PROFILE_ID},p1,p2`)
   check('an unassigned channel goes out of the primary profile', plan[1].channelId === 'c' && plan[1].profileIds.join(',') === MAIN_PROFILE_ID)
   check('a channel no profile has is left out', !plan.some(r => r.channelId === 'gone'))
+}
+
+// Search
+{
+  const list = [
+    { id: '1', name: 'Veritasium' },
+    { id: '2', name: 'Tom Scott' },
+    { id: '3', name: 'Scott Manley' },
+    { id: '4' },
+    { id: '5', name: 'a.b (c)' }
+  ]
+
+  check('a search is trimmed and lower case', normaliseQuery('  Scott ') === 'scott')
+  check('matching ignores case', ids(filterChannels(list, normaliseQuery('SCOTT'))) === '2,3')
+  check('matching finds the search anywhere in the name', ids(filterChannels(list, 'itas')) === '1')
+  check('no search is everything, as it was', filterChannels(list, '') === list)
+  check('characters with a meaning in patterns are only text', ids(filterChannels(list, normaliseQuery('.b (c'))) === '5' && filterChannels(list, '.*').length === 0)
+  check('a channel without a name matches nothing', !filterChannels(list, 'undefined').some(c => c.id === '4'))
 }
 
 if (failures > 0) {
