@@ -20,6 +20,7 @@
       :profile="profile"
       :open="openProfileIds.includes(profile._id)"
       :match-count="matchCounts?.get(profile._id) ?? null"
+      :duplicate-count="duplicateCounts.get(profile._id) ?? 0"
       @toggle="emit('toggle', profile._id)"
       @drop-channels="(dragged, copy) => emit('drop-channels', profile._id, dragged, copy)"
     />
@@ -46,6 +47,11 @@ defineProps({
   matchCounts: {
     type: Map,
     default: null
+  },
+  /** @type {import('vue').PropType<Map<string, number>>} */
+  duplicateCounts: {
+    type: Map,
+    default: () => new Map()
   }
 })
 

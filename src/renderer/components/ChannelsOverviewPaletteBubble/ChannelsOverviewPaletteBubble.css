@@ -69,6 +69,16 @@
   color: var(--tertiary-text-color);
 }
 
+.duplicateBadge {
+  inset-inline-start: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background-color: var(--secondary-card-bg-color);
+  color: var(--secondary-text-color);
+  font-size: 11px;
+}
+
 .dropTarget {
   outline: 3px dashed var(--primary-color);
   outline-offset: -3px;

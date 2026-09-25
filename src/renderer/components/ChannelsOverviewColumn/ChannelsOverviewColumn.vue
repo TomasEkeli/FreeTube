@@ -43,6 +43,8 @@
         :key="channel.id"
         :channel="channel"
         :selected="selectedIds.has(channel.id)"
+        :duplicate-profiles="duplicateProfiles.get(channel.id) ?? null"
+        :callout="calloutColours.get(channel.id) ?? null"
         @thumbnail-error="emit('thumbnail-error', $event)"
         @drag-start="(event, channel) => emit('drag-start', event, channel)"
         @select="(extend) => emit('select', channel, extend)"
@@ -98,6 +100,22 @@ const props = defineProps({
   selectedIds: {
     type: Set,
     default: () => new Set()
+  },
+  /**
+   * For each channel in more than one profile, the names of its profiles
+   * @type {import('vue').PropType<Map<string, string[]>>}
+   */
+  duplicateProfiles: {
+    type: Map,
+    default: () => new Map()
+  },
+  /**
+   * The callout colour of each channel duplicated across the open columns
+   * @type {import('vue').PropType<Map<string, number>>}
+   */
+  calloutColours: {
+    type: Map,
+    default: () => new Map()
   }
 })
 

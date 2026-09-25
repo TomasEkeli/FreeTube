@@ -28,10 +28,22 @@
     >
       {{ matchCount }}
     </span>
+    <span
+      v-if="duplicateCount > 0"
+      class="badge duplicateBadge"
+      :title="t('Channels.Overview.Profile Duplicates', { count: duplicateCount }, duplicateCount)"
+    >
+      <FontAwesomeIcon
+        :icon="['fas', 'clone']"
+        aria-hidden="true"
+      />
+      {{ duplicateCount }}
+    </span>
   </div>
 </template>
 
 <script setup>
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -53,6 +65,11 @@ defineProps({
   matchCount: {
     type: Number,
     default: null
+  },
+  /** How many of the profile's channels are in some other profile too */
+  duplicateCount: {
+    type: Number,
+    default: 0
   }
 })
 

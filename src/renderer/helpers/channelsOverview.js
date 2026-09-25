@@ -481,3 +481,92 @@ export function filterChannels(channels, query) {
     return (channel.name ?? '').normalize('NFC').toLocaleLowerCase().includes(query)
   })
 }
+
+/**
+ * How many callout colours there are to go round. Channels duplicated across
+ * the open columns take them in turn, and start over once all are taken.
+ */
+export const CALLOUT_COLOUR_COUNT = 8
+
+/**
+ * Whether a channel is in more than one profile, the primary one aside.
+ * @param {Map<string, string[]>} memberships from `channelMemberships`
+ * @param {string} channelId
+ * @returns {boolean}
+ */
+export function isDuplicate(memberships, channelId) {
+  return (memberships.get(channelId)?.length ?? 0) > 1
+}
+
+/**
+ * A profile's column order: channels in more than one profile first, so they
+ * are hard to miss, then the rest; each part alphabetical.
+ * @param {Channel[]} channels
+ * @param {Map<string, string[]>} memberships
+ * @param {Intl.Collator} collator
+ * @returns {Channel[]} a new array
+ */
+export function sortColumn(channels, memberships, collator) {
+  const sorted = sortChannels(channels, collator)
+
+  return [
+    ...sorted.filter(channel => isDuplicate(memberships, channel.id)),
+    ...sorted.filter(channel => !isDuplicate(memberships, channel.id))
+  ]
+}
+
+/**
+ * Which callout colour each channel in two or more of the open columns gets,
+ * by channel id, as an index below `CALLOUT_COLOUR_COUNT`. Only the open
+ * columns count, so every colour on screen has its twin on screen too. The
+ * colours go out in the order the channels are first met, reading the columns
+ * left to right and each from the top.
+ * @param {string[][]} openColumnChannelIds each open column's channel ids, in order
+ * @param {number} [colourCount]
+ * @returns {Map<string, number>}
+ */
+export function assignCalloutColours(openColumnChannelIds, colourCount = CALLOUT_COLOUR_COUNT) {
+  /** @type {Map<string, number>} */
+  const appearances = new Map()
+
+  for (const channelIds of openColumnChannelIds) {
+    for (const channelId of new Set(channelIds)) {
+      appearances.set(channelId, (appearances.get(channelId) ?? 0) + 1)
+    }
+  }
+
+  /** @type {Map<string, number>} */
+  const colours = new Map()
+
+  for (const channelIds of openColumnChannelIds) {
+    for (const channelId of channelIds) {
+      if (appearances.get(channelId) > 1 && !colours.has(channelId)) {
+        colours.set(channelId, colours.size % colourCount)
+      }
+    }
+  }
+
+  return colours
+}
+
+/**
+ * How many channels in each profile are in some other profile as well, by
+ * profile id. The primary profile is left out.
+ * @param {Profile[]} profileList
+ * @param {Map<string, string[]>} [memberships]
+ * @returns {Map<string, number>}
+ */
+export function duplicateCounts(profileList, memberships = channelMemberships(profileList)) {
+  /** @type {Map<string, number>} */
+  const counts = new Map(nonPrimaryProfiles(profileList).map(profile => [profile._id, 0]))
+
+  for (const profileIds of memberships.values()) {
+    if (profileIds.length < 2) { continue }
+
+    for (const profileId of profileIds) {
+      counts.set(profileId, counts.get(profileId) + 1)
+    }
+  }
+
+  return counts
+}

@@ -11,8 +11,11 @@
  */
 
 import {
+  assignCalloutColours,
   channelMemberships,
+  duplicateCounts,
   filterChannels,
+  isDuplicate,
   isSelected,
   MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
@@ -27,6 +30,7 @@ import {
   selectionSize,
   selectRange,
   sortChannels,
+  sortColumn,
   toggleOpenProfile,
   toggleSelected,
   unassignedChannels,
@@ -269,6 +273,39 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('no search is everything, as it was', filterChannels(list, '') === list)
   check('characters with a meaning in patterns are only text', ids(filterChannels(list, normaliseQuery('.b (c'))) === '5' && filterChannels(list, '.*').length === 0)
   check('a channel without a name matches nothing', !filterChannels(list, 'undefined').some(c => c.id === '4'))
+}
+
+// Duplicates
+{
+  const profiles = [
+    profile(MAIN_PROFILE_ID, 'All Channels', ['a', 'b', 'c', 'd', 'e']),
+    profile('p1', 'Gaming', ['a', 'b', 'c', 'd']),
+    profile('p2', 'Science', ['d', 'b']),
+    profile('p3', 'Music', ['c'])
+  ]
+  const memberships = channelMemberships(profiles)
+
+  check('a channel in two profiles is a duplicate', isDuplicate(memberships, 'b'))
+  check('a channel in one profile is not', !isDuplicate(memberships, 'a'))
+  check('an unassigned channel is not', !isDuplicate(memberships, 'e'))
+
+  check('duplicates sort first, each part alphabetical', ids(sortColumn(profiles[1].subscriptions, memberships, collator)) === 'b,c,d,a')
+
+  const counts = duplicateCounts(profiles, memberships)
+  check('bubbles count their duplicates', counts.get('p1') === 3 && counts.get('p2') === 2 && counts.get('p3') === 1)
+  check('the primary profile has no count', !counts.has(MAIN_PROFILE_ID))
+
+  // Gaming and Science open: b and d are duplicated on screen, c is not (Music is closed)
+  const open = [['b', 'c', 'd', 'a'], ['b', 'd']]
+  const colours = assignCalloutColours(open)
+  check('channels duplicated across open columns get colours', colours.size === 2 && colours.has('b') && colours.has('d'))
+  check('each gets its own colour', colours.get('b') !== colours.get('d'))
+  check('colours go out top down, first column first', colours.get('b') === 0 && colours.get('d') === 1)
+  check('a duplicate whose twin is closed gets no colour', !colours.has('c'))
+  check('a single open column colours nothing', assignCalloutColours([['a', 'b']]).size === 0)
+
+  const many = assignCalloutColours([['1', '2', '3'], ['1', '2', '3']], 2)
+  check('the colours start over once all are used', many.get('1') === 0 && many.get('2') === 1 && many.get('3') === 0)
 }
 
 if (failures > 0) {
