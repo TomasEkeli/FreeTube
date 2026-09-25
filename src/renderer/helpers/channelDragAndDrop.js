@@ -20,7 +20,8 @@ export const CHANNEL_DRAG_TYPE = 'application/x-freetube-channels'
 /**
  * @param {DragEvent} event
  * @param {DraggedChannel[]} channels `profileId` is null for the unassigned pool
- * @param {string} label shown by anything the channels are dropped on outside the app
+ * @param {string} label shown by anything the channels are dropped on outside the app,
+ *   and on the picture of the drag when it carries more than one
  */
 export function startChannelDrag(event, channels, label) {
   event.dataTransfer.effectAllowed = 'copyMove'
@@ -29,40 +30,119 @@ export function startChannelDrag(event, channels, label) {
   // the app something to show
   event.dataTransfer.setData('text/plain', label)
 
-  if (channels.length > 1) {
-    setCountDragImage(event, label)
+  const source = event.target instanceof Element ? event.target.closest('[data-channel-id]') ?? event.target : null
+
+  if (source instanceof HTMLElement) {
+    startDragPicture(event, source, channels.length > 1 ? label : null)
   }
 }
 
 /**
- * The browser pictures a drag as the element it started on, which for a
- * selection is one row out of however many are going. A badge with the count
- * says what is actually being carried.
+ * The picture that follows the pointer during a drag is drawn by the page,
+ * not left to the browser. The browser's is only let go of once the drop has
+ * been dealt with and the system has played its own ending to the drag, which
+ * on some desktops leaves it hanging over the drop for up to a second. The
+ * page's goes the moment the drop lands. It is a copy of the channel's
+ * square, and for a selection it carries a badge with the count, as the
+ * square alone is one of however many are going.
+ *
+ * The browser still gets a picture, an empty one, as without one it draws
+ * its own of the square.
  * @param {DragEvent} event
- * @param {string} label
+ * @param {HTMLElement} source
+ * @param {string | null} badgeLabel
  */
-function setCountDragImage(event, label) {
-  const badge = document.createElement('div')
-  badge.textContent = label
-  badge.className = 'channelDragBadge'
+function startDragPicture(event, source, badgeLabel) {
+  const empty = document.createElement('div')
+  Object.assign(empty.style, { position: 'fixed', top: '-10px', left: '-10px', width: '1px', height: '1px', opacity: '0' })
+  document.body.appendChild(empty)
+  event.dataTransfer.setDragImage(empty, 0, 0)
+  // The browser takes its picture of the element as the drag starts
+  setTimeout(() => empty.remove(), 0)
 
-  Object.assign(badge.style, {
+  const rect = source.getBoundingClientRect()
+  const grabX = event.clientX - rect.left
+  const grabY = event.clientY - rect.top
+
+  const picture = document.createElement('div')
+  Object.assign(picture.style, {
     position: 'fixed',
-    insetBlockStart: '-1000px',
-    insetInlineStart: '-1000px',
-    padding: '6px 12px',
-    borderRadius: '14px',
-    background: 'var(--primary-color)',
-    color: 'var(--text-with-main-color)',
-    font: 'bold 14px sans-serif',
-    whiteSpace: 'nowrap',
+    top: '0',
+    left: '0',
+    zIndex: '1000',
+    pointerEvents: 'none',
+    opacity: '0.9',
+    willChange: 'transform',
+    transform: `translate(${rect.left}px, ${rect.top}px)`
   })
 
-  document.body.appendChild(badge)
-  event.dataTransfer.setDragImage(badge, 0, 0)
+  const copy = source.cloneNode(true)
+  copy.removeAttribute('data-channel-id')
+  copy.classList.remove('dragging', 'selected')
+  copy.querySelectorAll('.selectedMark, .corner').forEach(el => el.remove())
+  Object.assign(copy.style, {
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    backgroundColor: 'var(--card-bg-color)',
+    boxShadow: '0 4px 14px rgb(0 0 0 / 35%)',
+    borderRadius: '8px'
+  })
+  picture.appendChild(copy)
 
-  // The browser takes its picture of the element as the drag starts
-  setTimeout(() => badge.remove(), 0)
+  if (badgeLabel !== null) {
+    const badge = document.createElement('div')
+    badge.textContent = badgeLabel
+    Object.assign(badge.style, {
+      position: 'absolute',
+      top: '-10px',
+      right: '-10px',
+      padding: '4px 10px',
+      borderRadius: '12px',
+      background: 'var(--primary-color)',
+      color: 'var(--text-with-main-color)',
+      font: 'bold 13px sans-serif',
+      whiteSpace: 'nowrap',
+      boxShadow: '0 1px 3px rgb(0 0 0 / 40%)'
+    })
+    picture.appendChild(badge)
+  }
+
+  const page = document.querySelector('.app') ?? document.body
+  page.appendChild(picture)
+
+  /** @param {DragEvent} moveEvent */
+  const follow = (moveEvent) => {
+    // Chromium reports 0, 0 for the last events of a drag leaving the window
+    if (moveEvent.clientX === 0 && moveEvent.clientY === 0) { return }
+
+    picture.style.transform = `translate(${moveEvent.clientX - grabX}px, ${moveEvent.clientY - grabY}px)`
+    picture.style.visibility = 'visible'
+  }
+
+  /** @param {DragEvent} leaveEvent */
+  const hideOutside = (leaveEvent) => {
+    // Leaving the window, not moving from one element on to the next
+    if (leaveEvent.relatedTarget === null) {
+      picture.style.visibility = 'hidden'
+    }
+  }
+
+  const end = () => {
+    picture.remove()
+    document.removeEventListener('dragover', follow, true)
+    document.removeEventListener('dragleave', hideOutside, true)
+    document.removeEventListener('drop', end, true)
+    source.removeEventListener('dragend', end)
+  }
+
+  document.addEventListener('dragover', follow, true)
+  document.addEventListener('dragleave', hideOutside, true)
+  // Before any drop target has done anything, so the picture is gone at once
+  document.addEventListener('drop', end, true)
+  // A drag given up, or dropped where nothing takes it. On the square itself,
+  // as it may no longer be in the page by then, and then the event goes no
+  // further.
+  source.addEventListener('dragend', end)
 }
 
 /**
