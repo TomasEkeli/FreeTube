@@ -187,6 +187,18 @@ Channels:
   Count: '{number} channel(s) found.'
   Empty: Your channel list is currently empty.
   Unsubscribe Prompt: Are you sure you want to unsubscribe from "{channelName}"?
+  # The Channels page, where subscriptions are sorted into profiles: a strip of
+  # profile bubbles, a column per open profile, and a column of the channels no
+  # profile has claimed yet.
+  Overview:
+    Profiles: Profiles
+    Unassigned: Unassigned
+    Unassigned Count: 1 unassigned | {count} unassigned
+    Empty Profile: No channels in this profile yet.
+    Open a Profile: Click a profile above to open its column.
+    No Profiles: Channels are sorted into profiles, and there are none yet.
+    Create Profiles: Create one in Settings.
+    Go to channel: Go to {channelName}
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown
