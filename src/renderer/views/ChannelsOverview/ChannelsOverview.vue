@@ -27,6 +27,7 @@
           :profiles="profiles"
           :open-profile-ids="openProfileIds"
           :match-counts="matchCounts"
+          :duplicate-counts="duplicateCountsByProfile"
           @toggle="toggleColumn"
           @drop-channels="fileChannelsFromPalette"
         />
@@ -97,6 +98,8 @@
           :text-color="column.profile?.textColor"
           :channels="column.channels"
           :selected-ids="selection.get(column.id)"
+          :duplicate-profiles="duplicateProfiles"
+          :callout-colours="calloutColours"
           @thumbnail-error="updateThumbnail"
           @select="(channel, extend) => selectChannel(column, channel, extend)"
           @drag-start="(event, channel) => dragChannel(event, channel, column.id)"
@@ -140,7 +143,9 @@ import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/loca
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
+  assignCalloutColours,
   channelMemberships,
+  duplicateCounts,
   filterChannels,
   isSelected,
   nonPrimaryProfiles,
@@ -156,6 +161,7 @@ import {
   selectionSize,
   selectRange,
   sortChannels,
+  sortColumn,
   toggleOpenProfile,
   toggleSelected,
   unassignedChannels,
@@ -225,6 +231,7 @@ async function saveOpenProfileIds(profileIds) {
  * @property {string | null} id the profile's, or null for the pool
  * @property {Profile | null} profile
  * @property {Channel[]} channels shown, in the order shown
+ * @property {Channel[]} [allChannels] every channel in the column, shown or not
  * @property {number} total how many channels the column has, shown or not
  */
 
@@ -243,12 +250,13 @@ const openColumns = computed(() => {
   return openProfileIds.value
     .map(id => profiles.value.find(profile => profile._id === id))
     .map(profile => {
-      const channels = sortChannels(uniqueChannels(profile.subscriptions), collator.value)
+      const channels = sortColumn(uniqueChannels(profile.subscriptions), memberships.value, collator.value)
 
       return {
         id: profile._id,
         profile,
         channels: filterChannels(channels, normalisedQuery.value),
+        allChannels: channels,
         total: channels.length
       }
     })
@@ -274,6 +282,34 @@ const columns = computed(() => {
 
   return [poolColumn, ...openColumns.value]
 })
+
+/**
+ * The names of every profile each duplicated channel is in, for the mark on
+ * its rows. Only channels in more than one profile have an entry.
+ * @type {import('vue').ComputedRef<Map<string, string[]>>}
+ */
+const duplicateProfiles = computed(() => {
+  const names = new Map(profiles.value.map(profile => [profile._id, profile.name]))
+  const duplicates = new Map()
+
+  for (const [channelId, profileIds] of memberships.value) {
+    if (profileIds.length > 1) {
+      duplicates.set(channelId, profileIds.map(id => names.get(id)))
+    }
+  }
+
+  return duplicates
+})
+
+/**
+ * Callout colours for the channels duplicated across the open columns. Taken
+ * from the columns in full, so a search does not change a channel's colour.
+ */
+const calloutColours = computed(() => {
+  return assignCalloutColours(openColumns.value.map(column => column.allChannels.map(channel => channel.id)))
+})
+
+const duplicateCountsByProfile = computed(() => duplicateCounts(profileList.value, memberships.value))
 
 /**
  * How many channels in each profile match the search, so that a profile whose

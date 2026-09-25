@@ -215,6 +215,9 @@ Channels:
     No Matches: No channels here match the search.
     # In a column's header while searching
     Match Count: '{matches} of {count}'
+    # Over a channel in more than one profile; {profiles} is a list of profile names
+    In Profiles: In {profiles}
+    Profile Duplicates: 1 channel is in other profiles too | {count} channels are in other profiles too
     Profile Matches: 1 channel matches | {count} channels match
     Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'
     Selected Count: 1 channel selected | {count} channels selected

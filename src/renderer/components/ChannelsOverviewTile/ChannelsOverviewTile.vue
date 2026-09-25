@@ -6,6 +6,10 @@
   page is for sorting channels into profiles, and what a channel has uploaded
   lately is a question for another page.
 
+  A channel in more than one profile has a mark saying which. Where its twin
+  is in an other open column as well, both rows share a callout colour, so the
+  pair can be matched at a glance.
+
   Clicking the row selects it, and Shift-click selects everything from the
   last clicked row; Space and Enter do the same from the keyboard. Going to
   the channel is the small icon at the end of the row, so a stray click while
@@ -14,7 +18,7 @@
 <template>
   <div
     class="tile"
-    :class="{ dragging, selected }"
+    :class="[{ dragging, selected }, callout === null ? null : `callout callout${callout}`]"
     role="checkbox"
     tabindex="0"
     :aria-checked="selected ? 'true' : 'false'"
@@ -54,6 +58,15 @@
     >
       {{ channel.name }}
     </span>
+    <span
+      v-if="duplicateProfiles !== null"
+      class="duplicateMark"
+      :title="duplicateTitle"
+      :aria-label="duplicateTitle"
+      role="img"
+    >
+      <FontAwesomeIcon :icon="['fas', 'clone']" />
+    </span>
     <RouterLink
       v-if="showChannelLink"
       class="channelLink"
@@ -85,6 +98,20 @@ const props = defineProps({
   selected: {
     type: Boolean,
     default: false
+  },
+  /**
+   * Every profile the channel is in, by name, when that is more than one;
+   * null otherwise.
+   * @type {import('vue').PropType<string[] | null>}
+   */
+  duplicateProfiles: {
+    type: Array,
+    default: null
+  },
+  /** The callout colour shared with its twins in the other open columns, if any */
+  callout: {
+    type: Number,
+    default: null
   }
 })
 
@@ -100,7 +127,15 @@ function onDragStart(event) {
   emit('drag-start', event, props.channel)
 }
 
-const { t } = useI18n()
+const { locale, t } = useI18n()
+
+const duplicateTitle = computed(() => {
+  if (props.duplicateProfiles === null) { return '' }
+
+  const profiles = new Intl.ListFormat([locale.value, 'en'], { type: 'conjunction' }).format(props.duplicateProfiles)
+
+  return t('Channels.Overview.In Profiles', { profiles })
+})
 
 const showChannelLink = computed(() => !store.getters.getDisableChannelLinks)
 

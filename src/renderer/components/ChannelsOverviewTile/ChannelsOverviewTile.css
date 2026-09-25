@@ -4,7 +4,8 @@
   gap: 8px;
   block-size: 36px;
   padding-block: 0;
-  padding-inline: 6px;
+  padding-inline: 4px 6px;
+  border-inline-start: 4px solid transparent;
   border-radius: 4px;
   box-sizing: border-box;
   user-select: none;
@@ -93,4 +94,39 @@
   background-color: rgb(0 0 0 / 55%);
   color: #fff;
   font-size: 13px;
+}
+
+.duplicateMark {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  color: var(--tertiary-text-color);
+  font-size: 13px;
+}
+
+/*
+ * Callout colours: a small set of hues picked to stay apart from each other,
+ * and to read on the light themes and the dark ones alike. A strip in the
+ * colour itself, and a tint of it under the row.
+ */
+.callout0 { --callout-colour: #e0a800; }
+.callout1 { --callout-colour: #a0a8b4; }
+.callout2 { --callout-colour: #c07a3e; }
+.callout3 { --callout-colour: #19a898; }
+.callout4 { --callout-colour: #9b6ae0; }
+.callout5 { --callout-colour: #e0508a; }
+.callout6 { --callout-colour: #3d95e0; }
+.callout7 { --callout-colour: #7fb539; }
+
+.tile.callout {
+  border-inline-start-color: var(--callout-colour);
+  background-color: color-mix(in srgb, var(--callout-colour) 20%, transparent);
+}
+
+.tile.callout .duplicateMark {
+  color: var(--callout-colour);
+}
+
+.tile.callout.selected {
+  background-color: color-mix(in srgb, var(--primary-color) 22%, color-mix(in srgb, var(--callout-colour) 20%, transparent));
 }
