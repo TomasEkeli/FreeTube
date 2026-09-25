@@ -72,7 +72,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
@@ -86,6 +86,7 @@ import {
   channelMemberships,
   nonPrimaryProfiles,
   primaryProfile,
+  restoreOpenProfiles,
   sortChannels,
   toggleOpenProfile,
   unassignedChannels,
@@ -112,13 +113,18 @@ const memberships = computed(() => channelMemberships(profileList.value))
 /** @type {import('vue').ComputedRef<Channel[]>} */
 const pool = computed(() => sortChannels(unassignedChannels(profileList.value, memberships.value), collator.value))
 
-/** @type {import('vue').Ref<string[]>} */
-const openProfileIds = ref([])
+/**
+ * The open columns, as a setting: it survives leaving the page and restarting
+ * the app, and follows along in any other window.
+ * @type {import('vue').ComputedRef<string[]>}
+ */
+const openProfileIds = computed(() => {
+  return restoreOpenProfiles(store.getters.getChannelsOverviewOpenProfiles, profileList.value)
+})
 
 const openColumns = computed(() => {
   return openProfileIds.value
     .map(id => profiles.value.find(profile => profile._id === id))
-    .filter(profile => profile !== undefined)
     .map(profile => ({
       profile,
       channels: sortChannels(uniqueChannels(profile.subscriptions), collator.value)
@@ -129,7 +135,7 @@ const openColumns = computed(() => {
  * @param {string} profileId
  */
 function toggleColumn(profileId) {
-  openProfileIds.value = toggleOpenProfile(openProfileIds.value, profileId)
+  store.dispatch('updateChannelsOverviewOpenProfiles', toggleOpenProfile(openProfileIds.value, profileId))
 }
 
 let thumbnailErrorCount = 0

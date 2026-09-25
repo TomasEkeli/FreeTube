@@ -127,6 +127,23 @@ export function sortChannels(channels, collator) {
 }
 
 /**
+ * The open columns as stored, less any profile that no longer exists. A
+ * profile deleted since the page was last open simply does not come back.
+ * @param {unknown} storedIds
+ * @param {Profile[]} profileList
+ * @param {number} [max]
+ * @returns {string[]}
+ */
+export function restoreOpenProfiles(storedIds, profileList, max = MAX_OPEN_COLUMNS) {
+  if (!Array.isArray(storedIds)) { return [] }
+
+  const existing = new Set(nonPrimaryProfiles(profileList).map(profile => profile._id))
+  const restored = [...new Set(storedIds)].filter(id => existing.has(id))
+
+  return restored.slice(Math.max(0, restored.length - max))
+}
+
+/**
  * Opens a closed column or closes an open one. Opening a column when the
  * working set is full closes the one that has been open longest, so the
  * newest choice always lands.
