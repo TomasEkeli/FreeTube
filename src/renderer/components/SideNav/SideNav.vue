@@ -110,7 +110,7 @@
           class="thumbnailContainer"
         >
           <FontAwesomeIcon
-            :icon="['fas', 'bookmark']"
+            :icon="['fas', 'list']"
             class="navIcon"
             :class="applyNavIconExpand"
           />
