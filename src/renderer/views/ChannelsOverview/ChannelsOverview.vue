@@ -537,11 +537,12 @@ function afterPendingChanges(change) {
  */
 function fileChannels(dragged, targetProfileId, copy) {
   return afterPendingChanges(async () => {
-    const before = profileList.value
-    const updated = planTransfer(before, dragged, targetProfileId, copy)
+    const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
 
     if (updated.length === 0) { return 0 }
 
+    // Counted before saving, as saving changes the profile list in place
+    const count = countTransferred(profileList.value, updated, targetProfileId)
     const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
 
     await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
@@ -550,7 +551,7 @@ function fileChannels(dragged, targetProfileId, copy) {
     // be pruned for not being there yet
     setPrunedSelection(selectionAfter)
 
-    return countTransferred(before, updated, targetProfileId)
+    return count
   })
 }
 
