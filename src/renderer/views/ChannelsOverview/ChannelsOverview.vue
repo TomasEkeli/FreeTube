@@ -61,18 +61,26 @@
           :label="searching ? t('Channels.Overview.Select All Matches') : t('Channels.Overview.Select All')"
           @click="selectAllShown"
         />
-        <template v-if="selectedCount > 0">
-          <span
-            class="selectedCount"
-            aria-live="polite"
-          >
+        <!-- Always there, so that a screen reader is listening before the count changes -->
+        <span
+          class="selectedCount"
+          aria-live="polite"
+        >
+          <template v-if="selectedCount > 0">
             {{ t('Channels.Overview.Selected Count', { count: selectedCount }, selectedCount) }}
-          </span>
-          <FtButton
-            :label="t('Channels.Overview.Clear Selection')"
-            @click="clearSelection"
-          />
-        </template>
+            <span
+              v-if="hiddenSelectedCount > 0"
+              class="hiddenSelected"
+            >
+              {{ t('Channels.Overview.Hidden by Search', { count: hiddenSelectedCount }, hiddenSelectedCount) }}
+            </span>
+          </template>
+        </span>
+        <FtButton
+          v-if="selectedCount > 0"
+          :label="t('Channels.Overview.Clear Selection')"
+          @click="clearSelection"
+        />
         <span
           v-else
           class="toolbarHint"
@@ -237,7 +245,7 @@ async function saveOpenProfileIds(profileIds) {
  * @property {string | null} id the profile's, or null for the pool
  * @property {Profile | null} profile
  * @property {Channel[]} channels shown, in the order shown
- * @property {Channel[]} [allChannels] every channel in the column, shown or not
+ * @property {Channel[]} allChannels every channel in the column, shown or not
  * @property {number} total how many channels the column has, shown or not
  */
 
@@ -283,6 +291,7 @@ const columns = computed(() => {
     id: null,
     profile: null,
     channels: filterChannels(pool.value, normalisedQuery.value),
+    allChannels: pool.value,
     total: pool.value.length
   }
 
@@ -359,12 +368,45 @@ const selectionAnchors = new Map()
 
 const selectedCount = computed(() => selectionSize(selection.value))
 
-// A channel that leaves its column, or a column that closes, is no longer selected
-watch(columns, (columns) => {
-  selection.value = pruneSelection(selection.value, new Map(columns.map(column => {
-    return [column.id, column.channels.map(channel => channel.id)]
-  })))
+/**
+ * Selected channels the search is hiding. They stay selected, so that a
+ * selection can be gathered over several searches, and go along with a drag;
+ * the count over the columns says how many of them there are.
+ */
+const hiddenSelectedCount = computed(() => {
+  const shown = pruneSelection(selection.value, columnContents(columns.value, 'channels'))
+
+  return selectedCount.value - selectionSize(shown)
 })
+
+/**
+ * @param {Column[]} columns
+ * @param {'channels' | 'allChannels'} which shown, or all of them
+ * @returns {Map<string | null, Set<string>>}
+ */
+function columnContents(columns, which) {
+  return new Map(columns.map(column => [column.id, new Set(column[which].map(channel => channel.id))]))
+}
+
+/**
+ * Only what is in the open columns: a channel that leaves its column, or a
+ * column that closes, is no longer selected, and a Shift-click range no
+ * longer starts from it. A search hiding a channel leaves it selected.
+ * @param {import('../../helpers/channelsOverview').Selection} next
+ */
+function setPrunedSelection(next) {
+  const contents = columnContents(columns.value, 'allChannels')
+
+  selection.value = pruneSelection(next, contents)
+
+  for (const [columnId, channelId] of selectionAnchors) {
+    if (!contents.get(columnId)?.has(channelId)) {
+      selectionAnchors.delete(columnId)
+    }
+  }
+}
+
+watch(columns, () => setPrunedSelection(selection.value))
 
 /**
  * @param {Column} column
@@ -374,12 +416,15 @@ watch(columns, (columns) => {
 function selectChannel(column, channel, extend) {
   const anchor = selectionAnchors.get(column.id)
 
-  if (extend && anchor !== undefined && anchor !== channel.id) {
-    const order = column.channels.map(channel => channel.id)
-    selection.value = selectRange(selection.value, column.id, order, anchor, channel.id)
-  } else {
-    selection.value = toggleSelected(selection.value, column.id, channel.id)
-  }
+  // A range runs through the rows as shown; an anchor the search now hides
+  // has no place in that, and the click toggles the row instead
+  const range = extend && anchor !== undefined && anchor !== channel.id
+    ? selectRange(selection.value, column.id, column.channels.map(channel => channel.id), anchor, channel.id)
+    : selection.value
+
+  selection.value = range !== selection.value
+    ? range
+    : toggleSelected(selection.value, column.id, channel.id)
 
   selectionAnchors.set(column.id, channel.id)
 }
@@ -473,9 +518,7 @@ async function fileChannels(dragged, targetProfileId, copy) {
 
   // Only now, with the channels in their new columns: sooner, and they would
   // be pruned for not being there yet
-  selection.value = pruneSelection(selectionAfter, new Map(columns.value.map(column => {
-    return [column.id, column.channels.map(channel => channel.id)]
-  })))
+  setPrunedSelection(selectionAfter)
 }
 
 /**

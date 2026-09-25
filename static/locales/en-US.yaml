@@ -214,6 +214,7 @@ Channels:
     Profile Matches: 1 channel matches | {count} channels match
     Unassigned Match Count: '{matches} of 1 unassigned | {matches} of {count} unassigned'
     Selected Count: 1 channel selected | {count} channels selected
+    Hidden by Search: (1 hidden by the search) | ({count} hidden by the search)
     Clear Selection: Clear Selection
     Selection Hint: Click to select, Shift-click to select a range. Drag to move, hold Ctrl to copy.
     # Shown on the cursor while dragging more than one channel
