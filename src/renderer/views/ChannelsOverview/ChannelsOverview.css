@@ -18,6 +18,27 @@
   text-align: center;
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 44px;
+}
+
+.toolbar :deep(.btn) {
+  margin: 0;
+}
+
+.selectedCount {
+  font-weight: bold;
+}
+
+.toolbarHint {
+  color: var(--tertiary-text-color);
+  font-size: 14px;
+}
+
 .columns {
   display: flex;
   align-items: stretch;
@@ -25,7 +46,7 @@
 
   /* The columns scroll on their own, so they fill what the window has left
      below the top bar and the palette instead of making the page scroll */
-  block-size: calc(100vh - 200px);
+  block-size: calc(100vh - 276px);
   min-block-size: 320px;
   overflow-x: auto;
 }

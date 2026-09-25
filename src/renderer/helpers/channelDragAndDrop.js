@@ -28,6 +28,41 @@ export function startChannelDrag(event, channels, label) {
   // Allows drag and drop to work with touch devices, and gives a drop outside
   // the app something to show
   event.dataTransfer.setData('text/plain', label)
+
+  if (channels.length > 1) {
+    setCountDragImage(event, label)
+  }
+}
+
+/**
+ * The browser pictures a drag as the element it started on, which for a
+ * selection is one row out of however many are going. A badge with the count
+ * says what is actually being carried.
+ * @param {DragEvent} event
+ * @param {string} label
+ */
+function setCountDragImage(event, label) {
+  const badge = document.createElement('div')
+  badge.textContent = label
+  badge.className = 'channelDragBadge'
+
+  Object.assign(badge.style, {
+    position: 'fixed',
+    insetBlockStart: '-1000px',
+    insetInlineStart: '-1000px',
+    padding: '6px 12px',
+    borderRadius: '14px',
+    background: 'var(--primary-color)',
+    color: 'var(--text-with-main-color)',
+    font: 'bold 14px sans-serif',
+    whiteSpace: 'nowrap',
+  })
+
+  document.body.appendChild(badge)
+  event.dataTransfer.setDragImage(badge, 0, 0)
+
+  // The browser takes its picture of the element as the drag starts
+  setTimeout(() => badge.remove(), 0)
 }
 
 /**
