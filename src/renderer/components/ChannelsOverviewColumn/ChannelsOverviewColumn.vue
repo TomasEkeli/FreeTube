@@ -233,7 +233,7 @@ watch(() => props.channels, () => {
   nextTick(() => playChange(container, before, leaving, inSight))
 }, { flush: 'pre' })
 
-const MOVE_MS = 200
+const MOVE_MS = 150
 
 /**
  * @param {HTMLElement} container

@@ -82,11 +82,11 @@
  * up. The gap after it folds with it.
  */
 .column.column-enter-active {
-  animation: column-open 300ms ease-out;
+  animation: column-open 225ms ease-out;
 }
 
 .column.column-leave-active {
-  animation: column-close 300ms ease-in forwards;
+  animation: column-close 225ms ease-in forwards;
   pointer-events: none;
 }
 

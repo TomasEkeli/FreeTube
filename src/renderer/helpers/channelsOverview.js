@@ -139,7 +139,7 @@ export function restoreOpenProfiles(storedIds, profileList) {
 }
 
 /**
- * Opens a closed column, at the end, or closes an open one. As many can be
+ * Opens a closed column or closes an open one. As many can be
  * open as the reader likes; the page scrolls sideways once they do not fit.
  * @param {string[]} openProfileIds in the order they were opened
  * @param {string} profileId
