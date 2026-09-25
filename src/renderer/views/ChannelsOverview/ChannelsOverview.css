@@ -1,0 +1,42 @@
+.channelsOverview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  inline-size: 95%;
+  margin-block: 0 20px;
+  margin-inline: auto;
+}
+
+.emptyCard,
+.paletteCard {
+  margin: 0;
+  padding-block: 10px;
+}
+
+.message {
+  color: var(--tertiary-text-color);
+  text-align: center;
+}
+
+.columns {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+
+  /* The columns scroll on their own, so they fill what the window has left
+     below the top bar and the palette instead of making the page scroll */
+  block-size: calc(100vh - 200px);
+  min-block-size: 320px;
+  overflow-x: auto;
+}
+
+.columnsHint {
+  flex: 1 1 0;
+  align-self: center;
+}
+
+@media only screen and (width <= 680px) {
+  .channelsOverview {
+    inline-size: 100%;
+  }
+}

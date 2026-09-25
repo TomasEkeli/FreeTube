@@ -1,0 +1,57 @@
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: 36px;
+  padding-block: 0;
+  padding-inline: 6px;
+  border-radius: 4px;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.tile:hover {
+  background-color: var(--side-nav-hover-color);
+  color: var(--side-nav-hover-text-color);
+}
+
+.thumbnail {
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.channelLink {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 50%;
+  color: var(--tertiary-text-color);
+  font-size: 12px;
+  opacity: 0;
+}
+
+.channelLink:hover,
+.channelLink:focus-visible {
+  color: var(--primary-text-color);
+  background-color: var(--secondary-card-bg-color);
+}
+
+.tile:hover .channelLink,
+.tile:focus-within .channelLink {
+  opacity: 1;
+}
