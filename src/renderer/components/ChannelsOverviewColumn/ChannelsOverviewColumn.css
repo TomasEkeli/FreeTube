@@ -1,9 +1,11 @@
 .column {
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
-  min-inline-size: 200px;
-  max-inline-size: 420px;
+
+  /* Wide enough for three channels abreast. With more columns open than
+     fit, they keep this width and the row of them scrolls sideways */
+  flex: 1 0 300px;
+  max-inline-size: 480px;
   block-size: 100%;
   border-radius: 6px;
   background-color: var(--card-bg-color);

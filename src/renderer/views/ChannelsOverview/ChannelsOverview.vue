@@ -228,24 +228,28 @@ const memberships = computed(() => channelMemberships(profileList.value))
 const pool = computed(() => sortChannels(unassignedChannels(profileList.value, memberships.value), collator.value))
 
 /**
- * The open columns. Saved as a setting, so they survive leaving the page and
- * restarting the app, and follow along in any other window.
+ * The open columns, which belong to the window: one window can be sorting
+ * two profiles while another sorts three others. They are kept in the
+ * window's session storage, which lasts through leaving the page and
+ * reloading, and is the window's own.
  *
- * The page keeps its own copy and saves it: the setting only changes once the
- * database has the value, and a second click before then would toggle the
- * value from before the first. Changes to the setting are taken up only while
- * nothing is being saved from here, so the page never falls back to one of
- * its own earlier values.
- * @type {import('vue').Ref<unknown>}
+ * Every change is saved to the setting as well, where it is only read by a
+ * window that has no columns of its own yet: a new one, or the first after a
+ * restart, which so starts out as the last one left off.
  */
-const storedOpenProfileIds = ref(store.getters.getChannelsOverviewOpenProfiles)
-let openProfileSavesInFlight = 0
+const WINDOW_OPEN_PROFILES_KEY = 'ChannelsOverview/openProfiles'
 
-watch(() => store.getters.getChannelsOverviewOpenProfiles, (value) => {
-  if (openProfileSavesInFlight === 0) {
-    storedOpenProfileIds.value = value
+/** @returns {unknown} */
+function readWindowOpenProfiles() {
+  try {
+    return JSON.parse(sessionStorage.getItem(WINDOW_OPEN_PROFILES_KEY))
+  } catch {
+    return null
   }
-})
+}
+
+/** @type {import('vue').Ref<unknown>} */
+const storedOpenProfileIds = ref(readWindowOpenProfiles() ?? store.getters.getChannelsOverviewOpenProfiles)
 
 /** @type {import('vue').ComputedRef<string[]>} */
 const openProfileIds = computed(() => restoreOpenProfiles(storedOpenProfileIds.value, profileList.value))
@@ -253,15 +257,10 @@ const openProfileIds = computed(() => restoreOpenProfiles(storedOpenProfileIds.v
 /**
  * @param {string[]} profileIds
  */
-async function saveOpenProfileIds(profileIds) {
+function saveOpenProfileIds(profileIds) {
   storedOpenProfileIds.value = profileIds
-  openProfileSavesInFlight++
-
-  try {
-    await store.dispatch('updateChannelsOverviewOpenProfiles', profileIds)
-  } finally {
-    openProfileSavesInFlight--
-  }
+  sessionStorage.setItem(WINDOW_OPEN_PROFILES_KEY, JSON.stringify(profileIds))
+  store.dispatch('updateChannelsOverviewOpenProfiles', profileIds)
 }
 
 /**

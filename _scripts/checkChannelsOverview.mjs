@@ -18,7 +18,6 @@ import {
   filterChannels,
   isDuplicate,
   isSelected,
-  MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
   normaliseQuery,
   planTransfer,
@@ -130,9 +129,9 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('a closed column opens', toggleOpenProfile(['p1'], 'p2').join(',') === 'p1,p2')
   check('an open column closes', toggleOpenProfile(['p1', 'p2'], 'p1').join(',') === 'p2')
 
-  const full = ['p1', 'p2', 'p3', 'p4']
-  check('the working set tops out at the maximum', MAX_OPEN_COLUMNS === 4)
-  check('opening one more closes the longest open', toggleOpenProfile(full, 'p5').join(',') === 'p2,p3,p4,p5')
+  const many = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
+  check('there is no limit on how many are open', toggleOpenProfile(many, 'p9').join(',') === 'p1,p2,p3,p4,p5,p6,p7,p8,p9')
+  check('restoring keeps them all', restoreOpenProfiles(many, [profile(MAIN_PROFILE_ID, 'All Channels', []), ...many.map(id => profile(id, id, []))]).length === 8)
 }
 
 // Restoring the working set from the stored setting

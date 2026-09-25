@@ -72,6 +72,14 @@
   overflow-x: auto;
 }
 
+/* The pool stays in view while the profile columns scroll past it */
+.poolColumn {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  box-shadow: 4px 0 8px rgb(0 0 0 / 15%);
+}
+
 .columnsHint {
   flex: 1 1 0;
   align-self: center;
