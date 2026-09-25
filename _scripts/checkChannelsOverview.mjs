@@ -13,6 +13,7 @@
 import {
   assignCalloutColours,
   channelMemberships,
+  countTransferred,
   duplicateCounts,
   filterChannels,
   isDuplicate,
@@ -201,6 +202,17 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   ], 'p2', false)
   check('a mixed drop updates each profile once', many.length === 2 && touched(many) === 'p1,p2')
   check('a mixed drop moves everything across', subs(many, 'p2') === 'c,a,b,d' && subs(many, 'p1') === '')
+
+  check('a move counts what it moved', countTransferred(profiles(), moved, 'p2') === 1)
+  check('a copy counts what it added', countTransferred(profiles(), copied, 'p2') === 1)
+  const alreadyThereCopy = planTransfer(profiles(), [{ channelId: 'a', profileId: null }], 'p1', true)
+  check('a channel already there counts nothing when copied', countTransferred(profiles(), alreadyThereCopy, 'p1') === 0)
+  check('a channel already there counts when moved out of its column', countTransferred([
+    profile(MAIN_PROFILE_ID, 'All Channels', ['a']),
+    profile('p1', 'Gaming', ['a']),
+    profile('p2', 'Science', ['a'])
+  ], alreadyMove, 'p2') === 1)
+  check('a mixed move counts each channel once', countTransferred(profiles(), many, 'p2') === 3)
 
   const original = profiles()
   planTransfer(original, [{ channelId: 'a', profileId: 'p1' }], 'p2', false)

@@ -157,6 +157,7 @@ import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
   assignCalloutColours,
   channelMemberships,
+  countTransferred,
   duplicateCounts,
   filterChannels,
   isSelected,
@@ -506,6 +507,24 @@ function dragChannel(event, channel, profileId) {
   }
 }
 
+let pendingChanges = Promise.resolve()
+
+/**
+ * Runs a change to the profiles once every earlier one from this page has
+ * landed. A drop saves whole profiles worked out from the profile list as it
+ * stands, and two drops in quick succession would otherwise both start from
+ * the list before either, the second putting back what the first took out.
+ * @template T
+ * @param {() => Promise<T>} change
+ * @returns {Promise<T>}
+ */
+function afterPendingChanges(change) {
+  const run = pendingChanges.then(change)
+  pendingChanges = run.catch(error => console.error(error))
+
+  return run
+}
+
 /**
  * Files dropped channels into a profile, or back into the pool with
  * `targetProfileId` null, saving each changed profile once. Through the
@@ -514,19 +533,25 @@ function dragChannel(event, channel, profileId) {
  * @param {DraggedChannel[]} dragged
  * @param {string | null} targetProfileId
  * @param {boolean} copy
+ * @returns {Promise<number>} how many channels were filed
  */
-async function fileChannels(dragged, targetProfileId, copy) {
-  const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
+function fileChannels(dragged, targetProfileId, copy) {
+  return afterPendingChanges(async () => {
+    const before = profileList.value
+    const updated = planTransfer(before, dragged, targetProfileId, copy)
 
-  if (updated.length === 0) { return }
+    if (updated.length === 0) { return 0 }
 
-  const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
+    const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
 
-  await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
+    await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
 
-  // Only now, with the channels in their new columns: sooner, and they would
-  // be pruned for not being there yet
-  setPrunedSelection(selectionAfter)
+    // Only now, with the channels in their new columns: sooner, and they would
+    // be pruned for not being there yet
+    setPrunedSelection(selectionAfter)
+
+    return countTransferred(before, updated, targetProfileId)
+  })
 }
 
 /**
@@ -541,16 +566,14 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
 
   if (!profile) { return }
 
-  const arriving = new Set(dragged.filter(channel => channel.profileId !== profileId).map(channel => channel.channelId))
+  const count = await fileChannels(dragged, profileId, copy)
 
-  await fileChannels(dragged, profileId, copy)
-
-  if (arriving.size === 0) {
+  if (count === 0) {
     showToast(t('Channels.Overview.Already in Profile', { profile: profile.name }))
   } else if (copy) {
-    showToast(t('Channels.Overview.Copied to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+    showToast(t('Channels.Overview.Copied to Profile', { count, profile: profile.name }, count))
   } else {
-    showToast(t('Channels.Overview.Moved to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+    showToast(t('Channels.Overview.Moved to Profile', { count, profile: profile.name }, count))
   }
 }
 
@@ -560,7 +583,9 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
  * @param {string} profileId
  */
 function removeDuplicate(channel, profileId) {
-  store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds: [profileId] })
+  afterPendingChanges(() => {
+    return store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds: [profileId] })
+  })
 }
 
 /**
@@ -570,11 +595,13 @@ function removeDuplicate(channel, profileId) {
  * @param {string} homeProfileId
  */
 function keepOnlyIn(channel, homeProfileId) {
-  const profileIds = profilesOutsideHome(memberships.value, channel.id, homeProfileId)
+  afterPendingChanges(async () => {
+    const profileIds = profilesOutsideHome(memberships.value, channel.id, homeProfileId)
 
-  if (profileIds.length > 0) {
-    store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
-  }
+    if (profileIds.length > 0) {
+      await store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
+    }
+  })
 }
 
 /**
@@ -609,14 +636,19 @@ async function handleUnsubscribePrompt(value) {
 
   if (value !== 'unsubscribe') { return }
 
-  const removal = planUnsubscribe(profileList.value, channelIds)
+  const count = await afterPendingChanges(async () => {
+    const removal = planUnsubscribe(profileList.value, channelIds)
 
-  if (removal === null) { return }
+    if (removal === null) { return 0 }
 
-  await store.dispatch('removeChannelsFromProfiles', removal)
+    await store.dispatch('removeChannelsFromProfiles', removal)
 
-  const count = removal.channelIds.length
-  showToast(t('Channels.Overview.Unsubscribed', { count }, count))
+    return removal.channelIds.length
+  })
+
+  if (count > 0) {
+    showToast(t('Channels.Overview.Unsubscribed', { count }, count))
+  }
 }
 
 /**

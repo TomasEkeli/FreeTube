@@ -592,3 +592,34 @@ export function duplicateCounts(profileList, memberships = channelMemberships(pr
 export function profilesOutsideHome(memberships, channelId, homeProfileId) {
   return (memberships.get(channelId) ?? []).filter(profileId => profileId !== homeProfileId)
 }
+
+/**
+ * How many channels a planned transfer actually files: those it adds to the
+ * target, and for a move also those it only takes out of where they were
+ * dragged from, as a channel already in the target does.
+ * @param {Profile[]} profileList before the transfer
+ * @param {Profile[]} updated what `planTransfer` returned
+ * @param {string | null} targetProfileId
+ * @returns {number}
+ */
+export function countTransferred(profileList, updated, targetProfileId) {
+  const byId = new Map(profileList.map(profile => [profile._id, profile]))
+  const transferred = new Set()
+
+  for (const profile of updated) {
+    const before = new Set(byId.get(profile._id)?.subscriptions.map(channel => channel.id) ?? [])
+    const after = new Set(profile.subscriptions.map(channel => channel.id))
+
+    if (profile._id === targetProfileId) {
+      for (const channelId of after) {
+        if (!before.has(channelId)) { transferred.add(channelId) }
+      }
+    } else {
+      for (const channelId of before) {
+        if (!after.has(channelId)) { transferred.add(channelId) }
+      }
+    }
+  }
+
+  return transferred.size
+}
