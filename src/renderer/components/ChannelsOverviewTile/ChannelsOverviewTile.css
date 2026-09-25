@@ -1,14 +1,11 @@
 .tile {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  block-size: 36px;
-  padding-block: 0;
-  padding-inline: 0 2px;
-  border-inline-start: 4px solid transparent;
-  border-radius: 4px;
-  box-sizing: border-box;
+  position: relative;
+  border-radius: 8px;
   user-select: none;
+}
+
+.tile[draggable='true'] {
+  cursor: grab;
 }
 
 .tile:hover {
@@ -16,77 +13,51 @@
   color: var(--side-nav-hover-text-color);
 }
 
-.selectArea {
-  flex: 1 1 auto;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-inline-size: 0;
+.tile.dragging {
+  opacity: 0.4;
+}
 
-  /* The row's padding and the space before its buttons are inside the
-     checkbox, so that a click anywhere in the row but on them selects it */
-  padding-inline: 4px 8px;
-  border-radius: 4px;
+.selectArea {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  block-size: 100%;
+  padding-block: 10px 8px;
+  padding-inline: 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+}
+
+.selectArea:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
 }
 
 .thumbnailSlot {
   position: relative;
-  flex: 0 0 auto;
   display: flex;
+  border-radius: 50%;
 }
 
 .thumbnail {
-  inline-size: 26px;
-  block-size: 26px;
+  inline-size: 64px;
+  block-size: 64px;
   border-radius: 50%;
   object-fit: cover;
 }
 
 .name {
-  flex: 1 1 auto;
-  min-inline-size: 0;
+  display: -webkit-box;
+  inline-size: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-}
-
-.channelLink {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 24px;
-  block-size: 24px;
-  border-radius: 50%;
-  color: var(--tertiary-text-color);
-  font-size: 12px;
-  opacity: 0;
-}
-
-.channelLink:hover,
-.channelLink:focus-visible {
-  color: var(--primary-text-color);
-  background-color: var(--secondary-card-bg-color);
-}
-
-.tile:hover .channelLink,
-.tile:focus-within .channelLink {
-  opacity: 1;
-}
-
-.tile[draggable='true'] {
-  cursor: grab;
-}
-
-.tile.dragging {
-  opacity: 0.4;
-}
-
-.selectArea:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 1px;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .tile.selected {
@@ -102,34 +73,62 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background-color: rgb(0 0 0 / 55%);
+  background-color: rgb(0 0 0 / 50%);
 }
 
 /* A tick: two sides of a box, turned */
 .selectedMark::after {
   content: '';
   position: absolute;
-  inset-block-start: 6px;
-  inset-inline-start: 10px;
-  inline-size: 5px;
-  block-size: 10px;
+  inset-block-start: 17px;
+  inset-inline-start: 26px;
+  inline-size: 10px;
+  block-size: 20px;
   border: solid #fff;
-  border-width: 0 2px 2px 0;
+  border-width: 0 3px 3px 0;
   transform: rotate(45deg);
 }
 
-.duplicateMark {
-  flex: 0 0 auto;
+/* The two buttons, laid over the square's top corners */
+.corner {
+  position: absolute;
+  inset-block-start: 4px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  inline-size: 26px;
+  block-size: 26px;
+  border-radius: 50%;
+  background-color: var(--card-bg-color);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+  font-size: 12px;
+}
+
+.duplicateMark {
+  inset-inline-end: 4px;
   color: var(--tertiary-text-color);
-  font-size: 13px;
+}
+
+.channelLink {
+  inset-inline-start: 4px;
+  color: var(--tertiary-text-color);
+  opacity: 0;
+}
+
+.channelLink:hover,
+.channelLink:focus-visible {
+  color: var(--primary-text-color);
+}
+
+.tile:hover .channelLink,
+.tile:focus-within .channelLink {
+  opacity: 1;
 }
 
 /*
  * Callout colours: a small set of hues picked to stay apart from each other,
- * and to read on the light themes and the dark ones alike. A strip in the
- * colour itself, and a tint of it under the row.
+ * and to read on the light themes and the dark ones alike. A ring in the
+ * colour itself round the thumbnail, and a tint of it under the square.
  */
 .callout0 { --callout-colour: #e0a800; }
 .callout1 { --callout-colour: #a0a8b4; }
@@ -141,8 +140,11 @@
 .callout7 { --callout-colour: #7fb539; }
 
 .tile.callout {
-  border-inline-start-color: var(--callout-colour);
-  background-color: color-mix(in srgb, var(--callout-colour) 20%, transparent);
+  background-color: color-mix(in srgb, var(--callout-colour) 16%, transparent);
+}
+
+.tile.callout .thumbnail {
+  box-shadow: 0 0 0 3px var(--callout-colour);
 }
 
 .tile.callout .duplicateMark {
@@ -150,5 +152,5 @@
 }
 
 .tile.callout.selected {
-  background-color: color-mix(in srgb, var(--primary-color) 22%, color-mix(in srgb, var(--callout-colour) 20%, transparent));
+  background-color: color-mix(in srgb, var(--primary-color) 22%, color-mix(in srgb, var(--callout-colour) 16%, transparent));
 }
