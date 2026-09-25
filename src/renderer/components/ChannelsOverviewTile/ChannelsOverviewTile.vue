@@ -10,12 +10,19 @@
   icon at the end of the row, so a stray click while sorting never navigates.
 -->
 <template>
-  <div class="tile">
+  <div
+    class="tile"
+    :class="{ dragging }"
+    draggable="true"
+    @dragstart="onDragStart"
+    @dragend="dragging = false"
+  >
     <img
       v-if="thumbnailUrl"
       class="thumbnail"
       :src="thumbnailUrl"
       alt=""
+      draggable="false"
       loading="lazy"
       @error.once="emit('thumbnail-error', channel)"
     >
@@ -47,7 +54,7 @@
 
 <script setup>
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import store from '../../store/index'
@@ -61,7 +68,17 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error'])
+const emit = defineEmits(['thumbnail-error', 'drag-start'])
+
+const dragging = ref(false)
+
+/**
+ * @param {DragEvent} event
+ */
+function onDragStart(event) {
+  dragging.value = true
+  emit('drag-start', event, props.channel)
+}
 
 const { t } = useI18n()
 

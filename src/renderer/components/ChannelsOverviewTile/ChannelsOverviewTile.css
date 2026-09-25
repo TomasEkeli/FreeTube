@@ -55,3 +55,11 @@
 .tile:focus-within .channelLink {
   opacity: 1;
 }
+
+.tile[draggable='true'] {
+  cursor: grab;
+}
+
+.tile.dragging {
+  opacity: 0.4;
+}

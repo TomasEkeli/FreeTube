@@ -14,6 +14,7 @@ import {
   channelMemberships,
   MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
+  planTransfer,
   restoreOpenProfiles,
   sortChannels,
   toggleOpenProfile,
@@ -130,6 +131,64 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('the primary profile never comes back as a column', restoreOpenProfiles([MAIN_PROFILE_ID, 'p1'], profiles).join(',') === 'p1')
   check('a stored value that is not a list opens nothing', restoreOpenProfiles('p1', profiles).length === 0)
   check('a profile stored twice opens once', restoreOpenProfiles(['p1', 'p1'], profiles).join(',') === 'p1')
+}
+
+// Filing channels by dropping them
+{
+  const profiles = () => [
+    profile(MAIN_PROFILE_ID, 'All Channels', ['a', 'b', 'c', 'd']),
+    profile('p1', 'Gaming', ['a', 'b']),
+    profile('p2', 'Science', ['c'])
+  ]
+  const subs = (updated, id) => ids(updated.find(p => p._id === id)?.subscriptions ?? [])
+  const touched = updated => updated.map(p => p._id).sort().join(',')
+
+  const moved = planTransfer(profiles(), [{ channelId: 'a', profileId: 'p1' }], 'p2', false)
+  check('a move takes the channel out of its column', subs(moved, 'p1') === 'b')
+  check('a move puts the channel in the target', subs(moved, 'p2') === 'c,a')
+  check('a move changes only the two profiles', touched(moved) === 'p1,p2')
+
+  const copied = planTransfer(profiles(), [{ channelId: 'a', profileId: 'p1' }], 'p2', true)
+  check('a copy leaves the source alone', touched(copied) === 'p2' && subs(copied, 'p2') === 'c,a')
+
+  const fromPool = planTransfer(profiles(), [{ channelId: 'd', profileId: null }], 'p1', false)
+  check('from the pool the channel is added', touched(fromPool) === 'p1' && subs(fromPool, 'p1') === 'a,b,d')
+  check('the added channel keeps its details', fromPool[0].subscriptions[2].name === 'channel d' && fromPool[0].subscriptions[2].thumbnail.includes('/d='))
+
+  const toPool = planTransfer(profiles(), [{ channelId: 'a', profileId: 'p1' }], null, false)
+  check('into the pool the channel leaves its profile', touched(toPool) === 'p1' && subs(toPool, 'p1') === 'b')
+  const copyToPool = planTransfer(profiles(), [{ channelId: 'a', profileId: 'p1' }], null, true)
+  check('copying into the pool still takes it out', subs(copyToPool, 'p1') === 'b')
+
+  const already = planTransfer(profiles(), [{ channelId: 'd', profileId: null }, { channelId: 'a', profileId: null }], 'p1', false)
+  check('a channel already in the target is not added twice', subs(already, 'p1') === 'a,b,d')
+
+  const alreadyMove = planTransfer([
+    profile(MAIN_PROFILE_ID, 'All Channels', ['a']),
+    profile('p1', 'Gaming', ['a']),
+    profile('p2', 'Science', ['a'])
+  ], [{ channelId: 'a', profileId: 'p1' }], 'p2', false)
+  check('moving onto a column that has it already leaves one copy', touched(alreadyMove) === 'p1' && subs(alreadyMove, 'p1') === '')
+
+  check('dropping on its own column changes nothing', planTransfer(profiles(), [{ channelId: 'a', profileId: 'p1' }], 'p1', false).length === 0)
+  check('the pool onto the pool changes nothing', planTransfer(profiles(), [{ channelId: 'd', profileId: null }], null, false).length === 0)
+  check('the primary profile is never a target', planTransfer(profiles(), [{ channelId: 'd', profileId: null }], MAIN_PROFILE_ID, false).length === 0)
+  check('a deleted target changes nothing', planTransfer(profiles(), [{ channelId: 'd', profileId: null }], 'gone', false).length === 0)
+  check('a channel from a deleted profile is skipped', planTransfer(profiles(), [{ channelId: 'a', profileId: 'gone' }], 'p2', false).length === 0)
+
+  // Many channels from many columns land as one update per profile
+  const many = planTransfer(profiles(), [
+    { channelId: 'a', profileId: 'p1' },
+    { channelId: 'b', profileId: 'p1' },
+    { channelId: 'c', profileId: 'p2' },
+    { channelId: 'd', profileId: null }
+  ], 'p2', false)
+  check('a mixed drop updates each profile once', many.length === 2 && touched(many) === 'p1,p2')
+  check('a mixed drop moves everything across', subs(many, 'p2') === 'c,a,b,d' && subs(many, 'p1') === '')
+
+  const original = profiles()
+  planTransfer(original, [{ channelId: 'a', profileId: 'p1' }], 'p2', false)
+  check('planning leaves the profile list alone', ids(original[1].subscriptions) === 'a,b' && ids(original[2].subscriptions) === 'c')
 }
 
 if (failures > 0) {

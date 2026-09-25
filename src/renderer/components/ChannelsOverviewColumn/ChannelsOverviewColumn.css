@@ -62,3 +62,12 @@
 .drawMore {
   block-size: 36px;
 }
+
+.dropTarget {
+  outline: 3px dashed var(--primary-color);
+  outline-offset: -3px;
+}
+
+.dropTarget .columnBody {
+  background-color: var(--secondary-card-bg-color);
+}
