@@ -570,3 +570,15 @@ export function duplicateCounts(profileList, memberships = channelMemberships(pr
 
   return counts
 }
+
+/**
+ * The profiles to take a channel out of to leave it only in its home profile
+ * (and the primary one, which has every subscription).
+ * @param {Map<string, string[]>} memberships
+ * @param {string} channelId
+ * @param {string} homeProfileId
+ * @returns {string[]}
+ */
+export function profilesOutsideHome(memberships, channelId, homeProfileId) {
+  return (memberships.get(channelId) ?? []).filter(profileId => profileId !== homeProfileId)
+}

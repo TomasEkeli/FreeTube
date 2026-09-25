@@ -48,6 +48,8 @@
         @thumbnail-error="emit('thumbnail-error', $event)"
         @drag-start="(event, channel) => emit('drag-start', event, channel)"
         @select="(extend) => emit('select', channel, extend)"
+        @remove-here="emit('remove-here', channel)"
+        @keep-here="emit('keep-here', channel)"
       />
       <div
         v-if="drawnChannels.length < channels.length"
@@ -119,7 +121,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here'])
 
 const headingId = useId()
 

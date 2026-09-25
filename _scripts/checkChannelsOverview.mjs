@@ -22,6 +22,7 @@ import {
   normaliseQuery,
   planTransfer,
   planUnsubscribe,
+  profilesOutsideHome,
   pruneSelection,
   restoreOpenProfiles,
   selectAll,
@@ -303,6 +304,10 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('colours go out top down, first column first', colours.get('b') === 0 && colours.get('d') === 1)
   check('a duplicate whose twin is closed gets no colour', !colours.has('c'))
   check('a single open column colours nothing', assignCalloutColours([['a', 'b']]).size === 0)
+
+  check('this is home leaves the other profiles to remove it from', profilesOutsideHome(memberships, 'b', 'p2').join(',') === 'p1')
+  check('this is home never removes from the primary profile', !profilesOutsideHome(memberships, 'd', 'p1').includes(MAIN_PROFILE_ID))
+  check('a channel only at home has nothing to remove', profilesOutsideHome(memberships, 'a', 'p1').length === 0)
 
   const many = assignCalloutColours([['1', '2', '3'], ['1', '2', '3']], 2)
   check('the colours start over once all are used', many.get('1') === 0 && many.get('2') === 1 && many.get('3') === 0)
