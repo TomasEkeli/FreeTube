@@ -56,6 +56,7 @@
       <ChannelsOverviewTile
         v-for="channel in drawnChannels"
         :key="channel.id"
+        :data-channel-id="channel.id"
         :channel="channel"
         :selected="selectedIds.has(channel.id)"
         :duplicate-profiles="duplicateProfiles.get(channel.id) ?? null"
@@ -78,7 +79,7 @@
 </template>
 
 <script setup>
-import { computed, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
 import { useI18n } from 'vue-i18n'
 
@@ -112,6 +113,11 @@ const props = defineProps({
   channels: {
     type: Array,
     required: true
+  },
+  /** Whether the next change to the channels is shown happening */
+  animate: {
+    type: Boolean,
+    default: false
   },
   /**
    * Starts the column over from the top, drawing only the first rows, when it
@@ -187,6 +193,121 @@ const { dragOver, handlers: dropHandlers } = useChannelDropTarget({
   // A copy into the pool means nothing: the pool is where no profile has it
   canCopy: () => !props.isPool
 })
+
+/**
+ * A change to the channels, seen happening, while `animate` says it is worth
+ * watching: a channel leaving fades out where it was while the others close
+ * up, and one arriving fades in where it lands once they have made room.
+ * Drawing the next batch, or a search, just shows what it shows.
+ *
+ * Done by hand, as TransitionGroup measures each moved channel between moving
+ * the ones before it, which makes the browser lay the page out again for
+ * every one of them. Here every position is read in one go before the change
+ * and one go after, and only for the channels in sight.
+ */
+watch(() => props.channels, () => {
+  if (!props.animate || !body.value) { return }
+
+  const container = body.value
+  const top = container.scrollTop
+  const bottom = top + container.clientHeight
+  const inSight = (el) => el.offsetTop + el.offsetHeight > top && el.offsetTop < bottom
+
+  const staying = new Set(props.channels.map(channel => channel.id))
+
+  /** @type {Map<string, { left: number, top: number }>} */
+  const before = new Map()
+  const leaving = []
+
+  for (const el of container.querySelectorAll(':scope > [data-channel-id]')) {
+    if (!inSight(el)) { continue }
+
+    const position = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }
+    before.set(el.dataset.channelId, position)
+
+    if (!staying.has(el.dataset.channelId)) {
+      leaving.push({ ghost: el.cloneNode(true), position, opacity: getComputedStyle(el).opacity })
+    }
+  }
+
+  nextTick(() => playChange(container, before, leaving, inSight))
+}, { flush: 'pre' })
+
+const MOVE_MS = 200
+
+/**
+ * @param {HTMLElement} container
+ * @param {Map<string, { left: number, top: number }>} before
+ * @param {{ ghost: HTMLElement, position: { left: number, top: number, width: number, height: number }, opacity: string }[]} leaving
+ * @param {(el: HTMLElement) => boolean} inSight
+ */
+function playChange(container, before, leaving, inSight) {
+  // The ones leaving stand in where they were, as copies, and fade
+  for (const { ghost, position, opacity } of leaving) {
+    ghost.classList.add('leavingChannel')
+    ghost.removeAttribute('data-channel-id')
+    Object.assign(ghost.style, {
+      left: `${position.left}px`,
+      top: `${position.top}px`,
+      width: `${position.width}px`,
+      height: `${position.height}px`,
+      opacity
+    })
+    container.appendChild(ghost)
+    setTimeout(() => ghost.remove(), MOVE_MS + 50)
+  }
+
+  // Reads first, all of them, then the writes
+  const moves = []
+  const arriving = []
+
+  for (const el of container.querySelectorAll(':scope > [data-channel-id]')) {
+    const was = before.get(el.dataset.channelId)
+
+    if (was === undefined) {
+      if (inSight(el)) { arriving.push(el) }
+      continue
+    }
+
+    const dx = was.left - el.offsetLeft
+    const dy = was.top - el.offsetTop
+
+    if (dx !== 0 || dy !== 0) {
+      moves.push({ el, dx, dy })
+    }
+  }
+
+  for (const { el, dx, dy } of moves) {
+    el.style.transition = 'none'
+    el.style.transform = `translate(${dx}px, ${dy}px)`
+  }
+
+  for (const el of arriving) {
+    el.classList.add('arrivingChannel')
+    setTimeout(() => el.classList.remove('arrivingChannel'), MOVE_MS * 2)
+  }
+
+  // One layout for the lot, with every channel back where it was
+  forceLayout(container)
+
+  for (const { el } of moves) {
+    el.style.transition = `transform ${MOVE_MS}ms ease`
+    el.style.transform = ''
+    setTimeout(() => { el.style.transition = '' }, MOVE_MS)
+  }
+
+  for (const { ghost } of leaving) {
+    ghost.style.opacity = '0'
+  }
+}
+
+/**
+ * @param {HTMLElement} el
+ * @returns {number}
+ */
+function forceLayout(el) {
+  return el.offsetHeight
+}
 
 /**
  * @param {boolean} isVisible

@@ -76,7 +76,46 @@
   gap: 4px;
   overflow-y: auto;
   padding: 6px;
+
+  /* What a leaving channel is placed against while it fades */
+  position: relative;
 }
+
+/*
+ * A drop, seen happening: the channel fades out where it was while the
+ * others close up, and fades in where it lands once they have made room.
+ * The moving itself is set on each channel as it moves.
+ */
+.columnBody > :deep(.leavingChannel) {
+  position: absolute;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.columnBody > .arrivingChannel {
+  animation: channel-arrive 200ms ease 150ms backwards;
+}
+
+@keyframes channel-arrive {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .columnBody > :deep(.leavingChannel) {
+    display: none;
+  }
+
+  .columnBody > .arrivingChannel {
+    animation: none;
+  }
+}
+
 
 .emptyColumn,
 .drawMore {

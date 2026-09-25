@@ -76,6 +76,68 @@
   contain: inline-size;
 }
 
+/*
+ * A column opening grows to its width, the others moving aside, and then
+ * fades in; one closing fades out, and then folds away, the others closing
+ * up. The gap after it folds with it.
+ */
+.column.column-enter-active {
+  animation: column-open 300ms ease-out;
+}
+
+.column.column-leave-active {
+  animation: column-close 300ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes column-open {
+  0% {
+    flex-basis: 0;
+    max-inline-size: 0;
+    margin-inline-end: -12px;
+    opacity: 0;
+  }
+
+  /* A column's own width, from ChannelsOverviewColumn.css */
+  50% {
+    flex-basis: 380px;
+    max-inline-size: 600px;
+    margin-inline-end: 0;
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes column-close {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    flex-basis: 380px;
+    max-inline-size: 600px;
+    margin-inline-end: 0;
+    opacity: 0;
+  }
+
+  100% {
+    flex-basis: 0;
+    max-inline-size: 0;
+    margin-inline-end: -12px;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .column.column-enter-active,
+  .column.column-leave-active {
+    animation-duration: 1ms;
+  }
+}
+
 /* The pool stays in view while the profile columns scroll past it */
 .poolColumn {
   position: sticky;

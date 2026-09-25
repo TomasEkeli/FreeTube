@@ -110,7 +110,12 @@
           @unsubscribe-selection="askToUnsubscribe(selectedChannels(selection))"
         />
       </div>
-      <div class="columns">
+      <!-- Opened and closed columns grow in and fade, fade and fold away -->
+      <TransitionGroup
+        tag="div"
+        class="columns"
+        name="column"
+      >
         <ChannelsOverviewColumn
           v-for="column in columns"
           :key="column.profile?._id ?? 'pool'"
@@ -121,6 +126,7 @@
           :empty-label="searching ? t('Channels.Overview.No Matches') : t('Channels.Overview.Empty Profile')"
           :background-color="column.profile?.bgColor"
           :channels="column.channels"
+          :animate="animatingChange"
           :reset-key="normalisedQuery"
           :selected-ids="selection.get(column.id)"
           :duplicate-profiles="duplicateProfiles"
@@ -137,11 +143,12 @@
         />
         <p
           v-if="openColumns.length === 0 && profiles.length > 0"
+          key="hint"
           class="message columnsHint"
         >
           {{ t('Channels.Overview.Open a Profile') }}
         </p>
-      </div>
+      </TransitionGroup>
     </template>
     <ChannelsOverviewMenu
       v-if="contextMenu !== null"
@@ -548,6 +555,42 @@ function dragChannel(event, channel, profileId) {
   }
 }
 
+/** Changes to more channels than this at once are not animated: too much moving at once */
+const ANIMATED_CHANGE_LIMIT = 60
+
+/** Whether the change being made now is shown happening, in the columns */
+const animatingChange = ref(false)
+let animatingChangeTimeout = null
+
+/**
+ * Lets the columns animate the change about to be made, for as long as the
+ * animation takes.
+ * @param {number} count how many channels it moves
+ */
+function animateChange(count) {
+  if (count === 0 || count > ANIMATED_CHANGE_LIMIT) { return }
+
+  clearTimeout(animatingChangeTimeout)
+  animatingChange.value = true
+  animatingChangeTimeout = setTimeout(() => { animatingChange.value = false }, 500)
+}
+
+onBeforeUnmount(() => clearTimeout(animatingChangeTimeout))
+
+/**
+ * Takes channels out of profiles, shown at once and then saved, as a drop is.
+ * One removal, however many channels and profiles, which the other windows
+ * hear of once.
+ * @param {string[]} channelIds
+ * @param {string[]} profileIds
+ */
+async function removeChannels(channelIds, profileIds) {
+  animateChange(channelIds.length)
+  store.commit('removeChannelsFromProfiles', { channelIds, profileIds })
+
+  await store.dispatch('removeChannelsFromProfiles', { channelIds, profileIds })
+}
+
 let pendingChanges = Promise.resolve()
 
 /**
@@ -585,12 +628,16 @@ function fileChannels(dragged, targetProfileId, copy) {
     // Counted before saving, as saving changes the profile list in place
     const count = countTransferred(profileList.value, updated, targetProfileId)
     const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
+    const saved = updated.map(profile => deepCopy(profile))
 
-    await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
-
-    // Only now, with the channels in their new columns: sooner, and they would
-    // be pruned for not being there yet
+    // Shown at once, before the database has it, so the channel does not sit
+    // where it was for as long as the save takes. The save then writes the
+    // same again, and tells the other windows.
+    animateChange(count)
+    saved.forEach(profile => store.commit('upsertProfileToList', deepCopy(profile)))
     setPrunedSelection(selectionAfter)
+
+    await Promise.all(saved.map(profile => store.dispatch('updateProfile', profile)))
 
     return count
   })
@@ -680,9 +727,7 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
  * @param {string} profileId
  */
 function removeDuplicate(channel, profileId) {
-  afterPendingChanges(() => {
-    return store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds: [profileId] })
-  })
+  afterPendingChanges(() => removeChannels([channel.id], [profileId]))
 }
 
 /**
@@ -696,7 +741,7 @@ function keepOnlyIn(channel, homeProfileId) {
     const profileIds = profilesOutsideHome(memberships.value, channel.id, homeProfileId)
 
     if (profileIds.length > 0) {
-      await store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
+      await removeChannels([channel.id], profileIds)
     }
   })
 }
@@ -822,7 +867,7 @@ async function handleUnsubscribePrompt(value) {
 
     if (removal === null) { return 0 }
 
-    await store.dispatch('removeChannelsFromProfiles', removal)
+    await removeChannels(removal.channelIds, removal.profileIds)
 
     return removal.channelIds.length
   })
