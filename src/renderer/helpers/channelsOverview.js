@@ -253,3 +253,182 @@ export function planTransfer(profileList, dragged, targetProfileId, copy) {
 
   return updated
 }
+
+/**
+ * Selected channels, per column: the profile id, or null for the pool, to the
+ * ids of the channels selected in it. Per column because the same channel can
+ * be in two open columns, and selecting it in one is not selecting it in the
+ * other. Never changed in place; every function here returns a new one.
+ * @typedef {Map<string | null, Set<string>>} Selection
+ */
+
+/**
+ * @param {Selection} selection
+ * @param {string | null} profileId
+ * @param {string} channelId
+ * @returns {boolean}
+ */
+export function isSelected(selection, profileId, channelId) {
+  return selection.get(profileId)?.has(channelId) ?? false
+}
+
+/**
+ * @param {Selection} selection
+ * @returns {number}
+ */
+export function selectionSize(selection) {
+  let size = 0
+
+  for (const channelIds of selection.values()) {
+    size += channelIds.size
+  }
+
+  return size
+}
+
+/**
+ * @param {Selection} selection
+ * @param {string | null} profileId
+ * @param {string} channelId
+ * @returns {Selection}
+ */
+export function toggleSelected(selection, profileId, channelId) {
+  const next = new Map(selection)
+  const channelIds = new Set(selection.get(profileId))
+
+  if (channelIds.has(channelId)) {
+    channelIds.delete(channelId)
+  } else {
+    channelIds.add(channelId)
+  }
+
+  if (channelIds.size === 0) {
+    next.delete(profileId)
+  } else {
+    next.set(profileId, channelIds)
+  }
+
+  return next
+}
+
+/**
+ * Adds everything from one channel to an other in a column, both included, in
+ * the order the column shows them. Either end missing from the column selects
+ * nothing new.
+ * @param {Selection} selection
+ * @param {string | null} profileId
+ * @param {string[]} orderedChannelIds the column as shown
+ * @param {string} fromChannelId
+ * @param {string} toChannelId
+ * @returns {Selection}
+ */
+export function selectRange(selection, profileId, orderedChannelIds, fromChannelId, toChannelId) {
+  const from = orderedChannelIds.indexOf(fromChannelId)
+  const to = orderedChannelIds.indexOf(toChannelId)
+
+  if (from === -1 || to === -1) { return selection }
+
+  const next = new Map(selection)
+  const channelIds = new Set(selection.get(profileId))
+
+  for (let i = Math.min(from, to); i <= Math.max(from, to); i++) {
+    channelIds.add(orderedChannelIds[i])
+  }
+
+  next.set(profileId, channelIds)
+
+  return next
+}
+
+/**
+ * Adds every channel of the given columns.
+ * @param {Selection} selection
+ * @param {Map<string | null, string[]>} columns
+ * @returns {Selection}
+ */
+export function selectAll(selection, columns) {
+  const next = new Map(selection)
+
+  for (const [profileId, channelIds] of columns) {
+    if (channelIds.length === 0) { continue }
+
+    next.set(profileId, new Set([...(selection.get(profileId) ?? []), ...channelIds]))
+  }
+
+  return next
+}
+
+/**
+ * Only what is in the given columns: a channel that has left its column, or
+ * a column that has closed, is no longer selected.
+ * @param {Selection} selection
+ * @param {Map<string | null, Iterable<string>>} columns
+ * @returns {Selection}
+ */
+export function pruneSelection(selection, columns) {
+  /** @type {Selection} */
+  const next = new Map()
+  let changed = false
+
+  for (const [profileId, channelIds] of selection) {
+    const column = columns.get(profileId)
+
+    if (column === undefined) {
+      changed = true
+      continue
+    }
+
+    const present = column instanceof Set ? column : new Set(column)
+    const kept = new Set([...channelIds].filter(channelId => present.has(channelId)))
+
+    if (kept.size !== channelIds.size) { changed = true }
+    if (kept.size > 0) { next.set(profileId, kept) }
+  }
+
+  return changed ? next : selection
+}
+
+/**
+ * The selection as a drag payload: every selected channel with its column.
+ * @param {Selection} selection
+ * @returns {import('./channelDragAndDrop').DraggedChannel[]}
+ */
+export function selectedChannels(selection) {
+  const channels = []
+
+  for (const [profileId, channelIds] of selection) {
+    for (const channelId of channelIds) {
+      channels.push({ channelId, profileId })
+    }
+  }
+
+  return channels
+}
+
+/**
+ * Where the selection is after a drop: moved channels are selected where they
+ * landed, so a selection can be dragged on again. A copy leaves the selection
+ * where it was, as the channels are still there too.
+ * @param {Selection} selection
+ * @param {import('./channelDragAndDrop').DraggedChannel[]} dragged
+ * @param {string | null} targetProfileId
+ * @param {boolean} copy
+ * @returns {Selection}
+ */
+export function selectionAfterTransfer(selection, dragged, targetProfileId, copy) {
+  if (copy && targetProfileId !== null) { return selection }
+
+  let next = selection
+
+  for (const { channelId, profileId } of dragged) {
+    if (profileId === targetProfileId || !isSelected(next, profileId, channelId)) { continue }
+
+    next = toggleSelected(next, profileId, channelId)
+
+    if (!isSelected(next, targetProfileId, channelId)) {
+      next = toggleSelected(next, targetProfileId, channelId)
+    }
+  }
+
+  return next
+}

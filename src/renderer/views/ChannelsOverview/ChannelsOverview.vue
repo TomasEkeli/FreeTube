@@ -38,31 +38,49 @@
           </RouterLink>
         </p>
       </FtCard>
+      <div
+        class="toolbar"
+        role="toolbar"
+        :aria-label="t('Channels.Overview.Selection')"
+      >
+        <template v-if="selectedCount > 0">
+          <span
+            class="selectedCount"
+            aria-live="polite"
+          >
+            {{ t('Channels.Overview.Selected Count', { count: selectedCount }, selectedCount) }}
+          </span>
+          <FtButton
+            :label="t('Channels.Overview.Clear Selection')"
+            @click="clearSelection"
+          />
+        </template>
+        <span
+          v-else
+          class="toolbarHint"
+        >
+          {{ t('Channels.Overview.Selection Hint') }}
+        </span>
+      </div>
       <div class="columns">
         <ChannelsOverviewColumn
-          v-if="pool.length > 0"
-          key="pool"
-          class="poolColumn"
-          is-pool
-          :title="t('Channels.Overview.Unassigned')"
-          :count-label="t('Channels.Overview.Unassigned Count', { count: pool.length }, pool.length)"
-          :channels="pool"
-          @thumbnail-error="updateThumbnail"
-          @drag-start="(event, channel) => dragChannel(event, channel, null)"
-          @drop-channels="(dragged, copy) => fileChannels(dragged, null, copy)"
-        />
-        <ChannelsOverviewColumn
-          v-for="column in openColumns"
-          :key="column.profile._id"
-          :title="column.profile.name"
-          :count-label="String(column.channels.length)"
+          v-for="column in columns"
+          :key="column.profile?._id ?? 'pool'"
+          :class="{ poolColumn: column.profile === null }"
+          :is-pool="column.profile === null"
+          :title="column.profile?.name ?? t('Channels.Overview.Unassigned')"
+          :count-label="column.profile === null
+            ? t('Channels.Overview.Unassigned Count', { count: column.channels.length }, column.channels.length)
+            : String(column.channels.length)"
           :empty-label="t('Channels.Overview.Empty Profile')"
-          :background-color="column.profile.bgColor"
-          :text-color="column.profile.textColor"
+          :background-color="column.profile?.bgColor"
+          :text-color="column.profile?.textColor"
           :channels="column.channels"
+          :selected-ids="selection.get(column.id)"
           @thumbnail-error="updateThumbnail"
-          @drag-start="(event, channel) => dragChannel(event, channel, column.profile._id)"
-          @drop-channels="(dragged, copy) => fileChannels(dragged, column.profile._id, copy)"
+          @select="(channel, extend) => selectChannel(column, channel, extend)"
+          @drag-start="(event, channel) => dragChannel(event, channel, column.id)"
+          @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
         />
         <p
           v-if="openColumns.length === 0 && profiles.length > 0"
@@ -76,9 +94,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
@@ -90,12 +109,19 @@ import { startChannelDrag } from '../../helpers/channelDragAndDrop'
 import { deepCopy } from '../../helpers/utils'
 import {
   channelMemberships,
+  isSelected,
   nonPrimaryProfiles,
   planTransfer,
   primaryProfile,
+  pruneSelection,
   restoreOpenProfiles,
+  selectedChannels,
+  selectionAfterTransfer,
+  selectionSize,
+  selectRange,
   sortChannels,
   toggleOpenProfile,
+  toggleSelected,
   unassignedChannels,
   uniqueChannels,
 } from '../../helpers/channelsOverview'
@@ -158,14 +184,89 @@ async function saveOpenProfileIds(profileIds) {
   }
 }
 
+/**
+ * @typedef {object} Column
+ * @property {string | null} id the profile's, or null for the pool
+ * @property {Profile | null} profile
+ * @property {Channel[]} channels in the order shown
+ */
+
+/** @type {import('vue').ComputedRef<Column[]>} */
 const openColumns = computed(() => {
   return openProfileIds.value
     .map(id => profiles.value.find(profile => profile._id === id))
     .map(profile => ({
+      id: profile._id,
       profile,
       channels: sortChannels(uniqueChannels(profile.subscriptions), collator.value)
     }))
 })
+
+/**
+ * Everything drawn, pool first. The pool is left out once it is empty, and
+ * with it the one place to drop a channel out of every profile.
+ * @type {import('vue').ComputedRef<Column[]>}
+ */
+const columns = computed(() => {
+  if (pool.value.length === 0) {
+    return openColumns.value
+  }
+
+  return [{ id: null, profile: null, channels: pool.value }, ...openColumns.value]
+})
+
+/** @type {import('vue').ShallowRef<import('../../helpers/channelsOverview').Selection>} */
+const selection = shallowRef(new Map())
+
+/**
+ * The last row clicked in each column, where a Shift-click range starts from.
+ * @type {Map<string | null, string>}
+ */
+const selectionAnchors = new Map()
+
+const selectedCount = computed(() => selectionSize(selection.value))
+
+// A channel that leaves its column, or a column that closes, is no longer selected
+watch(columns, (columns) => {
+  selection.value = pruneSelection(selection.value, new Map(columns.map(column => {
+    return [column.id, column.channels.map(channel => channel.id)]
+  })))
+})
+
+/**
+ * @param {Column} column
+ * @param {Channel} channel
+ * @param {boolean} extend Shift was held: select from the last clicked row
+ */
+function selectChannel(column, channel, extend) {
+  const anchor = selectionAnchors.get(column.id)
+
+  if (extend && anchor !== undefined && anchor !== channel.id) {
+    const order = column.channels.map(channel => channel.id)
+    selection.value = selectRange(selection.value, column.id, order, anchor, channel.id)
+  } else {
+    selection.value = toggleSelected(selection.value, column.id, channel.id)
+  }
+
+  selectionAnchors.set(column.id, channel.id)
+}
+
+function clearSelection() {
+  selection.value = new Map()
+  selectionAnchors.clear()
+}
+
+/**
+ * @param {KeyboardEvent} event
+ */
+function handleKeydown(event) {
+  if (event.key === 'Escape' && selectedCount.value > 0 && !event.defaultPrevented) {
+    clearSelection()
+  }
+}
+
+onMounted(() => document.addEventListener('keydown', handleKeydown))
+onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
 
 /**
  * @param {string} profileId
@@ -180,7 +281,17 @@ function toggleColumn(profileId) {
  * @param {string | null} profileId the column it is dragged out of, null for the pool
  */
 function dragChannel(event, channel, profileId) {
-  startChannelDrag(event, [{ channelId: channel.id, profileId }], channel.name ?? channel.id)
+  // A selected row carries the whole selection with it; any other row only itself
+  if (isSelected(selection.value, profileId, channel.id)) {
+    const dragged = selectedChannels(selection.value)
+    const label = dragged.length === 1
+      ? channel.name ?? channel.id
+      : t('Channels.Overview.Channel Count', { count: dragged.length }, dragged.length)
+
+    startChannelDrag(event, dragged, label)
+  } else {
+    startChannelDrag(event, [{ channelId: channel.id, profileId }], channel.name ?? channel.id)
+  }
 }
 
 /**
@@ -195,7 +306,17 @@ function dragChannel(event, channel, profileId) {
 async function fileChannels(dragged, targetProfileId, copy) {
   const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
 
+  if (updated.length === 0) { return }
+
+  const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
+
   await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
+
+  // Only now, with the channels in their new columns: sooner, and they would
+  // be pruned for not being there yet
+  selection.value = pruneSelection(selectionAfter, new Map(columns.value.map(column => {
+    return [column.id, column.channels.map(channel => channel.id)]
+  })))
 }
 
 let thumbnailErrorCount = 0

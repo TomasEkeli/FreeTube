@@ -45,8 +45,10 @@
         v-for="channel in drawnChannels"
         :key="channel.id"
         :channel="channel"
+        :selected="selectedIds.has(channel.id)"
         @thumbnail-error="emit('thumbnail-error', $event)"
         @drag-start="(event, channel) => emit('drag-start', event, channel)"
+        @select="(extend) => emit('select', channel, extend)"
       />
       <div
         v-if="drawnChannels.length < channels.length"
@@ -94,10 +96,15 @@ const props = defineProps({
   channels: {
     type: Array,
     required: true
+  },
+  /** @type {import('vue').PropType<Set<string>>} */
+  selectedIds: {
+    type: Set,
+    default: () => new Set()
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select'])
 
 const headingId = useId()
 

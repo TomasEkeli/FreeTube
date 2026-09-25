@@ -12,12 +12,20 @@
 
 import {
   channelMemberships,
+  isSelected,
   MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
   planTransfer,
+  pruneSelection,
   restoreOpenProfiles,
+  selectAll,
+  selectedChannels,
+  selectionAfterTransfer,
+  selectionSize,
+  selectRange,
   sortChannels,
   toggleOpenProfile,
+  toggleSelected,
   unassignedChannels,
   uniqueChannels,
 } from '../src/renderer/helpers/channelsOverview.js'
@@ -189,6 +197,42 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   const original = profiles()
   planTransfer(original, [{ channelId: 'a', profileId: 'p1' }], 'p2', false)
   check('planning leaves the profile list alone', ids(original[1].subscriptions) === 'a,b' && ids(original[2].subscriptions) === 'c')
+}
+
+// Selection
+{
+  const empty = new Map()
+  const listed = selection => selectedChannels(selection).map(c => `${c.profileId ?? 'pool'}:${c.channelId}`).sort().join(',')
+
+  const one = toggleSelected(empty, 'p1', 'a')
+  check('a click selects', isSelected(one, 'p1', 'a') && selectionSize(one) === 1)
+  check('selecting leaves the old selection alone', selectionSize(empty) === 0)
+  check('a second click deselects', selectionSize(toggleSelected(one, 'p1', 'a')) === 0)
+  check('the same channel in an other column is separate', !isSelected(one, 'p2', 'a'))
+  check('the pool is a column of its own', isSelected(toggleSelected(empty, null, 'a'), null, 'a'))
+
+  const order = ['a', 'b', 'c', 'd', 'e']
+  const range = selectRange(one, 'p1', order, 'a', 'c')
+  check('a range selects both ends and between', listed(range) === 'p1:a,p1:b,p1:c')
+  check('a range works upwards too', listed(selectRange(empty, 'p1', order, 'd', 'b')) === 'p1:b,p1:c,p1:d')
+  check('a range adds to what is selected', listed(selectRange(toggleSelected(empty, 'p2', 'x'), 'p1', order, 'a', 'b')) === 'p1:a,p1:b,p2:x')
+  check('a range with a missing end selects nothing', selectRange(empty, 'p1', order, 'zz', 'b') === empty)
+
+  const all = selectAll(one, new Map([['p1', ['b']], [null, ['c', 'd']], ['p2', []]]))
+  check('select all adds every channel of the columns', listed(all) === 'p1:a,p1:b,pool:c,pool:d')
+
+  const pruned = pruneSelection(all, new Map([['p1', ['a']], [null, new Set(['c', 'd'])]]))
+  check('a channel gone from its column is deselected', listed(pruned) === 'p1:a,pool:c,pool:d')
+  check('a closed column loses its selection', listed(pruneSelection(all, new Map([[null, ['c', 'd']]]))) === 'pool:c,pool:d')
+  check('pruning nothing returns the same selection', pruneSelection(one, new Map([['p1', ['a']]])) === one)
+
+  const two = toggleSelected(toggleSelected(empty, 'p1', 'a'), null, 'b')
+  const dragged = selectedChannels(two)
+  check('moved channels are selected where they landed', listed(selectionAfterTransfer(two, dragged, 'p2', false)) === 'p2:a,p2:b')
+  check('copied channels stay selected where they were', listed(selectionAfterTransfer(two, dragged, 'p2', true)) === 'p1:a,pool:b')
+  check('channels dropped on the pool are selected there', listed(selectionAfterTransfer(two, dragged, null, false)) === 'pool:a,pool:b')
+  check('a drag of one unselected tile leaves the selection alone',
+    listed(selectionAfterTransfer(two, [{ channelId: 'z', profileId: 'p1' }], 'p2', false)) === 'p1:a,pool:b')
 }
 
 if (failures > 0) {
