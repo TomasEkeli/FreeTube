@@ -29,15 +29,20 @@
       v-if="openSettingsProfile"
       :key="openSettingsProfileId"
     >
-      <FtProfileChannelList
+      <FtCard
         v-if="!isNewProfileOpen"
-        :profile="openSettingsProfile"
-        :is-main-profile="isMainProfile"
-      />
-      <FtProfileFilterChannelsList
-        v-if="!isNewProfileOpen && !isMainProfile"
-        :profile="openSettingsProfile"
-      />
+        class="card channelsCard"
+      >
+        <p class="channelsMessage">
+          {{ $t('Profile.Channels Moved') }}
+        </p>
+        <RouterLink
+          class="channelsLink"
+          :to="isMainProfile ? '/subscribedchannels' : { path: '/subscribedchannels', query: { open: openSettingsProfileId } }"
+        >
+          {{ isMainProfile ? $t('Profile.Go to Channels') : $t('Profile.Sort Channels', { profile: openSettingsProfile.name }) }}
+        </RouterLink>
+      </FtCard>
       <FtProfileEdit
         :profile="openSettingsProfile"
         :is-new="isNewProfileOpen"
@@ -57,8 +62,6 @@ import FtFlexBox from '../../components/ft-flex-box/ft-flex-box.vue'
 import FtProfileBubble from '../../components/FtProfileBubble/FtProfileBubble.vue'
 import FtButton from '../../components/FtButton/FtButton.vue'
 import FtProfileEdit from '../../components/FtProfileEdit/FtProfileEdit.vue'
-import FtProfileChannelList from '../../components/FtProfileChannelList/FtProfileChannelList.vue'
-import FtProfileFilterChannelsList from '../../components/FtProfileFilterChannelsList/FtProfileFilterChannelsList.vue'
 
 import store from '../../store/index'
 

@@ -896,6 +896,11 @@ Profile:
   Close Profile Dropdown: Close Profile Dropdown
   Open Profile Dropdown: Open Profile Dropdown
   Go To Profile Manager: Go to Profile Manager
+  # Where the channel lists used to be: sorting channels into profiles is done
+  # on the Channels page now
+  Channels Moved: Channels are sorted into profiles on the Channels page.
+  Go to Channels: Go to Channels
+  Sort Channels: Sort channels into {profile}
 #On Channel Page
 Channel:
   Subscribe: Subscribe
