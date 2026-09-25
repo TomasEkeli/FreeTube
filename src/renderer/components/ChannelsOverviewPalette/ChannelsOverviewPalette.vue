@@ -2,7 +2,8 @@
   Every profile a channel can be filed into, as a strip of bubbles over the
   Channels overview. Clicking a bubble opens that profile's column below, or
   closes it if it is open. Dropping channels on a bubble files them into that
-  profile, open or not.
+  profile, open or not. While searching, each bubble says how many of its
+  channels match, which is how a closed profile shows it has any.
 
   The primary profile has no bubble: it is every subscription, and is never a
   column of its own.
@@ -18,6 +19,7 @@
       :key="profile._id"
       :profile="profile"
       :open="openProfileIds.includes(profile._id)"
+      :match-count="matchCounts?.get(profile._id) ?? null"
       @toggle="emit('toggle', profile._id)"
       @drop-channels="(dragged, copy) => emit('drop-channels', profile._id, dragged, copy)"
     />
@@ -39,6 +41,11 @@ defineProps({
   openProfileIds: {
     type: Array,
     required: true
+  },
+  /** @type {import('vue').PropType<Map<string, number> | null>} */
+  matchCounts: {
+    type: Map,
+    default: null
   }
 })
 

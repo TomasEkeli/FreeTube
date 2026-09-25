@@ -26,6 +26,7 @@
           v-if="profiles.length > 0"
           :profiles="profiles"
           :open-profile-ids="openProfileIds"
+          :match-counts="matchCounts"
           @toggle="toggleColumn"
           @drop-channels="fileChannelsFromPalette"
         />
@@ -44,6 +45,21 @@
         role="toolbar"
         :aria-label="t('Channels.Overview.Selection')"
       >
+        <FtInput
+          ref="searchInput"
+          class="channelSearch"
+          :placeholder="t('Channels.Search bar placeholder')"
+          :value="query"
+          :show-clear-text-button="true"
+          :show-action-button="false"
+          :maxlength="255"
+          @input="(value) => query = value"
+          @clear="query = ''"
+        />
+        <FtButton
+          :label="searching ? t('Channels.Overview.Select All Matches') : t('Channels.Overview.Select All')"
+          @click="selectAllShown"
+        />
         <template v-if="selectedCount > 0">
           <span
             class="selectedCount"
@@ -75,10 +91,8 @@
           :class="{ poolColumn: column.profile === null }"
           :is-pool="column.profile === null"
           :title="column.profile?.name ?? t('Channels.Overview.Unassigned')"
-          :count-label="column.profile === null
-            ? t('Channels.Overview.Unassigned Count', { count: column.channels.length }, column.channels.length)
-            : String(column.channels.length)"
-          :empty-label="t('Channels.Overview.Empty Profile')"
+          :count-label="countLabel(column)"
+          :empty-label="searching ? t('Channels.Overview.No Matches') : t('Channels.Overview.Empty Profile')"
           :background-color="column.profile?.bgColor"
           :text-color="column.profile?.textColor"
           :channels="column.channels"
@@ -109,11 +123,12 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
@@ -123,16 +138,19 @@ import store from '../../store/index'
 import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
 import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/local'
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
-import { deepCopy, showToast } from '../../helpers/utils'
+import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
   channelMemberships,
+  filterChannels,
   isSelected,
   nonPrimaryProfiles,
+  normaliseQuery,
   planTransfer,
   planUnsubscribe,
   primaryProfile,
   pruneSelection,
   restoreOpenProfiles,
+  selectAll,
   selectedChannels,
   selectionAfterTransfer,
   selectionSize,
@@ -206,23 +224,40 @@ async function saveOpenProfileIds(profileIds) {
  * @typedef {object} Column
  * @property {string | null} id the profile's, or null for the pool
  * @property {Profile | null} profile
- * @property {Channel[]} channels in the order shown
+ * @property {Channel[]} channels shown, in the order shown
+ * @property {number} total how many channels the column has, shown or not
  */
+
+/**
+ * The search over the columns. Deliberately not kept anywhere: it is gone on
+ * leaving the page.
+ */
+const query = ref('')
+
+const normalisedQuery = computed(() => normaliseQuery(query.value))
+
+const searching = computed(() => normalisedQuery.value !== '')
 
 /** @type {import('vue').ComputedRef<Column[]>} */
 const openColumns = computed(() => {
   return openProfileIds.value
     .map(id => profiles.value.find(profile => profile._id === id))
-    .map(profile => ({
-      id: profile._id,
-      profile,
-      channels: sortChannels(uniqueChannels(profile.subscriptions), collator.value)
-    }))
+    .map(profile => {
+      const channels = sortChannels(uniqueChannels(profile.subscriptions), collator.value)
+
+      return {
+        id: profile._id,
+        profile,
+        channels: filterChannels(channels, normalisedQuery.value),
+        total: channels.length
+      }
+    })
 })
 
 /**
  * Everything drawn, pool first. The pool is left out once it is empty, and
- * with it the one place to drop a channel out of every profile.
+ * with it the one place to drop a channel out of every profile. A search that
+ * matches nothing in it leaves it in place, as it still has channels.
  * @type {import('vue').ComputedRef<Column[]>}
  */
 const columns = computed(() => {
@@ -230,8 +265,46 @@ const columns = computed(() => {
     return openColumns.value
   }
 
-  return [{ id: null, profile: null, channels: pool.value }, ...openColumns.value]
+  const poolColumn = {
+    id: null,
+    profile: null,
+    channels: filterChannels(pool.value, normalisedQuery.value),
+    total: pool.value.length
+  }
+
+  return [poolColumn, ...openColumns.value]
 })
+
+/**
+ * How many channels in each profile match the search, so that a profile whose
+ * column is closed still shows it has something. Null while not searching.
+ * @type {import('vue').ComputedRef<Map<string, number> | null>}
+ */
+const matchCounts = computed(() => {
+  if (!searching.value) { return null }
+
+  return new Map(profiles.value.map(profile => {
+    return [profile._id, filterChannels(uniqueChannels(profile.subscriptions), normalisedQuery.value).length]
+  }))
+})
+
+/**
+ * @param {Column} column
+ * @returns {string}
+ */
+function countLabel(column) {
+  const shown = column.channels.length
+
+  if (column.profile === null) {
+    return searching.value
+      ? t('Channels.Overview.Unassigned Match Count', { matches: shown, count: column.total }, column.total)
+      : t('Channels.Overview.Unassigned Count', { count: column.total }, column.total)
+  }
+
+  return searching.value
+    ? t('Channels.Overview.Match Count', { matches: shown, count: column.total })
+    : String(column.total)
+}
 
 /** @type {import('vue').ShallowRef<import('../../helpers/channelsOverview').Selection>} */
 const selection = shallowRef(new Map())
@@ -269,15 +342,26 @@ function selectChannel(column, channel, extend) {
   selectionAnchors.set(column.id, channel.id)
 }
 
+/** Everything shown: with a search, exactly the matches in the open columns. */
+function selectAllShown() {
+  selection.value = selectAll(selection.value, new Map(columns.value.map(column => {
+    return [column.id, column.channels.map(channel => channel.id)]
+  })))
+}
+
 function clearSelection() {
   selection.value = new Map()
   selectionAnchors.clear()
 }
 
+const searchInput = useTemplateRef('searchInput')
+
 /**
  * @param {KeyboardEvent} event
  */
 function handleKeydown(event) {
+  ctrlFHandler(event, searchInput.value)
+
   if (event.key === 'Escape' && selectedCount.value > 0 && !event.defaultPrevented) {
     clearSelection()
   }

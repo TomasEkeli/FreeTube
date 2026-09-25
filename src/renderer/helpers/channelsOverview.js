@@ -456,3 +456,28 @@ export function planUnsubscribe(profileList, channelIds) {
 
   return removals
 }
+
+/**
+ * The search as typed, ready to match against: trimmed and lower case. Plain
+ * text, nothing in it has a special meaning.
+ * @param {string} query
+ * @returns {string}
+ */
+export function normaliseQuery(query) {
+  return query.trim().normalize('NFC').toLocaleLowerCase()
+}
+
+/**
+ * The channels whose name has the search in it, in their order. No search
+ * gives back the same list.
+ * @param {Channel[]} channels
+ * @param {string} query as normalised by `normaliseQuery`
+ * @returns {Channel[]}
+ */
+export function filterChannels(channels, query) {
+  if (query === '') { return channels }
+
+  return channels.filter(channel => {
+    return (channel.name ?? '').normalize('NFC').toLocaleLowerCase().includes(query)
+  })
+}

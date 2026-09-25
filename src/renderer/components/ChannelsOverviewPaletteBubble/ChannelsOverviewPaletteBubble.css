@@ -42,6 +42,33 @@
   color: var(--card-bg-color);
 }
 
+.badge {
+  position: absolute;
+  inset-block-start: 2px;
+  min-inline-size: 20px;
+  block-size: 20px;
+  padding-inline: 5px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 20px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--card-bg-color);
+}
+
+.matchBadge {
+  inset-inline-end: 8px;
+  background-color: var(--primary-color);
+  color: var(--text-with-main-color);
+}
+
+.matchBadge.noMatches {
+  background-color: var(--secondary-card-bg-color);
+  color: var(--tertiary-text-color);
+}
+
 .dropTarget {
   outline: 3px dashed var(--primary-color);
   outline-offset: -3px;

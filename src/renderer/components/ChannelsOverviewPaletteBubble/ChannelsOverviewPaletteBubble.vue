@@ -20,11 +20,20 @@
       :aria-pressed="open ? 'true' : 'false'"
       @click="emit('toggle')"
     />
+    <span
+      v-if="matchCount !== null"
+      class="badge matchBadge"
+      :class="{ noMatches: matchCount === 0 }"
+      :title="t('Channels.Overview.Profile Matches', { count: matchCount }, matchCount)"
+    >
+      {{ matchCount }}
+    </span>
   </div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import FtProfileBubble from '../FtProfileBubble/FtProfileBubble.vue'
 
@@ -39,10 +48,17 @@ defineProps({
   open: {
     type: Boolean,
     default: false
+  },
+  /** How many of the profile's channels match the search, null while not searching */
+  matchCount: {
+    type: Number,
+    default: null
   }
 })
 
 const emit = defineEmits(['toggle', 'drop-channels'])
+
+const { t } = useI18n()
 
 const acknowledged = ref(false)
 let acknowledgeTimeout = null
