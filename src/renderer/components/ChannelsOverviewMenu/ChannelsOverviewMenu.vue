@@ -188,8 +188,10 @@ function closeOnScroll(event) {
  * @param {string} value
  */
 function choose(value) {
-  emit('close', true)
+  // The choice first: whoever opened the menu may forget what it was for
+  // once it is closed
   emit('choose', value)
+  emit('close', true)
 }
 
 onMounted(async () => {
