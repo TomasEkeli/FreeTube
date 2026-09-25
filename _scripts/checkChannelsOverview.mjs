@@ -16,6 +16,7 @@ import {
   MAX_OPEN_COLUMNS,
   nonPrimaryProfiles,
   planTransfer,
+  planUnsubscribe,
   pruneSelection,
   restoreOpenProfiles,
   selectAll,
@@ -233,6 +234,21 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('channels dropped on the pool are selected there', listed(selectionAfterTransfer(two, dragged, null, false)) === 'pool:a,pool:b')
   check('a drag of one unselected tile leaves the selection alone',
     listed(selectionAfterTransfer(two, [{ channelId: 'z', profileId: 'p1' }], 'p2', false)) === 'p1:a,pool:b')
+}
+
+// Unsubscribing
+{
+  const profiles = [
+    profile(MAIN_PROFILE_ID, 'All Channels', ['a', 'b', 'c']),
+    profile('p1', 'Gaming', ['a', 'b']),
+    profile('p2', 'Science', ['a'])
+  ]
+  const plan = planUnsubscribe(profiles, ['a', 'c', 'a', 'gone'])
+
+  check('each channel is removed once', plan.length === 2)
+  check('a channel goes out of every profile it is in', plan[0].channelId === 'a' && plan[0].profileIds.join(',') === `${MAIN_PROFILE_ID},p1,p2`)
+  check('an unassigned channel goes out of the primary profile', plan[1].channelId === 'c' && plan[1].profileIds.join(',') === MAIN_PROFILE_ID)
+  check('a channel no profile has is left out', !plan.some(r => r.channelId === 'gone'))
 }
 
 if (failures > 0) {

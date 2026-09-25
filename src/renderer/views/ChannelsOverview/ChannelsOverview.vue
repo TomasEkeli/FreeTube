@@ -62,6 +62,11 @@
         >
           {{ t('Channels.Overview.Selection Hint') }}
         </span>
+        <ChannelsOverviewTrash
+          v-if="!hideUnsubscribeButton"
+          class="trash"
+          @drop-channels="askToUnsubscribe"
+        />
       </div>
       <div class="columns">
         <ChannelsOverviewColumn
@@ -91,6 +96,15 @@
         </p>
       </div>
     </template>
+    <FtPrompt
+      v-if="unsubscribeChannelIds.length > 0"
+      :label="t('Channels.Overview.Unsubscribe Prompt', { count: unsubscribeChannelIds.length }, unsubscribeChannelIds.length)"
+      :extra-labels="[t('Channels.Overview.Unsubscribe Prompt Detail')]"
+      :option-names="[t('Channel.Unsubscribe'), t('Cancel')]"
+      :option-values="['unsubscribe', 'cancel']"
+      :is-first-option-destructive="true"
+      @click="handleUnsubscribePrompt"
+    />
   </div>
 </template>
 
@@ -100,8 +114,10 @@ import { useI18n } from 'vue-i18n'
 
 import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
+import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
+import ChannelsOverviewTrash from '../../components/ChannelsOverviewTrash/ChannelsOverviewTrash.vue'
 
 import store from '../../store/index'
 import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
@@ -113,6 +129,7 @@ import {
   isSelected,
   nonPrimaryProfiles,
   planTransfer,
+  planUnsubscribe,
   primaryProfile,
   pruneSelection,
   restoreOpenProfiles,
@@ -343,6 +360,46 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
   } else {
     showToast(t('Channels.Overview.Moved to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
   }
+}
+
+/**
+ * The trash follows the setting that hides the unsubscribe button everywhere
+ * else, as unsubscribing is all it does.
+ */
+const hideUnsubscribeButton = computed(() => store.getters.getHideUnsubscribeButton)
+
+/**
+ * The channels a drop on the trash wants unsubscribed from, waiting on the
+ * prompt. Empty while no prompt is showing.
+ * @type {import('vue').ShallowRef<string[]>}
+ */
+const unsubscribeChannelIds = shallowRef([])
+
+/**
+ * @param {DraggedChannel[]} dragged
+ */
+function askToUnsubscribe(dragged) {
+  unsubscribeChannelIds.value = [...new Set(dragged.map(channel => channel.channelId))]
+}
+
+/**
+ * Unsubscribes the way the subscribe button does, one removal per channel
+ * covering every profile it is in, so it leaves them all at once and other
+ * windows hear of it. Cancelling leaves everything as it was, the selection
+ * included.
+ * @param {'unsubscribe' | 'cancel' | null} value
+ */
+async function handleUnsubscribePrompt(value) {
+  const channelIds = unsubscribeChannelIds.value
+  unsubscribeChannelIds.value = []
+
+  if (value !== 'unsubscribe') { return }
+
+  const removals = planUnsubscribe(profileList.value, channelIds)
+
+  await Promise.all(removals.map(removal => store.dispatch('removeChannelFromProfiles', removal)))
+
+  showToast(t('Channels.Overview.Unsubscribed', { count: removals.length }, removals.length))
 }
 
 let thumbnailErrorCount = 0
