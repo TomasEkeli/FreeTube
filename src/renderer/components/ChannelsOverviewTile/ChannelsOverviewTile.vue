@@ -11,10 +11,11 @@
   colour, ringing the thumbnail, so the pair can be matched at a glance.
 
   Clicking the square selects it, and Shift-click selects everything from
-  the last one clicked; Space and Enter do the same from the keyboard. The
-  mark on a duplicate opens a menu of the two ways out of being one. Going to
-  the channel is the small icon in the other corner, so a stray click while
-  sorting never navigates.
+  the last one clicked; Space and Enter do the same from the keyboard. A
+  double click goes to the channel, as does the icon in the top corner, so a
+  single stray click while sorting never navigates. The mark on a duplicate
+  opens a menu of the two ways out of being one, and right-clicking the
+  square opens a menu with everything that can be done to the one channel.
 -->
 <template>
   <div
@@ -23,6 +24,7 @@
     draggable="true"
     @dragstart="onDragStart"
     @dragend="dragging = false"
+    @contextmenu.prevent="emit('context-menu', $event, channel)"
   >
     <!--
       The checkbox is the thumbnail and the name, filling the square, with
@@ -37,6 +39,7 @@
       :aria-checked="selected ? 'true' : 'false'"
       :aria-label="channel.name"
       @click="emit('select', $event.shiftKey)"
+      @dblclick="goToChannel"
       @keydown.space.enter.prevent="emit('select', $event.shiftKey)"
     >
       <span class="thumbnailSlot">
@@ -135,7 +138,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here', 'context-menu'])
 
 const dragging = ref(false)
 
@@ -163,6 +166,16 @@ function openChannel(event) {
   router.push(`/channel/${props.channel.id}`)
 }
 
+/**
+ * A double click goes to the channel, as it opens a file where a click only
+ * selects it. Its two clicks have toggled the selection and back again.
+ */
+function goToChannel() {
+  if (showChannelLink.value) {
+    router.push(`/channel/${props.channel.id}`)
+  }
+}
+
 const channelLinkLabel = computed(() => t('Channels.Overview.Go to channel', { channelName: props.channel.name }))
 
 const duplicateMenuItems = computed(() => [
@@ -187,7 +200,7 @@ const backendPreference = computed(() => store.getters.getBackendPreference)
 const currentInvidiousInstanceUrl = computed(() => store.getters.getCurrentInvidiousInstanceUrl)
 
 /** Twice the size it is shown at, for screens with twice the pixels */
-const THUMBNAIL_SIZE = 128
+const THUMBNAIL_SIZE = 176
 
 /**
  * The stored thumbnail, pointed at whichever backend is in use and asked for

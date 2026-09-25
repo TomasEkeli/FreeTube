@@ -213,6 +213,9 @@ Channels:
     # The two choices offered for a channel in more than one profile
     Remove This Duplicate: Remove this duplicate
     Keep Here Only: This is home, remove the others
+    # In the menu a right-click on a channel opens
+    Open Channel: Open channel
+    Unsubscribe Channel: Unsubscribe…
     # Under a profile's name in the palette: its channels also in some other profile
     Shared Count: '{count} shared'
     Profile Channels: 1 channel | {count} channels
@@ -222,8 +225,8 @@ Channels:
     Selected Count: 1 channel selected | {count} channels selected
     Hidden by Search: (1 hidden by the search) | ({count} hidden by the search)
     Clear Selection: Clear Selection
-    Selection Hint: Click to select, Shift-click for a range, or select all on a column. Drag to move, hold Ctrl to copy.
-    Selection Hint Mac: Click to select, Shift-click for a range, or select all on a column. Drag to move, hold Option to copy.
+    Selection Hint: Click to select, Shift-click for a range. Drag to move, hold Ctrl to copy. Double-click opens a channel, right-click for more.
+    Selection Hint Mac: Click to select, Shift-click for a range. Drag to move, hold Option to copy. Double-click opens a channel, right-click for more.
     # Menus of profiles to send the selected channels to, the same as dragging them there
     Move Selection To: Move to…
     Copy Selection To: Copy to…
