@@ -3,11 +3,16 @@
   closes the profile's column; dropping channels on it files them into the
   profile without opening the column, and the bubble flashes to say they
   landed.
+
+  Under the name, how many channels the profile has, and how many of those
+  are shared with some other profile: the ones to sort out.
 -->
 <template>
   <div
     class="paletteEntry"
     :class="{ dropTarget: dragOver, acknowledged }"
+    :data-profile-id="profile._id"
+    :title="summary"
     v-on="dropHandlers"
   >
     <FtProfileBubble
@@ -29,29 +34,28 @@
       {{ matchCount }}
     </span>
     <span
-      v-if="duplicateCount > 0"
-      class="badge duplicateBadge"
-      :title="t('Channels.Overview.Profile Duplicates', { count: duplicateCount }, duplicateCount)"
+      class="counts"
+      :class="{ open }"
+      aria-hidden="true"
     >
-      <FontAwesomeIcon
-        :icon="['fas', 'clone']"
-        aria-hidden="true"
-      />
-      {{ duplicateCount }}
+      {{ channelCount }}
+      <span
+        v-if="duplicateCount > 0"
+        class="sharedCount"
+      >{{ t('Channels.Overview.Shared Count', { count: duplicateCount }) }}</span>
     </span>
   </div>
 </template>
 
 <script setup>
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtProfileBubble from '../FtProfileBubble/FtProfileBubble.vue'
 
 import { useChannelDropTarget } from '../../composables/useChannelDropTarget'
 
-defineProps({
+const props = defineProps({
   /** @type {import('vue').PropType<import('../../helpers/channelsOverview').Profile>} */
   profile: {
     type: Object,
@@ -66,6 +70,11 @@ defineProps({
     type: Number,
     default: null
   },
+  /** How many channels the profile has */
+  channelCount: {
+    type: Number,
+    default: 0
+  },
   /** How many of the profile's channels are in some other profile too */
   duplicateCount: {
     type: Number,
@@ -76,6 +85,17 @@ defineProps({
 const emit = defineEmits(['toggle', 'drop-channels'])
 
 const { t } = useI18n()
+
+/** The counts in words, for the tooltip and for a screen reader */
+const summary = computed(() => {
+  const channels = t('Channels.Overview.Profile Channels', { count: props.channelCount }, props.channelCount)
+
+  if (props.duplicateCount === 0) { return `${props.profile.name}: ${channels}` }
+
+  const shared = t('Channels.Overview.Profile Duplicates', { count: props.duplicateCount }, props.duplicateCount)
+
+  return `${props.profile.name}: ${channels}. ${shared}`
+})
 
 const acknowledged = ref(false)
 let acknowledgeTimeout = null

@@ -30,6 +30,18 @@
       <span class="columnCount">
         {{ countLabel }}
       </span>
+      <!-- What is shown: while searching, the matches -->
+      <button
+        v-if="channels.length > 0"
+        type="button"
+        class="selectAllButton"
+        :aria-label="allShownSelected
+          ? t('Channels.Overview.Select None In', { profile: title })
+          : t('Channels.Overview.Select All In', { profile: title })"
+        @click="allShownSelected ? emit('select-none') : emit('select-all')"
+      >
+        {{ allShownSelected ? t('Channels.Overview.Select None') : t('Channels.Overview.Select All') }}
+      </button>
     </header>
     <div
       ref="body"
@@ -66,6 +78,8 @@
 
 <script setup>
 import { computed, ref, useId, useTemplateRef, watch } from 'vue'
+
+import { useI18n } from 'vue-i18n'
 
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
 
@@ -132,7 +146,14 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none'])
+
+const { t } = useI18n()
+
+/** Whether everything shown is selected, when the button deselects instead */
+const allShownSelected = computed(() => {
+  return props.channels.length > 0 && props.channels.every(channel => props.selectedIds.has(channel.id))
+})
 
 const headingId = useId()
 

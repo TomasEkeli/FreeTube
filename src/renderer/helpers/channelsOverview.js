@@ -30,9 +30,6 @@ import { MAIN_PROFILE_ID } from '../../constants.js'
  * @property {Channel[]} subscriptions
  */
 
-/** How many profile columns can be open at once. */
-export const MAX_OPEN_COLUMNS = 4
-
 /**
  * @param {Profile[]} profileList
  * @returns {Profile | undefined}
@@ -131,35 +128,29 @@ export function sortChannels(channels, collator) {
  * profile deleted since the page was last open simply does not come back.
  * @param {unknown} storedIds
  * @param {Profile[]} profileList
- * @param {number} [max]
  * @returns {string[]}
  */
-export function restoreOpenProfiles(storedIds, profileList, max = MAX_OPEN_COLUMNS) {
+export function restoreOpenProfiles(storedIds, profileList) {
   if (!Array.isArray(storedIds)) { return [] }
 
   const existing = new Set(nonPrimaryProfiles(profileList).map(profile => profile._id))
-  const restored = [...new Set(storedIds)].filter(id => existing.has(id))
 
-  return restored.slice(Math.max(0, restored.length - max))
+  return [...new Set(storedIds)].filter(id => existing.has(id))
 }
 
 /**
- * Opens a closed column or closes an open one. Opening a column when the
- * working set is full closes the one that has been open longest, so the
- * newest choice always lands.
+ * Opens a closed column, at the end, or closes an open one. As many can be
+ * open as the reader likes; the page scrolls sideways once they do not fit.
  * @param {string[]} openProfileIds in the order they were opened
  * @param {string} profileId
- * @param {number} [max]
  * @returns {string[]} a new array
  */
-export function toggleOpenProfile(openProfileIds, profileId, max = MAX_OPEN_COLUMNS) {
+export function toggleOpenProfile(openProfileIds, profileId) {
   if (openProfileIds.includes(profileId)) {
     return openProfileIds.filter(id => id !== profileId)
   }
 
-  const opened = [...openProfileIds, profileId]
-
-  return opened.slice(Math.max(0, opened.length - max))
+  return [...openProfileIds, profileId]
 }
 
 /**
@@ -622,4 +613,34 @@ export function countTransferred(profileList, updated, targetProfileId) {
   }
 
   return transferred.size
+}
+
+/**
+ * Takes every channel of the given columns out of the selection.
+ * @param {Selection} selection
+ * @param {Map<string | null, string[]>} columns
+ * @returns {Selection}
+ */
+export function deselectAll(selection, columns) {
+  const next = new Map(selection)
+
+  for (const [profileId, channelIds] of columns) {
+    const selected = selection.get(profileId)
+
+    if (!selected) { continue }
+
+    const kept = new Set(selected)
+
+    for (const channelId of channelIds) {
+      kept.delete(channelId)
+    }
+
+    if (kept.size === 0) {
+      next.delete(profileId)
+    } else {
+      next.set(profileId, kept)
+    }
+  }
+
+  return next
 }

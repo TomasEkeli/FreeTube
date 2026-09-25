@@ -1,19 +1,19 @@
 <!--
   One channel in a column of the Channels overview.
 
-  A compact row, so that a column shows a screenful of channels and not a
-  handful: the thumbnail, the name, and nothing else about the channel. The
-  page is for sorting channels into profiles, and what a channel has uploaded
-  lately is a question for another page.
+  A square: the thumbnail large enough to know the channel by, and its name
+  under it. Nothing else about the channel. The page is for sorting channels
+  into profiles, and what a channel has uploaded lately is a question for
+  another page.
 
-  A channel in more than one profile has a mark saying which. Where its twin
-  is in an other open column as well, both rows share a callout colour, so the
-  pair can be matched at a glance.
+  A channel in more than one profile has a mark in its corner saying which.
+  Where its twin is in an other open column as well, both share a callout
+  colour, ringing the thumbnail, so the pair can be matched at a glance.
 
-  Clicking the row selects it, and Shift-click selects everything from the
-  last clicked row; Space and Enter do the same from the keyboard. The mark
-  on a duplicate opens a menu of the two ways out of being one. Going to
-  the channel is the small icon at the end of the row, so a stray click while
+  Clicking the square selects it, and Shift-click selects everything from
+  the last one clicked; Space and Enter do the same from the keyboard. The
+  mark on a duplicate opens a menu of the two ways out of being one. Going to
+  the channel is the small icon in the other corner, so a stray click while
   sorting never navigates.
 -->
 <template>
@@ -25,9 +25,10 @@
     @dragend="dragging = false"
   >
     <!--
-      The checkbox is the thumbnail and the name, filling the row up to the
-      buttons at its end. The row itself cannot be it: a checkbox hides
-      whatever is inside it from a screen reader, buttons and all.
+      The checkbox is the thumbnail and the name, filling the square, with
+      the two buttons laid over its corners. The square itself cannot be it:
+      a checkbox hides whatever is inside it from a screen reader, buttons
+      and all.
     -->
     <span
       class="selectArea"
@@ -70,7 +71,7 @@
     </span>
     <span
       v-if="duplicateProfiles !== null"
-      class="duplicateMark"
+      class="corner duplicateMark"
     >
       <ChannelsOverviewMenuButton
         :label="duplicateTitle"
@@ -85,7 +86,7 @@
          lot of routing to work out while scrolling -->
     <a
       v-if="showChannelLink"
-      class="channelLink"
+      class="corner channelLink"
       :href="`#/channel/${channel.id}`"
       :title="channelLinkLabel"
       :aria-label="channelLinkLabel"
@@ -185,7 +186,8 @@ const backendPreference = computed(() => store.getters.getBackendPreference)
 /** @type {import('vue').ComputedRef<string>} */
 const currentInvidiousInstanceUrl = computed(() => store.getters.getCurrentInvidiousInstanceUrl)
 
-const THUMBNAIL_SIZE = 88
+/** Twice the size it is shown at, for screens with twice the pixels */
+const THUMBNAIL_SIZE = 128
 
 /**
  * The stored thumbnail, pointed at whichever backend is in use and asked for

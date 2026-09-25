@@ -20,6 +20,7 @@
       :profile="profile"
       :open="openProfileIds.includes(profile._id)"
       :match-count="matchCounts?.get(profile._id) ?? null"
+      :channel-count="new Set(profile.subscriptions.map(channel => channel.id)).size"
       :duplicate-count="duplicateCounts.get(profile._id) ?? 0"
       @toggle="emit('toggle', profile._id)"
       @drop-channels="(dragged, copy) => emit('drop-channels', profile._id, dragged, copy)"

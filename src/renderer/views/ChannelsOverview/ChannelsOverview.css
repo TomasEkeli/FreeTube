@@ -70,6 +70,18 @@
   flex: 1 1 0;
   min-block-size: 320px;
   overflow-x: auto;
+
+  /* Without this the columns' combined width widens the page itself, and
+     the whole page scrolls sideways instead of just the columns */
+  contain: inline-size;
+}
+
+/* The pool stays in view while the profile columns scroll past it */
+.poolColumn {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  box-shadow: 4px 0 8px rgb(0 0 0 / 15%);
 }
 
 .columnsHint {
