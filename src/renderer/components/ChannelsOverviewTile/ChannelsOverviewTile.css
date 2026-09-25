@@ -97,13 +97,21 @@
 .selectedMark {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 50%;
   background-color: rgb(0 0 0 / 55%);
-  color: #fff;
-  font-size: 13px;
+}
+
+/* A tick: two sides of a box, turned */
+.selectedMark::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-start: 10px;
+  inline-size: 5px;
+  block-size: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .duplicateMark {

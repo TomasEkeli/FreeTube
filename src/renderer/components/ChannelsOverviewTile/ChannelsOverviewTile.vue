@@ -53,12 +53,12 @@
           class="thumbnail"
           :icon="['fas', 'circle-user']"
         />
+        <!-- Drawn in CSS and only shown or hidden, as selecting a whole column
+             would otherwise build and tear down an icon in every row -->
         <span
-          v-if="selected"
+          v-show="selected"
           class="selectedMark"
-        >
-          <FontAwesomeIcon :icon="['fas', 'check']" />
-        </span>
+        />
       </span>
       <span
         class="name"
@@ -80,17 +80,20 @@
         <FontAwesomeIcon :icon="['fas', 'clone']" />
       </ChannelsOverviewMenuButton>
     </span>
-    <RouterLink
+    <!-- A plain link, which the router picks up from the address as it
+         changes: a RouterLink in each of a few thousand rows is a lot of
+         routing to work out while scrolling -->
+    <a
       v-if="showChannelLink"
       class="channelLink"
-      :to="`/channel/${channel.id}`"
-      :title="t('Channels.Overview.Go to channel', { channelName: channel.name })"
-      :aria-label="t('Channels.Overview.Go to channel', { channelName: channel.name })"
+      :href="`#/channel/${channel.id}`"
+      :title="channelLinkLabel"
+      :aria-label="channelLinkLabel"
       draggable="false"
       @click.stop
     >
       <FontAwesomeIcon :icon="['fas', 'arrow-up-right-from-square']" />
-    </RouterLink>
+    </a>
   </div>
 </template>
 
@@ -143,6 +146,8 @@ function onDragStart(event) {
 }
 
 const { locale, t } = useI18n()
+
+const channelLinkLabel = computed(() => t('Channels.Overview.Go to channel', { channelName: props.channel.name }))
 
 const duplicateMenuItems = computed(() => [
   { value: 'remove-here', label: t('Channels.Overview.Remove This Duplicate') },

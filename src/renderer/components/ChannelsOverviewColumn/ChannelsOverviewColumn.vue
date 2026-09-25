@@ -138,7 +138,7 @@ const headingId = useId()
 
 /** Rows drawn before any scrolling: a tall window's worth, with some to spare. */
 const FIRST_BATCH = 60
-const NEXT_BATCH = 120
+const NEXT_BATCH = 80
 
 const drawLimit = ref(FIRST_BATCH)
 
