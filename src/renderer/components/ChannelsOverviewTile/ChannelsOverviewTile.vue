@@ -80,9 +80,9 @@
         <FontAwesomeIcon :icon="['fas', 'clone']" />
       </ChannelsOverviewMenuButton>
     </span>
-    <!-- A plain link, which the router picks up from the address as it
-         changes: a RouterLink in each of a few thousand rows is a lot of
-         routing to work out while scrolling -->
+    <!-- A plain link that hands a plain click to the router, as a
+         RouterLink would: a RouterLink in each of a few thousand rows is a
+         lot of routing to work out while scrolling -->
     <a
       v-if="showChannelLink"
       class="channelLink"
@@ -90,7 +90,7 @@
       :title="channelLinkLabel"
       :aria-label="channelLinkLabel"
       draggable="false"
-      @click.stop
+      @click.stop="openChannel"
     >
       <FontAwesomeIcon :icon="['fas', 'arrow-up-right-from-square']" />
     </a>
@@ -101,6 +101,7 @@
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
 import ChannelsOverviewMenuButton from '../ChannelsOverviewMenuButton/ChannelsOverviewMenuButton.vue'
 
@@ -146,6 +147,20 @@ function onDragStart(event) {
 }
 
 const { locale, t } = useI18n()
+
+const router = useRouter()
+
+/**
+ * Through the router, so that coming back finds the page where it was left.
+ * A click with a modifier, or not the main button, is left to the link.
+ * @param {MouseEvent} event
+ */
+function openChannel(event) {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) { return }
+
+  event.preventDefault()
+  router.push(`/channel/${props.channel.id}`)
+}
 
 const channelLinkLabel = computed(() => t('Channels.Overview.Go to channel', { channelName: props.channel.name }))
 

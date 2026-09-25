@@ -1,10 +1,10 @@
 .tile {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   block-size: 36px;
   padding-block: 0;
-  padding-inline: 4px 6px;
+  padding-inline: 0 2px;
   border-inline-start: 4px solid transparent;
   border-radius: 4px;
   box-sizing: border-box;
@@ -23,6 +23,10 @@
   align-items: center;
   gap: 8px;
   min-inline-size: 0;
+
+  /* The row's padding and the space before its buttons are inside the
+     checkbox, so that a click anywhere in the row but on them selects it */
+  padding-inline: 4px 8px;
   border-radius: 4px;
 }
 
