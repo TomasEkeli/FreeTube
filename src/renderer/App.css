@@ -23,39 +23,9 @@
   margin-inline: 10px;
 }
 
-.banner {
-  inline-size: 85%;
-  margin-block: 40px 0;
-  margin-inline: auto;
-}
-
-.banner + .banner {
-  margin-block: 20px;
-}
-
-.banner-wrapper {
-  margin-block: 0;
-  margin-inline: 10px;
-}
-
 .flexBox {
   display: block;
   user-select: unset;
-}
-
-.changeLogTitle {
-  padding-inline: 16px;
-  overflow-wrap: break-word;
-  margin-block-end: 16px;
-}
-
-.changeLogText {
-  overflow-y: scroll;
-  block-size: 40vh;
-  display: block;
-  padding-inline: 16px;
-  margin-block-end: 16px;
-  overflow-wrap: break-word;
 }
 
 .fade-enter-active,
@@ -74,16 +44,7 @@
     margin-inline: 8px;
   }
 
-  .banner {
-    inline-size: 90%;
-    margin-block: 60px 0;
-  }
-
   .flexBox {
     margin-block: 60px -75px;
-  }
-
-  .changeLogText {
-    block-size: 65vh;
   }
 }

@@ -5,12 +5,6 @@
     <div class="switchColumnGrid">
       <div class="switchColumn">
         <FtToggleSwitch
-          :label="t('Settings.General Settings.Check for Updates')"
-          :default-value="checkForUpdates"
-          :compact="true"
-          @change="updateCheckForUpdates"
-        />
-        <FtToggleSwitch
           v-if="SUPPORTS_LOCAL_API"
           :label="t('Settings.General Settings.Fallback to Non-Preferred Backend on Failure')"
           :default-value="backendFallback"
@@ -218,16 +212,6 @@ if (process.env.IS_ELECTRON && process.platform === 'linux') {
   onMounted(async () => {
     isLinuxWayland.value = await window.ftElectron.isWaylandPlatform()
   })
-}
-
-/** @type {import('vue').ComputedRef<boolean>} */
-const checkForUpdates = computed(() => store.getters.getCheckForUpdates)
-
-/**
- * @param {boolean} value
- */
-function updateCheckForUpdates(value) {
-  store.dispatch('updateCheckForUpdates', value)
 }
 
 /** @type {import('vue').ComputedRef<boolean>} */

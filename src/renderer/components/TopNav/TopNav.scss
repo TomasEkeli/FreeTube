@@ -220,27 +220,42 @@
   }
 
   .logo {
+    /* What the fork stamp's doubled edge has to match, state for state */
+    --fork-stamp-gap: var(--card-bg-color);
+
     align-items: center;
     cursor: pointer;
     display: flex;
     padding-block: 0;
     padding-inline: 10px 25px;
 
+    @include top-nav-is-colored {
+      --fork-stamp-gap: var(--primary-color);
+    }
+
     &:hover {
+      --fork-stamp-gap: var(--side-nav-hover-color);
+
       background-color: var(--side-nav-hover-color);
       color: var(--side-nav-hover-text-color);
       transition: background 0.2s ease-in;
 
       @include top-nav-is-colored {
+        --fork-stamp-gap: var(--primary-color-hover);
+
         background-color: var(--primary-color-hover);
       }
     }
 
     &:active {
+      --fork-stamp-gap: var(--tertiary-text-color);
+
       background-color: var(--tertiary-text-color);
       transition: background 0.2s ease-in;
 
       @include top-nav-is-colored {
+        --fork-stamp-gap: var(--primary-color-active);
+
         background-color: var(--primary-color-active);
       }
     }
@@ -269,12 +284,24 @@
       inset-block-start: -3px;
       inline-size: 100px;
 
+      /*
+       * The stamp sits in the middle of the wordmark, and goes when the
+       * wordmark does on a narrow window: over the icon alone it would be too
+       * small to read.
+       */
+      display: grid;
+      place-items: center;
+
       @media only screen and (width <= 680px) {
         display: none;
       }
 
       @include top-nav-is-colored {
         background-image: var(--logo-text-bar-color);
+      }
+
+      .forkStamp {
+        font-size: 16px;
       }
     }
   }

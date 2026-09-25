@@ -8,9 +8,30 @@
   text-align: center;
 }
 
-.logo {
-  max-inline-size: 100%;
+/*
+ * The logo and the stamp share one grid cell, so the stamp sits over the logo
+ * without absolute positioning, and stays centred on it in either writing
+ * direction. The container is what the stamp's size is measured against, so it
+ * shrinks with the logo on a narrow window.
+ */
+.logoWithStamp {
+  display: inline-grid;
+  container-type: inline-size;
   inline-size: 500px;
+  max-inline-size: 100%;
+}
+
+.logoWithStamp > * {
+  grid-area: 1 / 1;
+}
+
+.logo {
+  inline-size: 100%;
+}
+
+.forkStamp {
+  place-self: center;
+  font-size: 15cqi;
 }
 
 .version {
@@ -49,7 +70,22 @@
 
 .title {
   grid-area: title;
+  font-size: 1.17em;
   margin: 0;
+}
+
+.upstream {
+  margin-block-start: 40px;
+  margin-inline: auto;
+  max-inline-size: 860px;
+}
+
+.upstreamHeading {
+  margin-block: 0 8px;
+}
+
+.upstreamNote {
+  margin-block: 0 16px;
 }
 
 .content {
