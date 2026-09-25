@@ -120,7 +120,6 @@
           :count-label="countLabel(column)"
           :empty-label="searching ? t('Channels.Overview.No Matches') : t('Channels.Overview.Empty Profile')"
           :background-color="column.profile?.bgColor"
-          :text-color="column.profile?.textColor"
           :channels="column.channels"
           :reset-key="normalisedQuery"
           :selected-ids="selection.get(column.id)"
@@ -134,6 +133,7 @@
           @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
           @remove-here="(channel) => removeDuplicate(channel, column.id)"
           @keep-here="(channel) => keepOnlyIn(channel, column.id)"
+          @context-menu="(event, channel) => openContextMenu(event, channel, column)"
         />
         <p
           v-if="openColumns.length === 0 && profiles.length > 0"
@@ -143,6 +143,15 @@
         </p>
       </div>
     </template>
+    <ChannelsOverviewMenu
+      v-if="contextMenu !== null"
+      :label="contextMenu.channel.name ?? contextMenu.channel.id"
+      :items="contextMenuItems"
+      :anchor="contextMenu.anchor"
+      focus-first
+      @choose="chooseFromContextMenu"
+      @close="closeContextMenu"
+    />
     <FtPrompt
       v-if="unsubscribeChannelIds.length > 0"
       :label="t('Channels.Overview.Unsubscribe Prompt', { count: unsubscribeChannelIds.length }, unsubscribeChannelIds.length)"
@@ -166,6 +175,7 @@ import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
+import ChannelsOverviewMenu from '../../components/ChannelsOverviewMenu/ChannelsOverviewMenu.vue'
 import ChannelsOverviewMenuButton from '../../components/ChannelsOverviewMenuButton/ChannelsOverviewMenuButton.vue'
 import ChannelsOverviewTrash from '../../components/ChannelsOverviewTrash/ChannelsOverviewTrash.vue'
 
@@ -689,6 +699,90 @@ function keepOnlyIn(channel, homeProfileId) {
       await store.dispatch('removeChannelFromProfiles', { channelId: channel.id, profileIds })
     }
   })
+}
+
+/**
+ * The menu a right-click on a channel opens, with everything that can be done
+ * to that one channel: going to it, and for a duplicate the two ways out of
+ * being one, and unsubscribing. Null while it is closed.
+ * @type {import('vue').ShallowRef<{ anchor: { x: number, y: number }, channel: Channel, column: Column, returnTo: HTMLElement | null } | null>}
+ */
+const contextMenu = shallowRef(null)
+
+/**
+ * @param {MouseEvent} event
+ * @param {Channel} channel
+ * @param {Column} column
+ */
+function openContextMenu(event, channel, column) {
+  const square = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+
+  contextMenu.value = {
+    anchor: { x: event.clientX, y: event.clientY },
+    channel,
+    column,
+    returnTo: square?.querySelector('.selectArea') ?? null
+  }
+}
+
+/**
+ * @param {boolean} returnFocus
+ */
+function closeContextMenu(returnFocus) {
+  const returnTo = contextMenu.value?.returnTo
+  contextMenu.value = null
+
+  if (returnFocus && returnTo?.isConnected) {
+    returnTo.focus()
+  }
+}
+
+const contextMenuItems = computed(() => {
+  if (contextMenu.value === null) { return [] }
+
+  const { channel, column } = contextMenu.value
+  const items = []
+
+  if (!store.getters.getDisableChannelLinks) {
+    items.push({ value: 'open', label: t('Channels.Overview.Open Channel') })
+  }
+
+  if (column.profile !== null && duplicateProfiles.value.has(channel.id)) {
+    items.push(
+      { value: 'remove-here', label: t('Channels.Overview.Remove This Duplicate') },
+      { value: 'keep-here', label: t('Channels.Overview.Keep Here Only') }
+    )
+  }
+
+  if (!hideUnsubscribeButton.value) {
+    items.push({ value: 'unsubscribe', label: t('Channels.Overview.Unsubscribe Channel'), destructive: true })
+  }
+
+  return items
+})
+
+/**
+ * @param {string} value
+ */
+function chooseFromContextMenu(value) {
+  if (contextMenu.value === null) { return }
+
+  const { channel, column } = contextMenu.value
+
+  switch (value) {
+    case 'open':
+      router.push(`/channel/${channel.id}`)
+      break
+    case 'remove-here':
+      removeDuplicate(channel, column.id)
+      break
+    case 'keep-here':
+      keepOnlyIn(channel, column.id)
+      break
+    case 'unsubscribe':
+      askToUnsubscribe([{ channelId: channel.id, profileId: column.id }])
+      break
+  }
 }
 
 /**

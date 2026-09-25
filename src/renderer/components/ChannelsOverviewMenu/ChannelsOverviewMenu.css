@@ -1,0 +1,38 @@
+.menu {
+  position: fixed;
+  z-index: 300;
+  margin: 0;
+  padding-block: 4px;
+  padding-inline: 0;
+  list-style: none;
+  min-inline-size: 220px;
+  overflow-y: auto;
+  border-radius: 6px;
+  background-color: var(--card-bg-color);
+  color: var(--primary-text-color);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+}
+
+.menuItem {
+  display: block;
+  inline-size: 100%;
+  padding-block: 8px;
+  padding-inline: 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background-color: var(--side-nav-hover-color);
+  color: var(--side-nav-hover-text-color);
+}
+
+.menuItem.destructive {
+  color: var(--destructive-color);
+}

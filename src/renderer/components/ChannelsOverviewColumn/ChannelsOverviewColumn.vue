@@ -18,7 +18,7 @@
   >
     <header
       class="columnHeader"
-      :style="isPool ? null : { background: backgroundColor, color: textColor }"
+      :style="isPool ? null : { background: backgroundColor, color: headerTextColor }"
     >
       <h3
         :id="headingId"
@@ -65,6 +65,7 @@
         @select="(extend) => emit('select', channel, extend)"
         @remove-here="emit('remove-here', channel)"
         @keep-here="emit('keep-here', channel)"
+        @context-menu="(event, channel) => emit('context-menu', event, channel)"
       />
       <div
         v-if="drawnChannels.length < channels.length"
@@ -84,6 +85,7 @@ import { useI18n } from 'vue-i18n'
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
 
 import { useChannelDropTarget } from '../../composables/useChannelDropTarget'
+import { calculateColorLuminance } from '../../helpers/colors'
 
 const props = defineProps({
   title: {
@@ -99,10 +101,6 @@ const props = defineProps({
     default: ''
   },
   backgroundColor: {
-    type: String,
-    default: null
-  },
-  textColor: {
     type: String,
     default: null
   },
@@ -146,9 +144,16 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu'])
 
 const { t } = useI18n()
+
+/**
+ * Black or white, whichever reads on the profile's colour. Worked out here
+ * instead of taken from the profile, whose stored text colour can be the
+ * wrong one of the two.
+ */
+const headerTextColor = computed(() => props.backgroundColor ? calculateColorLuminance(props.backgroundColor) : null)
 
 /** Whether everything shown is selected, when the button deselects instead */
 const allShownSelected = computed(() => {
