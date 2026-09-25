@@ -31,15 +31,25 @@
   text-overflow: ellipsis;
 }
 
+/* Open: tinted in the profile's own colour, with a ring of it round the
+   bubble, where the settings page's black would read as a hole */
 .paletteBubble.open {
-  background-color: var(--primary-text-color);
-  color: var(--card-bg-color);
+  background-color: color-mix(in srgb, var(--profile-colour) 22%, transparent);
+  color: inherit;
 }
 
 .paletteBubble.open:hover,
 .paletteBubble.open:focus-visible {
-  background-color: var(--tertiary-text-color);
-  color: var(--card-bg-color);
+  background-color: color-mix(in srgb, var(--profile-colour) 34%, transparent);
+  color: inherit;
+}
+
+.paletteBubble.open :deep(.bubble) {
+  box-shadow: 0 0 0 2px var(--card-bg-color), 0 0 0 5px var(--profile-colour);
+}
+
+.paletteBubble.open :deep(.profileName) {
+  font-weight: bold;
 }
 
 .badge {
@@ -81,10 +91,6 @@
   pointer-events: none;
 }
 
-.counts.open {
-  color: var(--card-bg-color);
-}
-
 .sharedCount {
   font-weight: bold;
   color: #d08a00;
@@ -95,9 +101,6 @@
   font-weight: normal;
 }
 
-.counts.open .sharedCount {
-  color: inherit;
-}
 
 .dropTarget {
   outline: 3px dashed var(--primary-color);

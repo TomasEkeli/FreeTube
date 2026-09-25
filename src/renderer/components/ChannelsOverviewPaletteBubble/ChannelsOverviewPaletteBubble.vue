@@ -12,6 +12,7 @@
     class="paletteEntry"
     :class="{ dropTarget: dragOver, acknowledged }"
     :data-profile-id="profile._id"
+    :style="{ '--profile-colour': profile.bgColor }"
     :title="summary"
     v-on="dropHandlers"
   >
@@ -21,7 +22,7 @@
       :profile-name="profile.name"
       :is-main-profile="false"
       :background-color="profile.bgColor"
-      :text-color="profile.textColor"
+      :text-color="calculateColorLuminance(profile.bgColor)"
       :aria-pressed="open ? 'true' : 'false'"
       @click="emit('toggle')"
     />
@@ -52,6 +53,8 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtProfileBubble from '../FtProfileBubble/FtProfileBubble.vue'
+
+import { calculateColorLuminance } from '../../helpers/colors'
 
 import { useChannelDropTarget } from '../../composables/useChannelDropTarget'
 

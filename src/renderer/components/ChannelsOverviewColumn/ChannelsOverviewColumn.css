@@ -4,8 +4,8 @@
 
   /* Wide enough for three channels abreast. With more columns open than
      fit, they keep this width and the row of them scrolls sideways */
-  flex: 1 0 300px;
-  max-inline-size: 480px;
+  flex: 1 0 380px;
+  max-inline-size: 600px;
   block-size: 100%;
   border-radius: 6px;
   background-color: var(--card-bg-color);
@@ -71,7 +71,7 @@
 .columnBody {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(114px, 1fr));
   align-content: start;
   gap: 4px;
   overflow-y: auto;
