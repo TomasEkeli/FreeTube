@@ -1929,6 +1929,15 @@ function runApp() {
           )
           return null
 
+        case DBActions.PROFILES.REMOVE_CHANNELS:
+          await baseHandlers.profiles.removeChannelsFromProfiles(data.channelIds, data.profileIds)
+          syncOtherWindows(
+            IpcChannels.SYNC_PROFILES,
+            event,
+            { event: SyncEvents.PROFILES.REMOVE_CHANNELS, data }
+          )
+          return null
+
         case DBActions.GENERAL.DELETE:
           await baseHandlers.profiles.delete(data)
           syncOtherWindows(

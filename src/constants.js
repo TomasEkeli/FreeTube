@@ -76,7 +76,8 @@ const DBActions = {
 
   PROFILES: {
     ADD_CHANNEL: 20,
-    REMOVE_CHANNEL: 21
+    REMOVE_CHANNEL: 21,
+    REMOVE_CHANNELS: 22
   },
 
   PLAYLISTS: {
@@ -118,7 +119,8 @@ const SyncEvents = {
 
   PROFILES: {
     ADD_CHANNEL: 20,
-    REMOVE_CHANNEL: 21
+    REMOVE_CHANNEL: 21,
+    REMOVE_CHANNELS: 22
   },
 
   PLAYLISTS: {

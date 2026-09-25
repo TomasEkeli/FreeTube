@@ -434,27 +434,37 @@ export function selectionAfterTransfer(selection, dragged, targetProfileId, copy
 }
 
 /**
- * Unsubscribing from channels: for each, every profile it is in, the primary
- * one included. One removal per channel across all its profiles, the way the
- * subscribe button unsubscribes, so each goes out of every profile at once.
+ * Unsubscribing from channels: out of every profile any of them is in, the
+ * primary one included, as one removal. One write for the lot, however many
+ * channels: taken out one at a time, each channel would rewrite every profile
+ * it leaves.
  * @param {Profile[]} profileList
  * @param {string[]} channelIds
- * @returns {{ channelId: string, profileIds: string[] }[]}
+ * @returns {{ channelIds: string[], profileIds: string[] } | null} null when none of them is subscribed to
  */
 export function planUnsubscribe(profileList, channelIds) {
-  const removals = []
+  const wanted = new Set(channelIds)
+  const found = new Set()
+  const profileIds = []
 
-  for (const channelId of new Set(channelIds)) {
-    const profileIds = profileList
-      .filter(profile => profile.subscriptions.some(channel => channel.id === channelId))
-      .map(profile => profile._id)
+  for (const profile of profileList) {
+    let inProfile = false
 
-    if (profileIds.length > 0) {
-      removals.push({ channelId, profileIds })
+    for (const channel of profile.subscriptions) {
+      if (wanted.has(channel.id)) {
+        found.add(channel.id)
+        inProfile = true
+      }
+    }
+
+    if (inProfile) {
+      profileIds.push(profile._id)
     }
   }
 
-  return removals
+  if (found.size === 0) { return null }
+
+  return { channelIds: [...found], profileIds }
 }
 
 /**

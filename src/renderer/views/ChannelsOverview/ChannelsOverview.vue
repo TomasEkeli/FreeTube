@@ -547,10 +547,9 @@ function askToUnsubscribe(dragged) {
 }
 
 /**
- * Unsubscribes the way the subscribe button does, one removal per channel
- * covering every profile it is in, so it leaves them all at once and other
- * windows hear of it. Cancelling leaves everything as it was, the selection
- * included.
+ * Unsubscribes as the subscribe button does, out of every profile at once,
+ * but for all the channels in one removal, so other windows hear of it once.
+ * Cancelling leaves everything as it was, the selection included.
  * @param {'unsubscribe' | 'cancel' | null} value
  */
 async function handleUnsubscribePrompt(value) {
@@ -559,11 +558,14 @@ async function handleUnsubscribePrompt(value) {
 
   if (value !== 'unsubscribe') { return }
 
-  const removals = planUnsubscribe(profileList.value, channelIds)
+  const removal = planUnsubscribe(profileList.value, channelIds)
 
-  await Promise.all(removals.map(removal => store.dispatch('removeChannelFromProfiles', removal)))
+  if (removal === null) { return }
 
-  showToast(t('Channels.Overview.Unsubscribed', { count: removals.length }, removals.length))
+  await store.dispatch('removeChannelsFromProfiles', removal)
+
+  const count = removal.channelIds.length
+  showToast(t('Channels.Overview.Unsubscribed', { count }, count))
 }
 
 let thumbnailErrorCount = 0

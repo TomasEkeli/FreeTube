@@ -248,14 +248,16 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   const profiles = [
     profile(MAIN_PROFILE_ID, 'All Channels', ['a', 'b', 'c']),
     profile('p1', 'Gaming', ['a', 'b']),
-    profile('p2', 'Science', ['a'])
+    profile('p2', 'Science', ['a']),
+    profile('p3', 'Music', ['b'])
   ]
   const plan = planUnsubscribe(profiles, ['a', 'c', 'a', 'gone'])
 
-  check('each channel is removed once', plan.length === 2)
-  check('a channel goes out of every profile it is in', plan[0].channelId === 'a' && plan[0].profileIds.join(',') === `${MAIN_PROFILE_ID},p1,p2`)
-  check('an unassigned channel goes out of the primary profile', plan[1].channelId === 'c' && plan[1].profileIds.join(',') === MAIN_PROFILE_ID)
-  check('a channel no profile has is left out', !plan.some(r => r.channelId === 'gone'))
+  check('the channels go in one removal, each once', plan.channelIds.sort().join(',') === 'a,c')
+  check('out of every profile any of them is in, the primary one too', plan.profileIds.join(',') === `${MAIN_PROFILE_ID},p1,p2`)
+  check('a profile none of them is in is left alone', !plan.profileIds.includes('p3'))
+  check('a channel no profile has is left out', !plan.channelIds.includes('gone'))
+  check('nothing subscribed to is nothing to do', planUnsubscribe(profiles, ['gone']) === null)
 }
 
 // Search
