@@ -217,6 +217,10 @@ Channels:
     Hidden by Search: (1 hidden by the search) | ({count} hidden by the search)
     Clear Selection: Clear Selection
     Selection Hint: Click to select, Shift-click to select a range. Drag to move, hold Ctrl to copy.
+    Selection Hint Mac: Click to select, Shift-click to select a range. Drag to move, hold Option to copy.
+    # Menus of profiles to send the selected channels to, the same as dragging them there
+    Move Selection To: Move to…
+    Copy Selection To: Copy to…
     # Shown on the cursor while dragging more than one channel
     Channel Count: 1 channel | {count} channels
     # After channels are dropped on a profile's bubble in the palette

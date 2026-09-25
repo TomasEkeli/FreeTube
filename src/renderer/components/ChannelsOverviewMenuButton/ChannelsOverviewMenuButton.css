@@ -1,26 +1,51 @@
-.duplicateButton {
+.menuButton {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  inline-size: 24px;
-  block-size: 24px;
+  gap: 8px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
   background: none;
   color: inherit;
-  font-size: 13px;
+  font: inherit;
   cursor: pointer;
 }
 
-.duplicateButton:hover,
-.duplicateButton:focus-visible,
-.duplicateButton[aria-expanded='true'] {
+.menuButton.icon {
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+
+.menuButton.icon:hover,
+.menuButton.icon:focus-visible,
+.menuButton.icon[aria-expanded='true'] {
   background-color: var(--secondary-card-bg-color);
 }
 
-.duplicateMenu {
+/* Looks like FtButton, as it sits among them */
+.menuButton.button {
+  padding-block: 10px;
+  padding-inline: 16px;
+  border-radius: 4px;
+  background-color: var(--card-bg-color);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 50%);
+  font-family: Roboto, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.menuButton.button:hover,
+.menuButton.button:focus-visible,
+.menuButton.button[aria-expanded='true'] {
+  background-color: var(--side-nav-hover-color);
+  color: var(--side-nav-hover-text-color);
+}
+
+.menu {
   position: fixed;
   z-index: 300;
   margin: 0;
@@ -28,6 +53,7 @@
   padding-inline: 0;
   list-style: none;
   min-inline-size: 220px;
+  overflow-y: auto;
   border-radius: 6px;
   background-color: var(--card-bg-color);
   color: var(--primary-text-color);

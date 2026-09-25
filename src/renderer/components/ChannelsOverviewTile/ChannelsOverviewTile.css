@@ -16,6 +16,16 @@
   color: var(--side-nav-hover-text-color);
 }
 
+.selectArea {
+  flex: 1 1 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  border-radius: 4px;
+}
+
 .thumbnailSlot {
   position: relative;
   flex: 0 0 auto;
@@ -70,9 +80,9 @@
   opacity: 0.4;
 }
 
-.tile:focus-visible {
+.selectArea:focus-visible {
   outline: 2px solid var(--primary-color);
-  outline-offset: -2px;
+  outline-offset: 1px;
 }
 
 .tile.selected {

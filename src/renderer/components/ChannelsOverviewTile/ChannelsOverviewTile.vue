@@ -11,7 +11,8 @@
   pair can be matched at a glance.
 
   Clicking the row selects it, and Shift-click selects everything from the
-  last clicked row; Space and Enter do the same from the keyboard. Going to
+  last clicked row; Space and Enter do the same from the keyboard. The mark
+  on a duplicate opens a menu of the two ways out of being one. Going to
   the channel is the small icon at the end of the row, so a stray click while
   sorting never navigates.
 -->
@@ -19,54 +20,65 @@
   <div
     class="tile"
     :class="[{ dragging, selected }, callout === null ? null : `callout callout${callout}`]"
-    role="checkbox"
-    tabindex="0"
-    :aria-checked="selected ? 'true' : 'false'"
-    :aria-label="channel.name"
     draggable="true"
-    @click="emit('select', $event.shiftKey)"
-    @keydown.space.enter.self.prevent="emit('select', $event.shiftKey)"
     @dragstart="onDragStart"
     @dragend="dragging = false"
   >
-    <span class="thumbnailSlot">
-      <img
-        v-if="thumbnailUrl"
-        class="thumbnail"
-        :src="thumbnailUrl"
-        alt=""
-        draggable="false"
-        loading="lazy"
-        @error.once="emit('thumbnail-error', channel)"
-      >
-      <FontAwesomeIcon
-        v-else
-        class="thumbnail"
-        :icon="['fas', 'circle-user']"
-      />
-      <span
-        v-if="selected"
-        class="selectedMark"
-      >
-        <FontAwesomeIcon :icon="['fas', 'check']" />
-      </span>
-    </span>
+    <!--
+      The checkbox is the thumbnail and the name, filling the row up to the
+      buttons at its end. The row itself cannot be it: a checkbox hides
+      whatever is inside it from a screen reader, buttons and all.
+    -->
     <span
-      class="name"
-      dir="auto"
-      :title="channel.name"
+      class="selectArea"
+      role="checkbox"
+      tabindex="0"
+      :aria-checked="selected ? 'true' : 'false'"
+      :aria-label="channel.name"
+      @click="emit('select', $event.shiftKey)"
+      @keydown.space.enter.prevent="emit('select', $event.shiftKey)"
     >
-      {{ channel.name }}
+      <span class="thumbnailSlot">
+        <img
+          v-if="thumbnailUrl"
+          class="thumbnail"
+          :src="thumbnailUrl"
+          alt=""
+          draggable="false"
+          loading="lazy"
+          @error.once="emit('thumbnail-error', channel)"
+        >
+        <FontAwesomeIcon
+          v-else
+          class="thumbnail"
+          :icon="['fas', 'circle-user']"
+        />
+        <span
+          v-if="selected"
+          class="selectedMark"
+        >
+          <FontAwesomeIcon :icon="['fas', 'check']" />
+        </span>
+      </span>
+      <span
+        class="name"
+        dir="auto"
+        :title="channel.name"
+      >
+        {{ channel.name }}
+      </span>
     </span>
     <span
       v-if="duplicateProfiles !== null"
       class="duplicateMark"
     >
-      <ChannelsOverviewDuplicateMenu
+      <ChannelsOverviewMenuButton
         :label="duplicateTitle"
-        @remove-here="emit('remove-here', channel)"
-        @keep-here="emit('keep-here', channel)"
-      />
+        :items="duplicateMenuItems"
+        @choose="(value) => value === 'remove-here' ? emit('remove-here', channel) : emit('keep-here', channel)"
+      >
+        <FontAwesomeIcon :icon="['fas', 'clone']" />
+      </ChannelsOverviewMenuButton>
     </span>
     <RouterLink
       v-if="showChannelLink"
@@ -87,7 +99,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import ChannelsOverviewDuplicateMenu from '../ChannelsOverviewDuplicateMenu/ChannelsOverviewDuplicateMenu.vue'
+import ChannelsOverviewMenuButton from '../ChannelsOverviewMenuButton/ChannelsOverviewMenuButton.vue'
 
 import store from '../../store/index'
 import { invidiousImageUrlToInvidious, youtubeImageUrlToInvidious } from '../../helpers/api/invidious'
@@ -131,6 +143,11 @@ function onDragStart(event) {
 }
 
 const { locale, t } = useI18n()
+
+const duplicateMenuItems = computed(() => [
+  { value: 'remove-here', label: t('Channels.Overview.Remove This Duplicate') },
+  { value: 'keep-here', label: t('Channels.Overview.Keep Here Only') }
+])
 
 const duplicateTitle = computed(() => {
   if (props.duplicateProfiles === null) { return '' }

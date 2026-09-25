@@ -76,21 +76,41 @@
             </span>
           </template>
         </span>
-        <FtButton
-          v-if="selectedCount > 0"
-          :label="t('Channels.Overview.Clear Selection')"
-          @click="clearSelection"
-        />
+        <template v-if="selectedCount > 0">
+          <!-- The same as dragging the selection, for the keyboard -->
+          <ChannelsOverviewMenuButton
+            variant="button"
+            :label="t('Channels.Overview.Move Selection To')"
+            :items="moveTargets"
+            @choose="(target) => fileSelection(target, false)"
+          >
+            {{ t('Channels.Overview.Move Selection To') }}
+          </ChannelsOverviewMenuButton>
+          <ChannelsOverviewMenuButton
+            variant="button"
+            :label="t('Channels.Overview.Copy Selection To')"
+            :items="copyTargets"
+            @choose="(target) => fileSelection(target, true)"
+          >
+            {{ t('Channels.Overview.Copy Selection To') }}
+          </ChannelsOverviewMenuButton>
+          <FtButton
+            :label="t('Channels.Overview.Clear Selection')"
+            @click="clearSelection"
+          />
+        </template>
         <span
           v-else
           class="toolbarHint"
         >
-          {{ t('Channels.Overview.Selection Hint') }}
+          {{ isMac ? t('Channels.Overview.Selection Hint Mac') : t('Channels.Overview.Selection Hint') }}
         </span>
         <ChannelsOverviewTrash
           v-if="!hideUnsubscribeButton"
           class="trash"
+          :has-selection="selectedCount > 0"
           @drop-channels="askToUnsubscribe"
+          @unsubscribe-selection="askToUnsubscribe(selectedChannels(selection))"
         />
       </div>
       <div class="columns">
@@ -147,6 +167,7 @@ import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
+import ChannelsOverviewMenuButton from '../../components/ChannelsOverviewMenuButton/ChannelsOverviewMenuButton.vue'
 import ChannelsOverviewTrash from '../../components/ChannelsOverviewTrash/ChannelsOverviewTrash.vue'
 
 import store from '../../store/index'
@@ -553,6 +574,44 @@ function fileChannels(dragged, targetProfileId, copy) {
 
     return count
   })
+}
+
+/** The pool's place in the move menu, as a profile id can never be empty */
+const POOL_TARGET = ''
+
+/**
+ * Where the move menu can send the selection: every profile, and while it is
+ * there, the pool, the same places a drag can.
+ */
+const moveTargets = computed(() => {
+  const targets = profiles.value.map(profile => ({ value: profile._id, label: profile.name }))
+
+  if (pool.value.length > 0) {
+    targets.push({ value: POOL_TARGET, label: t('Channels.Overview.Unassigned') })
+  }
+
+  return targets
+})
+
+/** A copy into the pool means nothing, so only the profiles */
+const copyTargets = computed(() => profiles.value.map(profile => ({ value: profile._id, label: profile.name })))
+
+const isMac = process.platform === 'darwin'
+
+/**
+ * The selection filed from the menus: what a drag of it onto a bubble does,
+ * or onto the pool.
+ * @param {string} target a profile id, or `POOL_TARGET`
+ * @param {boolean} copy
+ */
+function fileSelection(target, copy) {
+  const dragged = selectedChannels(selection.value)
+
+  if (target === POOL_TARGET) {
+    fileChannels(dragged, null, false)
+  } else {
+    fileChannelsFromPalette(target, dragged, copy)
+  }
 }
 
 /**
