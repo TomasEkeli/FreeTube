@@ -5,9 +5,9 @@
 
 /* FtProfileBubble, made smaller: the strip is a control, not the page */
 .paletteBubble {
-  inline-size: 84px;
+  inline-size: 96px;
   block-size: auto;
-  padding-block: 6px 8px;
+  padding-block: 6px 22px;
   padding-inline: 6px;
   border-radius: 8px;
   box-sizing: border-box;
@@ -69,14 +69,34 @@
   color: var(--tertiary-text-color);
 }
 
-.duplicateBadge {
-  inset-inline-start: 8px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  background-color: var(--secondary-card-bg-color);
-  color: var(--secondary-text-color);
+.counts {
+  position: absolute;
+  inset-block-end: 6px;
+  inset-inline: 0;
   font-size: 11px;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--tertiary-text-color);
+  pointer-events: none;
+}
+
+.counts.open {
+  color: var(--card-bg-color);
+}
+
+.sharedCount {
+  font-weight: bold;
+  color: #d08a00;
+}
+
+.sharedCount::before {
+  content: '· ';
+  font-weight: normal;
+}
+
+.counts.open .sharedCount {
+  color: inherit;
 }
 
 .dropTarget {
