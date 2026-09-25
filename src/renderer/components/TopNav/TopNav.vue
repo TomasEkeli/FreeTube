@@ -78,7 +78,9 @@
         />
         <div
           class="logoText"
-        />
+        >
+          <FtForkStamp class="forkStamp" />
+        </div>
       </RouterLink>
     </div>
     <div
@@ -250,6 +252,7 @@ import { useRoute, useRouter } from 'vue-router'
 import FtInput from '../FtInput/FtInput.vue'
 import FtProfileSelector from '../FtProfileSelector/FtProfileSelector.vue'
 import FtIconButton from '../FtIconButton/FtIconButton.vue'
+import FtForkStamp from '../FtForkStamp/FtForkStamp.vue'
 
 import store from '../../store/index'
 

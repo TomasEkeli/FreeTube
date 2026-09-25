@@ -9,7 +9,10 @@
         {{ $t("About.About") }}
       </h2>
       <section class="brand">
-        <FtLogoFull class="logo" />
+        <div class="logoWithStamp">
+          <FtLogoFull class="logo" />
+          <FtForkStamp class="forkStamp" />
+        </div>
         <div class="version">
           {{ versionNumber }} {{ $t("About.Beta") }}
         </div>
@@ -22,7 +25,7 @@
       </section>
       <section class="about-chunks">
         <figure
-          v-for="chunk in chunks"
+          v-for="chunk in forkChunks"
           :key="chunk.title"
           class="chunk"
         >
@@ -39,6 +42,33 @@
           />
         </figure>
       </section>
+      <section class="upstream">
+        <h3 class="upstreamHeading">
+          {{ $t("About.The FreeTube project") }}
+        </h3>
+        <p class="upstreamNote">
+          {{ $t("About.Fork disclaimer") }}
+        </p>
+        <div class="about-chunks">
+          <figure
+            v-for="chunk in upstreamChunks"
+            :key="chunk.title"
+            class="chunk"
+          >
+            <FontAwesomeIcon
+              class="icon"
+              :icon="chunk.icon"
+            />
+            <h4 class="title">
+              {{ chunk.title }}
+            </h4>
+            <div
+              v-safer-html="chunk.content"
+              class="content"
+            />
+          </figure>
+        </div>
+      </section>
     </FtCard>
   </div>
 </template>
@@ -50,6 +80,7 @@ import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtLogoFull from '../../components/FtLogoFull/FtLogoFull.vue'
+import FtForkStamp from '../../components/FtForkStamp/FtForkStamp.vue'
 import { vSaferHtml } from '../../directives/vSaferHtml.js'
 
 import { ABOUT_BITCOIN_ADDRESS } from '../../../constants'
@@ -67,12 +98,20 @@ const versionNumber = `v${packageDetails.version}`
  */
 const buildStamp = process.env.BUILD_STAMP
 
-const chunks = computed(() => [
+/**
+ * What belongs to this fork. Nothing here leads to the FreeTube team's own
+ * places for help, bug reports or chat: a problem met in this fork is not
+ * theirs to answer, and every link to them was an invitation to file one there.
+ */
+const forkChunks = computed(() => [
   {
     icon: ['fab', 'github'],
     title: t('About.Source code'),
     content: [
-      '<a href="https://github.com/FreeTubeApp/FreeTube" lang="en" dir="ltr">GitHub: FreeTubeApp/FreeTube</a>',
+      '<a href="https://github.com/TomasEkeli/FreeTube" lang="en" dir="ltr">GitHub: TomasEkeli/FreeTube</a>',
+      t('About.Forked from {upstreamLink}', {
+        upstreamLink: '<a href="https://github.com/FreeTubeApp/FreeTube" lang="en" dir="ltr">FreeTubeApp/FreeTube</a>',
+      }),
       t('About.Licensed under the {licenseLink}', {
         licenseLink: `<a href="https://www.gnu.org/licenses/agpl-3.0.en.html">${t('About.AGPLv3')}</a>`,
       }),
@@ -80,51 +119,16 @@ const chunks = computed(() => [
   },
   {
     icon: ['fas', 'file-download'],
-    title: t('About.Downloads / Changelog'),
-    content: `<a href="https://github.com/FreeTubeApp/FreeTube/releases">${t('About.GitHub releases')}</a>`,
+    title: t('About.Downloads'),
+    content: `<a href="https://github.com/TomasEkeli/FreeTube/actions/workflows/build.yml?query=branch%3Amain">${t('About.Build runs on GitHub Actions')}</a>`,
   },
-  {
-    icon: ['fas', 'question-circle'],
-    title: t('About.Help'),
-    content: [
-      `<a href="https://docs.freetubeapp.io/">${t('About.FreeTube Wiki')}</a>`,
-      `<a href="https://docs.freetubeapp.io/faq/">${t('About.FAQ')}</a>`,
-      `<a href="https://github.com/FreeTubeApp/FreeTube/discussions/">${t('About.Discussions')}</a>`
-    ].join(' / '),
-  },
-  {
-    icon: ['fas', 'exclamation-circle'],
-    title: t('About.Report a problem'),
-    content: [
-      `<a href="https://github.com/FreeTubeApp/FreeTube/issues">${t('About.GitHub issues')}</a>`,
-      t('About.Please check for duplicates before posting'),
-    ].join('<br>'),
-  },
-  {
-    icon: ['fas', 'globe'],
-    title: t('About.Website'),
-    content: '<a href="https://freetubeapp.io/">https://freetubeapp.io/</a>',
-  },
-  {
-    icon: ['fab', 'mastodon'],
-    title: t('About.Mastodon'),
-    content: '<a href="https://fosstodon.org/@FreeTube">@FreeTube@fosstodon.org</a>',
-  },
-  {
-    icon: ['fab', 'matrix'],
-    title: t('About.Chat on Matrix'),
-    content: [
-      '<a href="https://matrix.to/#/#freetubeapp:matrix.org">#freetubeapp:matrix.org</a>',
-      t('About.Please read the {roomRulesLink}', {
-        roomRulesLink: `<a href="https://docs.freetubeapp.io/community/matrix/">${t('About.room rules')}</a>`,
-      }),
-    ].join('<br>'),
-  },
-  {
-    icon: ['fas', 'language'],
-    title: t('About.Translate'),
-    content: '<a href="https://hosted.weblate.org/engage/free-tube/">https://hosted.weblate.org/engage/free-tube/</a>',
-  },
+])
+
+/**
+ * What belongs to the FreeTube team, shown under a note that they have no part
+ * in this fork.
+ */
+const upstreamChunks = computed(() => [
   {
     icon: ['fas', 'users'],
     title: t('About.Credits'),
