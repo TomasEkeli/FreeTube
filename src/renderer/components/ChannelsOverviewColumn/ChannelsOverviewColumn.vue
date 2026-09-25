@@ -12,8 +12,12 @@
 <template>
   <section
     class="column"
-    :class="{ pool: isPool }"
+    :class="{ pool: isPool, dropTarget: dragOver }"
     :aria-labelledby="headingId"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
   >
     <header
       class="columnHeader"
@@ -42,6 +46,7 @@
         :key="channel.id"
         :channel="channel"
         @thumbnail-error="emit('thumbnail-error', $event)"
+        @drag-start="(event, channel) => emit('drag-start', event, channel)"
       />
       <div
         v-if="drawnChannels.length < channels.length"
@@ -54,9 +59,11 @@
 </template>
 
 <script setup>
-import { computed, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
+
+import { acceptChannelDrag, isCopyDrop, readChannelDrag } from '../../helpers/channelDragAndDrop'
 
 const props = defineProps({
   title: {
@@ -90,7 +97,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels'])
 
 const headingId = useId()
 
@@ -101,6 +108,64 @@ const NEXT_BATCH = 120
 const drawLimit = ref(FIRST_BATCH)
 
 const drawnChannels = computed(() => props.channels.slice(0, drawLimit.value))
+
+const dragOver = ref(false)
+
+/**
+ * How many of the column's elements the drag is over. Moving from one row on
+ * to the next enters the next before leaving the last, so the column is only
+ * left once this is back to zero.
+ */
+let dragDepth = 0
+
+/**
+ * @param {DragEvent} event
+ */
+function onDragEnter(event) {
+  // A copy into the pool means nothing: the pool is where no profile has it
+  if (acceptChannelDrag(event, !props.isPool)) {
+    dragDepth++
+    dragOver.value = true
+  }
+}
+
+/**
+ * @param {DragEvent} event
+ */
+function onDragOver(event) {
+  acceptChannelDrag(event, !props.isPool)
+}
+
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+
+  if (dragDepth === 0) {
+    dragOver.value = false
+  }
+}
+
+/** A drag given up with Escape, or dropped somewhere else, ends the highlight too. */
+function endDrag() {
+  dragDepth = 0
+  dragOver.value = false
+}
+
+onMounted(() => document.addEventListener('dragend', endDrag))
+onBeforeUnmount(() => document.removeEventListener('dragend', endDrag))
+
+/**
+ * @param {DragEvent} event
+ */
+function onDrop(event) {
+  endDrag()
+
+  const dragged = readChannelDrag(event)
+
+  if (dragged.length === 0) { return }
+
+  event.preventDefault()
+  emit('drop-channels', dragged, isCopyDrop(event))
+}
 
 /**
  * @param {boolean} isVisible

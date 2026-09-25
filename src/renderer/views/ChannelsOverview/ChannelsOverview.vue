@@ -48,6 +48,8 @@
           :count-label="t('Channels.Overview.Unassigned Count', { count: pool.length }, pool.length)"
           :channels="pool"
           @thumbnail-error="updateThumbnail"
+          @drag-start="(event, channel) => dragChannel(event, channel, null)"
+          @drop-channels="(dragged, copy) => fileChannels(dragged, null, copy)"
         />
         <ChannelsOverviewColumn
           v-for="column in openColumns"
@@ -59,6 +61,8 @@
           :text-color="column.profile.textColor"
           :channels="column.channels"
           @thumbnail-error="updateThumbnail"
+          @drag-start="(event, channel) => dragChannel(event, channel, column.profile._id)"
+          @drop-channels="(dragged, copy) => fileChannels(dragged, column.profile._id, copy)"
         />
         <p
           v-if="openColumns.length === 0 && profiles.length > 0"
@@ -72,7 +76,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
@@ -82,9 +86,12 @@ import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/Ch
 import store from '../../store/index'
 import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
 import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/local'
+import { startChannelDrag } from '../../helpers/channelDragAndDrop'
+import { deepCopy } from '../../helpers/utils'
 import {
   channelMemberships,
   nonPrimaryProfiles,
+  planTransfer,
   primaryProfile,
   restoreOpenProfiles,
   sortChannels,
@@ -94,6 +101,7 @@ import {
 } from '../../helpers/channelsOverview'
 
 /** @import { Profile, Channel } from '../../helpers/channelsOverview' */
+/** @import { DraggedChannel } from '../../helpers/channelDragAndDrop' */
 
 const { locale, t } = useI18n()
 
@@ -114,13 +122,41 @@ const memberships = computed(() => channelMemberships(profileList.value))
 const pool = computed(() => sortChannels(unassignedChannels(profileList.value, memberships.value), collator.value))
 
 /**
- * The open columns, as a setting: it survives leaving the page and restarting
- * the app, and follows along in any other window.
- * @type {import('vue').ComputedRef<string[]>}
+ * The open columns. Saved as a setting, so they survive leaving the page and
+ * restarting the app, and follow along in any other window.
+ *
+ * The page keeps its own copy and saves it: the setting only changes once the
+ * database has the value, and a second click before then would toggle the
+ * value from before the first. Changes to the setting are taken up only while
+ * nothing is being saved from here, so the page never falls back to one of
+ * its own earlier values.
+ * @type {import('vue').Ref<unknown>}
  */
-const openProfileIds = computed(() => {
-  return restoreOpenProfiles(store.getters.getChannelsOverviewOpenProfiles, profileList.value)
+const storedOpenProfileIds = ref(store.getters.getChannelsOverviewOpenProfiles)
+let openProfileSavesInFlight = 0
+
+watch(() => store.getters.getChannelsOverviewOpenProfiles, (value) => {
+  if (openProfileSavesInFlight === 0) {
+    storedOpenProfileIds.value = value
+  }
 })
+
+/** @type {import('vue').ComputedRef<string[]>} */
+const openProfileIds = computed(() => restoreOpenProfiles(storedOpenProfileIds.value, profileList.value))
+
+/**
+ * @param {string[]} profileIds
+ */
+async function saveOpenProfileIds(profileIds) {
+  storedOpenProfileIds.value = profileIds
+  openProfileSavesInFlight++
+
+  try {
+    await store.dispatch('updateChannelsOverviewOpenProfiles', profileIds)
+  } finally {
+    openProfileSavesInFlight--
+  }
+}
 
 const openColumns = computed(() => {
   return openProfileIds.value
@@ -135,7 +171,31 @@ const openColumns = computed(() => {
  * @param {string} profileId
  */
 function toggleColumn(profileId) {
-  store.dispatch('updateChannelsOverviewOpenProfiles', toggleOpenProfile(openProfileIds.value, profileId))
+  saveOpenProfileIds(toggleOpenProfile(openProfileIds.value, profileId))
+}
+
+/**
+ * @param {DragEvent} event
+ * @param {Channel} channel
+ * @param {string | null} profileId the column it is dragged out of, null for the pool
+ */
+function dragChannel(event, channel, profileId) {
+  startChannelDrag(event, [{ channelId: channel.id, profileId }], channel.name ?? channel.id)
+}
+
+/**
+ * Files dropped channels into a profile, or back into the pool with
+ * `targetProfileId` null, saving each changed profile once. Through the
+ * store, so the database write happens in the main process and every other
+ * window hears about it.
+ * @param {DraggedChannel[]} dragged
+ * @param {string | null} targetProfileId
+ * @param {boolean} copy
+ */
+async function fileChannels(dragged, targetProfileId, copy) {
+  const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
+
+  await Promise.all(updated.map(profile => store.dispatch('updateProfile', deepCopy(profile))))
 }
 
 let thumbnailErrorCount = 0

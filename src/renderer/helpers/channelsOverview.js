@@ -161,3 +161,95 @@ export function toggleOpenProfile(openProfileIds, profileId, max = MAX_OPEN_COLU
 
   return opened.slice(Math.max(0, opened.length - max))
 }
+
+/**
+ * @param {Channel} channel
+ * @returns {Channel} a plain copy, safe to hand to the database
+ */
+function plainChannel(channel) {
+  return { ...channel }
+}
+
+/**
+ * What filing some channels into a profile, or back into the pool, does to
+ * the profiles: the changed ones, as whole profiles ready to save, one per
+ * profile however many channels it gains or loses.
+ *
+ * - Into a profile: each channel is added to it, unless it is there already.
+ *   Moving also takes it out of the profile it was dragged from; copying
+ *   leaves it there as well.
+ * - Into the pool (`targetProfileId` null): each channel is taken out of the
+ *   profile it was dragged from. It only turns up in the pool if no other
+ *   profile has it either. Copying into the pool means nothing, so it moves.
+ * - Dragged from the pool (`profileId` null): there is nothing to take it out
+ *   of, so moving and copying both just add it.
+ *
+ * The primary profile is never changed here: it is every subscription, and
+ * leaving it is unsubscribing, which is not what a drop onto a column means.
+ * @param {Profile[]} profileList
+ * @param {import('./channelDragAndDrop').DraggedChannel[]} dragged
+ * @param {string | null} targetProfileId
+ * @param {boolean} copy
+ * @returns {Profile[]}
+ */
+export function planTransfer(profileList, dragged, targetProfileId, copy) {
+  if (targetProfileId === MAIN_PROFILE_ID) { return [] }
+
+  const byId = new Map(nonPrimaryProfiles(profileList).map(profile => [profile._id, profile]))
+
+  if (targetProfileId !== null && !byId.has(targetProfileId)) { return [] }
+
+  // Where a dragged channel's details come from: the primary profile has every
+  // subscription, and the profile it was dragged from has it too otherwise
+  const primary = primaryProfile(profileList)
+  const knownChannels = new Map((primary?.subscriptions ?? []).map(channel => [channel.id, channel]))
+
+  /** @type {Map<string, Set<string>>} */
+  const removals = new Map()
+  /** @type {Channel[]} */
+  const additions = []
+  const target = targetProfileId === null ? null : byId.get(targetProfileId)
+  const inTarget = new Set(target?.subscriptions.map(channel => channel.id) ?? [])
+
+  for (const { channelId, profileId: sourceId } of dragged) {
+    const source = sourceId === null ? null : byId.get(sourceId)
+
+    if (sourceId !== null && source === undefined) { continue }
+    if (sourceId === targetProfileId) { continue }
+
+    if (target !== null && !inTarget.has(channelId)) {
+      const channel = knownChannels.get(channelId) ?? source?.subscriptions.find(channel => channel.id === channelId)
+
+      if (channel === undefined) { continue }
+
+      additions.push(plainChannel(channel))
+      inTarget.add(channelId)
+    }
+
+    if (source !== null && (target === null || !copy)) {
+      if (!removals.has(sourceId)) {
+        removals.set(sourceId, new Set())
+      }
+
+      removals.get(sourceId).add(channelId)
+    }
+  }
+
+  /** @type {Profile[]} */
+  const updated = []
+
+  for (const [profileId, channelIds] of removals) {
+    const profile = byId.get(profileId)
+    const subscriptions = profile.subscriptions.filter(channel => !channelIds.has(channel.id))
+
+    if (subscriptions.length !== profile.subscriptions.length) {
+      updated.push({ ...profile, subscriptions: subscriptions.map(plainChannel) })
+    }
+  }
+
+  if (target !== null && additions.length > 0) {
+    updated.push({ ...target, subscriptions: [...target.subscriptions.map(plainChannel), ...additions] })
+  }
+
+  return updated
+}
