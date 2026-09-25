@@ -71,6 +71,10 @@ Global:
   Counts:
     Video Count: 1 video | {count} videos
     Channel Count: 1 channel | {count} channels
+    # After channels are dropped on a profile's bubble in the palette
+    Moved to Profile: Moved 1 channel to {profile} | Moved {count} channels to {profile}
+    Copied to Profile: Copied 1 channel to {profile} | Copied {count} channels to {profile}
+    Already in Profile: Already in {profile}
     Subscriber Count: 1 subscriber | {count} subscribers
     View Count: 1 view | {count} views
     Like Count: 1 like | {count} likes
@@ -205,6 +209,10 @@ Channels:
     Selection Hint: Click to select, Shift-click to select a range. Drag to move, hold Ctrl to copy.
     # Shown on the cursor while dragging more than one channel
     Channel Count: 1 channel | {count} channels
+    # After channels are dropped on a profile's bubble in the palette
+    Moved to Profile: Moved 1 channel to {profile} | Moved {count} channels to {profile}
+    Copied to Profile: Copied 1 channel to {profile} | Copied {count} channels to {profile}
+    Already in Profile: Already in {profile}
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown

@@ -14,10 +14,7 @@
     class="column"
     :class="{ pool: isPool, dropTarget: dragOver }"
     :aria-labelledby="headingId"
-    @dragenter="onDragEnter"
-    @dragover="onDragOver"
-    @dragleave="onDragLeave"
-    @drop="onDrop"
+    v-on="dropHandlers"
   >
     <header
       class="columnHeader"
@@ -61,11 +58,11 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
 
-import { acceptChannelDrag, isCopyDrop, readChannelDrag } from '../../helpers/channelDragAndDrop'
+import { useChannelDropTarget } from '../../composables/useChannelDropTarget'
 
 const props = defineProps({
   title: {
@@ -116,63 +113,11 @@ const drawLimit = ref(FIRST_BATCH)
 
 const drawnChannels = computed(() => props.channels.slice(0, drawLimit.value))
 
-const dragOver = ref(false)
-
-/**
- * How many of the column's elements the drag is over. Moving from one row on
- * to the next enters the next before leaving the last, so the column is only
- * left once this is back to zero.
- */
-let dragDepth = 0
-
-/**
- * @param {DragEvent} event
- */
-function onDragEnter(event) {
+const { dragOver, handlers: dropHandlers } = useChannelDropTarget({
+  onDrop: (dragged, copy) => emit('drop-channels', dragged, copy),
   // A copy into the pool means nothing: the pool is where no profile has it
-  if (acceptChannelDrag(event, !props.isPool)) {
-    dragDepth++
-    dragOver.value = true
-  }
-}
-
-/**
- * @param {DragEvent} event
- */
-function onDragOver(event) {
-  acceptChannelDrag(event, !props.isPool)
-}
-
-function onDragLeave() {
-  dragDepth = Math.max(0, dragDepth - 1)
-
-  if (dragDepth === 0) {
-    dragOver.value = false
-  }
-}
-
-/** A drag given up with Escape, or dropped somewhere else, ends the highlight too. */
-function endDrag() {
-  dragDepth = 0
-  dragOver.value = false
-}
-
-onMounted(() => document.addEventListener('dragend', endDrag))
-onBeforeUnmount(() => document.removeEventListener('dragend', endDrag))
-
-/**
- * @param {DragEvent} event
- */
-function onDrop(event) {
-  endDrag()
-
-  const dragged = readChannelDrag(event)
-
-  if (dragged.length === 0) { return }
-
-  event.preventDefault()
-  emit('drop-channels', dragged, isCopyDrop(event))
-}
+  canCopy: () => !props.isPool
+})
 
 /**
  * @param {boolean} isVisible

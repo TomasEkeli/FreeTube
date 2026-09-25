@@ -1,7 +1,8 @@
 <!--
   Every profile a channel can be filed into, as a strip of bubbles over the
   Channels overview. Clicking a bubble opens that profile's column below, or
-  closes it if it is open.
+  closes it if it is open. Dropping channels on a bubble files them into that
+  profile, open or not.
 
   The primary profile has no bubble: it is every subscription, and is never a
   column of its own.
@@ -12,29 +13,21 @@
     role="group"
     :aria-label="t('Channels.Overview.Profiles')"
   >
-    <div
+    <ChannelsOverviewPaletteBubble
       v-for="profile in profiles"
       :key="profile._id"
-      class="paletteEntry"
-    >
-      <FtProfileBubble
-        class="paletteBubble"
-        :class="{ open: openProfileIds.includes(profile._id) }"
-        :profile-name="profile.name"
-        :is-main-profile="false"
-        :background-color="profile.bgColor"
-        :text-color="profile.textColor"
-        :aria-pressed="openProfileIds.includes(profile._id) ? 'true' : 'false'"
-        @click="emit('toggle', profile._id)"
-      />
-    </div>
+      :profile="profile"
+      :open="openProfileIds.includes(profile._id)"
+      @toggle="emit('toggle', profile._id)"
+      @drop-channels="(dragged, copy) => emit('drop-channels', profile._id, dragged, copy)"
+    />
   </div>
 </template>
 
 <script setup>
 import { useI18n } from 'vue-i18n'
 
-import FtProfileBubble from '../FtProfileBubble/FtProfileBubble.vue'
+import ChannelsOverviewPaletteBubble from '../ChannelsOverviewPaletteBubble/ChannelsOverviewPaletteBubble.vue'
 
 defineProps({
   /** @type {import('vue').PropType<import('../../helpers/channelsOverview').Profile[]>} */
@@ -49,7 +42,7 @@ defineProps({
   }
 })
 
-const emit = defineEmits(['toggle'])
+const emit = defineEmits(['toggle', 'drop-channels'])
 
 const { t } = useI18n()
 </script>
