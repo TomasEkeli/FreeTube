@@ -1,0 +1,68 @@
+.paletteEntry {
+  position: relative;
+  border-radius: 8px;
+}
+
+/* FtProfileBubble, made smaller: the strip is a control, not the page */
+.paletteBubble {
+  inline-size: 84px;
+  block-size: auto;
+  padding-block: 6px 8px;
+  padding-inline: 6px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.paletteBubble :deep(.bubble) {
+  inline-size: 44px;
+  block-size: 44px;
+  margin-block: 0 4px;
+  transition: transform 0.15s ease-out;
+}
+
+.paletteBubble :deep(.initial) {
+  font-size: 22px;
+  padding-block: 11px;
+}
+
+.paletteBubble :deep(.profileName) {
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.paletteBubble.open {
+  background-color: var(--primary-text-color);
+  color: var(--card-bg-color);
+}
+
+.paletteBubble.open:hover,
+.paletteBubble.open:focus-visible {
+  background-color: var(--tertiary-text-color);
+  color: var(--card-bg-color);
+}
+
+.dropTarget {
+  outline: 3px dashed var(--primary-color);
+  outline-offset: -3px;
+}
+
+.dropTarget .paletteBubble :deep(.bubble) {
+  transform: scale(1.15);
+}
+
+.acknowledged .paletteBubble :deep(.bubble) {
+  animation: filed 0.9s ease-out;
+}
+
+@keyframes filed {
+  0% {
+    box-shadow: 0 0 0 0 var(--primary-color);
+    transform: scale(1.2);
+  }
+
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+    transform: scale(1);
+  }
+}

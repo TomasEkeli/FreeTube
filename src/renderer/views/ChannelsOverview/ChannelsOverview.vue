@@ -27,6 +27,7 @@
           :profiles="profiles"
           :open-profile-ids="openProfileIds"
           @toggle="toggleColumn"
+          @drop-channels="fileChannelsFromPalette"
         />
         <p
           v-else
@@ -106,7 +107,7 @@ import store from '../../store/index'
 import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
 import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/local'
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
-import { deepCopy } from '../../helpers/utils'
+import { deepCopy, showToast } from '../../helpers/utils'
 import {
   channelMemberships,
   isSelected,
@@ -317,6 +318,31 @@ async function fileChannels(dragged, targetProfileId, copy) {
   selection.value = pruneSelection(selectionAfter, new Map(columns.value.map(column => {
     return [column.id, column.channels.map(channel => channel.id)]
   })))
+}
+
+/**
+ * A drop on a bubble does what a drop on its column does. The column may not
+ * be open to show the channels arriving, so a toast says what happened.
+ * @param {string} profileId
+ * @param {DraggedChannel[]} dragged
+ * @param {boolean} copy
+ */
+async function fileChannelsFromPalette(profileId, dragged, copy) {
+  const profile = profiles.value.find(profile => profile._id === profileId)
+
+  if (!profile) { return }
+
+  const arriving = new Set(dragged.filter(channel => channel.profileId !== profileId).map(channel => channel.channelId))
+
+  await fileChannels(dragged, profileId, copy)
+
+  if (arriving.size === 0) {
+    showToast(t('Channels.Overview.Already in Profile', { profile: profile.name }))
+  } else if (copy) {
+    showToast(t('Channels.Overview.Copied to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+  } else {
+    showToast(t('Channels.Overview.Moved to Profile', { count: arriving.size, profile: profile.name }, arriving.size))
+  }
 }
 
 let thumbnailErrorCount = 0
