@@ -382,9 +382,9 @@ describe('download service', () => {
       })
 
       await service.start(REQUEST, report)
-      await until(() => progress().some(p => p.status === 'downloading'))
+      await until(() => progress().some(p => p.part === 1))
 
-      expect(progress().find(p => p.status === 'downloading')).toMatchObject({
+      expect(progress().find(p => p.part === 1)).toMatchObject({
         part: 1,
         parts: 2,
         partKind: 'video',
@@ -420,7 +420,7 @@ describe('download service', () => {
       })
 
       await service.start(REQUEST, report)
-      await until(() => progress().some(p => p.status === 'downloading'))
+      await until(() => progress().some(p => p.part === 1))
       const before = progress().length
 
       const child = downloads()[0].child
@@ -446,7 +446,8 @@ describe('download service', () => {
       await service.start(REQUEST, report)
       await until(ended)
 
-      expect(progress().every(p => p.status === 'preparing')).toBe(true)
+      // Under way once named, with nothing more known about it
+      expect(progress().at(-1)).toMatchObject({ status: 'downloading', destination: DEST, part: null, downloadedBytes: null })
       expect(ours().at(-1)).toMatchObject({ type: 'finished', path: DEST })
     })
   })
@@ -483,7 +484,7 @@ describe('download service', () => {
       })
 
       await service.start(REQUEST, report)
-      await until(() => progress().some(p => p.status === 'downloading'))
+      await until(() => progress().some(p => p.part === 1))
 
       expect(progress().at(-1).resuming).toBe(false)
     })
@@ -524,7 +525,7 @@ describe('download service', () => {
       })
 
       await service.start(REQUEST, report)
-      await until(() => progress().some(p => p.status === 'downloading'))
+      await until(() => progress().some(p => p.part === 1))
 
       expect(progress().at(-1).resuming).toBe(true)
     })

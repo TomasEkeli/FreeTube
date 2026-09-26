@@ -175,9 +175,16 @@ export function whereText(download) {
   const t = i18n.global.t
 
   if (download.destination) {
-    return download.status === 'finished'
-      ? t('Video.yt-dlp.Downloads.Saved to', { path: download.destination })
-      : t('Video.yt-dlp.Downloads.Saving to', { path: download.destination })
+    switch (download.status) {
+      case 'finished':
+        return t('Video.yt-dlp.Downloads.Saved to', { path: download.destination })
+      case 'failed':
+      case 'cancelled':
+        // Its partial files are beside it, for the next attempt to carry on from
+        return t('Video.yt-dlp.Downloads.Was saving to', { path: download.destination })
+      default:
+        return t('Video.yt-dlp.Downloads.Saving to', { path: download.destination })
+    }
   }
 
   return download.folder ? t('Video.yt-dlp.Downloads.Saving into folder', { path: download.folder }) : ''
@@ -198,7 +205,7 @@ export function statusText(download) {
       return download.resuming ? t('Video.yt-dlp.Downloads.Status.Resuming') : t('Video.yt-dlp.Downloads.Status.Preparing')
     case 'downloading': {
       const parts = { part: download.part, parts: download.parts }
-      if (!download.parts || download.parts < 2) {
+      if (!download.part || !download.parts || download.parts < 2) {
         return download.resuming ? t('Video.yt-dlp.Downloads.Status.Resuming') : t('Video.yt-dlp.Downloads.Status.Downloading')
       }
       switch (download.partKind) {

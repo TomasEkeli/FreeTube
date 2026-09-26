@@ -1194,6 +1194,7 @@ Video:
       Downloads running: 'Downloads, {count} running'
       Saving to: 'Saving to {path}'
       Saved to: 'Saved to {path}'
+      Was saving to: 'Was saving to {path}'
       Saving into folder: 'Saving into {path}'
       Percent of size: '{percent}% of {size}'
       Speed: '{speed}/s'

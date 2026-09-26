@@ -355,6 +355,9 @@ export function createDownloadService(deps) {
 
       switch (parsed.kind) {
         case 'dest': {
+          // Named just before downloading starts: from here it is under way,
+          // even when custom arguments keep the progress lines from coming
+          download.status = 'downloading'
           download.destination = parsed.path
           download.parts = parsed.formatIds.length > 0 ? parsed.formatIds.length : null
 
