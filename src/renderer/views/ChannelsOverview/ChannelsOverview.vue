@@ -192,15 +192,6 @@
       :is-first-option-destructive="true"
       @click="handleUnsubscribePrompt"
     />
-    <FtPrompt
-      v-if="removingProfile !== null"
-      :label="t('Channels.Overview.Remove Profile Prompt', { profile: removingProfile.name })"
-      :extra-labels="[t('Channels.Overview.Remove Profile Prompt Detail')]"
-      :option-names="[t('Channels.Overview.Remove Profile Confirm'), t('Cancel')]"
-      :option-values="['remove', 'cancel']"
-      :is-first-option-destructive="true"
-      @click="handleRemovePrompt"
-    />
   </div>
 </template>
 
@@ -672,8 +663,6 @@ const {
   colourMenu,
   chooseColour,
   closeColourMenu,
-  removingProfile,
-  handleRemovePrompt,
   reorder
 } = useProfilePaletteEditing({ profileList, afterPendingChanges, openColumn })
 

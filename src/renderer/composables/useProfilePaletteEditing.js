@@ -205,7 +205,7 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
       const profile = profileList.value.find(candidate => candidate._id === profileId)
 
       if (profile) {
-        removingProfile.value = { profileId, name: profile.name }
+        removeProfile(profileId, profile.name)
       }
     }
   }
@@ -252,28 +252,16 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
   }
 
   /**
-   * The profile the prompt asks about removing. Null while no prompt shows.
-   * @type {import('vue').ShallowRef<{ profileId: string, name: string } | null>}
+   * Removes a profile at once, without asking: nothing is lost with it, as
+   * its channels stay subscribed to, and those in no other profile are
+   * unassigned again, which the pool shows by itself. As Profile settings
+   * does, the active and default profile fall back to the primary one if it
+   * was either. In the page's queue, as a drop saved after the removal would
+   * bring the profile back.
+   * @param {string} profileId
+   * @param {string} name
    */
-  const removingProfile = shallowRef(null)
-
-  /**
-   * Removes the profile once the prompt says so, as Profile settings does:
-   * the active and default profile fall back to the primary one if it was
-   * either. Its channels stay subscribed to, and those in no other profile
-   * are unassigned again, which the pool shows by itself. In the page's
-   * queue, as a drop saved after the removal would bring the profile back.
-   * @param {'remove' | 'cancel' | null} value
-   */
-  async function handleRemovePrompt(value) {
-    const target = removingProfile.value
-    removingProfile.value = null
-
-    // Cancelled, the prompt gives the focus back to the bubble itself
-    if (value !== 'remove' || target === null) { return }
-
-    const { profileId, name } = target
-
+  async function removeProfile(profileId, name) {
     const removed = await afterPendingChanges(async () => {
       if (!profileList.value.some(candidate => candidate._id === profileId)) { return false }
 
@@ -295,7 +283,7 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
       showToast(t('Profile.Your default profile has been changed to your primary profile'))
     }
 
-    // The prompt gives the focus back to the bubble, which is gone
+    // The menu gave the focus back to the bubble, which is gone
     await nextTick()
 
     if (document.activeElement === null || document.activeElement === document.body) {
@@ -336,8 +324,6 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     colourMenu,
     chooseColour,
     closeColourMenu,
-    removingProfile,
-    handleRemovePrompt,
     reorder
   }
 }
