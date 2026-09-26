@@ -41,7 +41,9 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, useTemplateRef } from 'vue'
+import { nextTick, onMounted, useTemplateRef } from 'vue'
+
+import { useAnchoredOverlay } from '../../composables/useAnchoredOverlay'
 
 /**
  * @typedef {object} MenuItem
@@ -86,31 +88,12 @@ const emit = defineEmits(['choose', 'close'])
 
 const menu = useTemplateRef('menu')
 
-/**
- * Below the anchor, or above it where there is no room below; lined up with
- * whichever side leaves the menu inside the window. Physical sides, as the
- * anchor's position is measured in them.
- */
-const position = computed(() => {
-  const rect = 'rect' in props.anchor
-    ? props.anchor.rect
-    : { top: props.anchor.y, bottom: props.anchor.y, left: props.anchor.x, right: props.anchor.x, width: 0 }
-  const gap = 'rect' in props.anchor ? 4 : 0
-  const width = document.documentElement.clientWidth
-  const roomBelow = window.innerHeight - rect.bottom
-  const roomAbove = rect.top
-  const below = roomBelow >= props.items.length * 36 + 12 || roomBelow >= roomAbove
-  const fromLeft = 'rect' in props.anchor
-    ? rect.left + rect.width / 2 < width / 2
-    : width - rect.left >= 240
-
-  return {
-    top: below ? `${rect.bottom + gap}px` : null,
-    bottom: below ? null : `${window.innerHeight - rect.top + gap}px`,
-    left: fromLeft ? `${Math.max(8, rect.left)}px` : null,
-    right: fromLeft ? null : `${Math.max(8, width - rect.right)}px`,
-    maxHeight: `${Math.max(0, (below ? roomBelow : roomAbove) - 12)}px`
-  }
+const { position } = useAnchoredOverlay({
+  element: menu,
+  anchor: () => props.anchor,
+  owner: () => props.owner,
+  height: () => props.items.length * 36 + 12,
+  onClose: () => emit('close', false)
 })
 
 /** @returns {HTMLButtonElement[]} */
@@ -165,26 +148,6 @@ function handleFocusOut(event) {
 }
 
 /**
- * @param {PointerEvent} event
- */
-function closeOnOutsidePointer(event) {
-  if (!menu.value?.contains(event.target) && !props.owner?.contains(event.target)) {
-    emit('close', false)
-  }
-}
-
-/**
- * The menu is placed against the window, so it would be left behind by a
- * column scrolling under it.
- * @param {Event} event
- */
-function closeOnScroll(event) {
-  if (event?.target instanceof Node && menu.value?.contains(event.target)) { return }
-
-  emit('close', false)
-}
-
-/**
  * @param {string} value
  */
 function choose(value) {
@@ -195,21 +158,11 @@ function choose(value) {
 }
 
 onMounted(async () => {
-  document.addEventListener('pointerdown', closeOnOutsidePointer, true)
-  document.addEventListener('scroll', closeOnScroll, true)
-  window.addEventListener('resize', closeOnScroll)
-
   await nextTick()
 
   if (props.focusFirst) {
     menuItems()[0]?.focus()
   }
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeOnOutsidePointer, true)
-  document.removeEventListener('scroll', closeOnScroll, true)
-  window.removeEventListener('resize', closeOnScroll)
 })
 </script>
 
