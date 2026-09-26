@@ -112,7 +112,7 @@ const forkChunks = computed(() => [
     icon: ['fab', 'github'],
     title: t('About.Source code'),
     content: [
-      '<a href="https://github.com/TomasEkeli/FreeTube" lang="en" dir="ltr">GitHub: TomasEkeli/FreeTube</a>',
+      '<a href="https://github.com/TomasEkeli/Fjernsyn" lang="en" dir="ltr">GitHub: TomasEkeli/Fjernsyn</a>',
       t('About.Forked from {upstreamLink}', {
         upstreamLink: '<a href="https://github.com/FreeTubeApp/FreeTube" lang="en" dir="ltr">FreeTubeApp/FreeTube</a>',
       }),
@@ -124,7 +124,7 @@ const forkChunks = computed(() => [
   {
     icon: ['fas', 'file-download'],
     title: t('About.Downloads'),
-    content: `<a href="https://github.com/TomasEkeli/FreeTube/actions/workflows/build.yml?query=branch%3Amain">${t('About.Build runs on GitHub Actions')}</a>`,
+    content: `<a href="https://github.com/TomasEkeli/Fjernsyn/actions/workflows/build.yml?query=branch%3Amain">${t('About.Build runs on GitHub Actions')}</a>`,
   },
 ])
 

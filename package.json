@@ -10,14 +10,14 @@
   "author": {
     "name": "Tomas Ekeli",
     "email": "noreply@example.com",
-    "url": "https://github.com/TomasEkeli/FreeTube"
+    "url": "https://github.com/TomasEkeli/Fjernsyn"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TomasEkeli/FreeTube.git"
+    "url": "git+https://github.com/TomasEkeli/Fjernsyn.git"
   },
   "bugs": {
-    "url": "https://github.com/TomasEkeli/FreeTube"
+    "url": "https://github.com/TomasEkeli/Fjernsyn"
   },
   "scripts": {
     "build": "pnpm run pack && pnpm run build-release",
