@@ -400,7 +400,8 @@ const {
   suggestions,
   toggleSuggestions,
   dismiss,
-  keepIn
+  keepIn,
+  dropLapsedKeeps
 } = useProfileSuggestions({ profileList, collator })
 
 /**
@@ -669,6 +670,8 @@ const hiddenSelectedCount = computed(() => {
  * The selection as a drag payload, each channel with where it drags from. A
  * channel selected in a proposed column drags from where it is now, and one
  * selected there and in its own profile's column as well is dragged once.
+ * One from a proposed column also says so, in `selectedIn`, so that once
+ * moved it is selected where it lands, as from any other column.
  * @returns {DraggedChannel[]}
  */
 function draggedSelection() {
@@ -686,7 +689,7 @@ function draggedSelection() {
     if (seen.has(key)) { continue }
 
     seen.add(key)
-    dragged.push({ channelId, profileId })
+    dragged.push(sources ? { channelId, profileId, selectedIn: columnId } : { channelId, profileId })
   }
 
   return dragged
@@ -852,6 +855,7 @@ onBeforeUnmount(() => clearTimeout(animatingChangeTimeout))
 async function removeChannels(channelIds, profileIds) {
   animateChange(channelIds.length)
   store.commit('removeChannelsFromProfiles', { channelIds, profileIds })
+  dropLapsedKeeps()
 
   await store.dispatch('removeChannelsFromProfiles', { channelIds, profileIds })
 }
@@ -929,7 +933,10 @@ async function transferChannels(dragged, targetProfileId, copy) {
 
   // Counted before saving, as saving changes the profile list in place
   const count = countTransferred(profileList.value, updated, targetProfileId)
-  const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
+  // Where each channel is selected, which for a proposed column is not
+  // where it is dragged from
+  const selected = dragged.map(({ channelId, profileId, selectedIn }) => ({ channelId, profileId: selectedIn ?? profileId }))
+  const selectionAfter = selectionAfterTransfer(selection.value, selected, targetProfileId, copy)
   const saved = updated.map(profile => deepCopy(profile))
 
   // Shown at once, before the database has it, so the channel does not sit
@@ -938,6 +945,7 @@ async function transferChannels(dragged, targetProfileId, copy) {
   animateChange(count)
   saved.forEach(profile => store.commit('upsertProfileToList', deepCopy(profile)))
   setPrunedSelection(selectionAfter)
+  dropLapsedKeeps()
 
   await Promise.all(saved.map(profile => store.dispatch('updateProfile', profile)))
 
@@ -1013,6 +1021,16 @@ async function fileChannelsFromPalette(profileId, dragged, copy) {
 
   const count = await fileChannels(dragged, profileId, copy)
 
+  toastFiled(profile, count, copy)
+}
+
+/**
+ * Says what filing into a profile whose column may be closed did.
+ * @param {Profile} profile
+ * @param {number} count
+ * @param {boolean} copy
+ */
+function toastFiled(profile, count, copy) {
   if (count === 0) {
     showToast(t('Channels.Overview.Already in Profile', { profile: profile.name }))
   } else if (copy) {
@@ -1149,14 +1167,33 @@ function chooseFromContextMenu(value) {
 const COLOUR_VALUES = colors.map(colour => colour.value)
 
 /**
- * Every channel of a suggestion, each as dragged from where it is now: the
- * whole of it, whatever the search is showing, which is why the menu says
- * how many.
- * @param {Proposal} proposal
+ * Every channel of a suggestion as it is now, each as dragged from where it
+ * is: the whole of it, whatever the search is showing, which is why the menu
+ * says how many. Read when the change's turn in the queue comes, as an
+ * earlier change still being saved may have filed some of them already.
+ * @param {string} key
  * @returns {DraggedChannel[]}
  */
-function proposalDragged(proposal) {
-  return proposal.channels.map(suggested => ({ channelId: suggested.channel.id, profileId: suggested.sourceProfileId }))
+function proposalDragged(key) {
+  const proposal = suggestions.value?.proposals.find(candidate => candidate.key === key)
+
+  return proposal?.channels.map(suggested => ({ channelId: suggested.channel.id, profileId: suggested.sourceProfileId })) ?? []
+}
+
+/**
+ * Files every channel of a suggestion in a profile, moving those in another
+ * profile out of it, as dropping them all there would.
+ * @param {string} key
+ * @param {string} profileId
+ */
+async function fileProposal(key, profileId) {
+  const profile = profilesById.value.get(profileId)
+
+  if (!profile) { return }
+
+  const count = await afterPendingChanges(() => transferChannels(proposalDragged(key), profileId, false))
+
+  toastFiled(profile, count, false)
 }
 
 /**
@@ -1211,10 +1248,10 @@ async function keepFocusOnPage() {
 async function chooseProposalAction(proposal, value, anchor) {
   switch (value) {
     case 'file':
-      await fileChannelsFromPalette(proposal.profileId, proposalDragged(proposal), false)
+      await fileProposal(proposal.key, proposal.profileId)
       break
     case 'create':
-      await createFromProposal(proposal)
+      await createFromProposal(proposal.key, proposal.name)
       break
     case 'send':
       if (anchor !== null) {
@@ -1235,15 +1272,20 @@ async function chooseProposalAction(proposal, value, anchor) {
  * the group's channels in it. One change in the queue, so that a rename or a
  * drop straight after cannot come between the two. Its column is not opened:
  * the bubble says where the channels went.
- * @param {Proposal} proposal
+ * @param {string} key
+ * @param {string} name
  */
-function createFromProposal(proposal) {
-  const dragged = proposalDragged(proposal)
-
+function createFromProposal(key, name) {
   return afterPendingChanges(async () => {
+    // Before the profile exists: once it does, its channels are suggested
+    // for it under another key
+    const dragged = proposalDragged(key)
+
+    if (dragged.length === 0) { return }
+
     const bgColor = pickUnusedColour(COLOUR_VALUES, profileList.value)
     const created = await store.dispatch('createProfile', {
-      name: proposal.name,
+      name,
       bgColor,
       textColor: calculateColorLuminance(bgColor),
       subscriptions: []
@@ -1271,11 +1313,10 @@ const sendTargets = computed(() => profiles.value.map(profile => ({ value: profi
  */
 async function chooseSendTarget(profileId) {
   const key = sendMenu.value?.key
-  const proposal = suggestions.value?.proposals.find(candidate => candidate.key === key)
 
-  if (!proposal) { return }
+  if (!key) { return }
 
-  await fileChannelsFromPalette(profileId, proposalDragged(proposal), false)
+  await fileProposal(key, profileId)
   await keepFocusOnPage()
 }
 

@@ -39,7 +39,7 @@ const getters = {
 }
 
 const actions = {
-  async grabAllSubscriptions({ commit, dispatch, rootGetters }) {
+  async grabAllSubscriptions({ commit, dispatch, rootGetters, state }) {
     try {
       const payload = await DBSubscriptionCacheHandlers.find()
 
@@ -87,9 +87,15 @@ const actions = {
         if (!hasData) { toBeRemovedChannelIds.push(channelId) }
       }
 
-      if (toBeRemovedChannelIds.length > 0) {
+      // A channel page seen while this was loading may have made a record for
+      // its tags since, which is data after all
+      const emptyChannelIds = toBeRemovedChannelIds.filter(channelId => {
+        return subscribedChannelIdSet.has(channelId) ? state.channelTagsCache[channelId] == null : true
+      })
+
+      if (emptyChannelIds.length > 0) {
         // Delete channels with no data
-        dispatch('clearSubscriptionsCacheForManyChannels', toBeRemovedChannelIds)
+        dispatch('clearSubscriptionsCacheForManyChannels', emptyChannelIds)
       }
       commit('setCaches', { videos, liveStreams, shorts, communityPosts, channelTags })
       commit('setSubscriptionCacheReady', true)

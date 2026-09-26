@@ -473,6 +473,23 @@ export function isKept(keeps, memberships, channelId) {
 }
 
 /**
+ * The keeps less any that no longer apply, or the same object when all do, so
+ * a caller can tell there is nothing to save. A keep that lapsed is gone for
+ * good: moved back to where it was kept, the channel is suggested again.
+ * @param {Keeps | null | undefined} keeps
+ * @param {Map<string, string[]>} memberships
+ * @returns {Keeps | null | undefined}
+ */
+export function pruneKeeps(keeps, memberships) {
+  const ids = Object.keys(keeps ?? {})
+  const applying = ids.filter(id => isKept(keeps, memberships, id))
+
+  if (applying.length === ids.length) { return keeps }
+
+  return Object.fromEntries(applying.map(id => [id, keeps[id]]))
+}
+
+/**
  * The keeps with one more, and any that no longer apply dropped, ready to save.
  * @param {Keeps | null | undefined} keeps
  * @param {Map<string, string[]>} memberships
@@ -481,18 +498,7 @@ export function isKept(keeps, memberships, channelId) {
  * @returns {Keeps}
  */
 export function addKeep(keeps, memberships, channelId, profileId) {
-  /** @type {Keeps} */
-  const next = {}
-
-  for (const id of Object.keys(keeps ?? {})) {
-    if (isKept(keeps, memberships, id)) {
-      next[id] = keeps[id]
-    }
-  }
-
-  next[channelId] = profileId
-
-  return next
+  return { ...pruneKeeps(keeps, memberships), [channelId]: profileId }
 }
 
 /**
@@ -708,24 +714,31 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
     return true
   })
 
-  // 4. By category, a category named as a profile is going to that profile
-  /** @type {Map<string, Proposal>} */
+  // 4. By category, a category named as a profile is going to that profile.
+  // Categories that differ only in case or spacing are one group, under the
+  // name first seen.
+  /** @type {Map<string, Proposal>} by the category's name as tags are kept */
   const categoryGroups = new Map()
 
   left = left.filter(entry => {
     if (entry.category === null) { return true }
 
     const { name, evidence } = entry.category
-    const profile = profileNames.get(normaliseTag(name))
+    const normalised = normaliseTag(name)
+    const profile = profileNames.get(normalised)
     const suggested = { channel: entry.channel, sourceProfileId: null, evidence }
 
     if (profile) {
       profileProposal(profile).channels.push(suggested)
     } else {
-      const group = proposal(`category:${name}`, 'category', name, null)
+      let group = categoryGroups.get(normalised)
+
+      if (!group) {
+        group = proposal(`category:${name}`, 'category', name, null)
+        categoryGroups.set(normalised, group)
+      }
 
       group.channels.push(suggested)
-      categoryGroups.set(normaliseTag(name), group)
     }
 
     return false

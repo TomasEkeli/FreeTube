@@ -15,7 +15,11 @@
  * profile's bubble is dragged to put it somewhere else in the order.
  */
 
-/** @typedef {{ channelId: string, profileId: string | null }} DraggedChannel */
+/**
+ * `selectedIn`, for a channel dragged out of a proposed column, is that
+ * column's key: where it is selected, as against where it is.
+ * @typedef {{ channelId: string, profileId: string | null, selectedIn?: string }} DraggedChannel
+ */
 
 /** Custom drag data types are lower case in Chromium whatever they were set as. */
 export const CHANNEL_DRAG_TYPE = 'application/x-freetube-channels'

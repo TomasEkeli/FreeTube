@@ -26,6 +26,7 @@ import {
   normaliseChannelTags,
   profileCharacter,
   proposeProfiles,
+  pruneKeeps,
   TAG_LIMIT,
   watchedCategories,
 } from '../src/renderer/helpers/profileSuggestions.js'
@@ -108,6 +109,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   check('nothing stored and something new needs a write', channelTagsChanged(undefined, { tags: ['a1'], musicArtist: false }))
   check('nothing stored and only the flag needs a write', channelTagsChanged(null, { tags: [], musicArtist: true }))
   check('nothing stored and nothing new needs no write', !channelTagsChanged(undefined, { tags: [], musicArtist: false }))
+  check('a stored record without a tag list takes a write for new tags', channelTagsChanged({ musicArtist: false }, { tags: ['a1'], musicArtist: false }))
 }
 
 // Watched categories
@@ -198,6 +200,9 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   check('and its evidence is the one that decided', fit.evidence.type === 'tagShare')
   const catWins = channelFit(both, member('x', 'Music', ['other']), 'p', false)
   check('the category decides when it is larger', catWins.fit === 0.5 && catWins.evidence.type === 'categoryShare')
+  const even = profileCharacter([...many('m', n, 'Music', ['lofi']), ...many('g', n, 'Gaming', ['jazz'])])
+  const tie = channelFit(even, member('x', 'Music', ['lofi']), 'p', false)
+  check('a tie between the two goes to the category', tie.fit === 0.5 && tie.evidence.type === 'categoryShare')
 }
 
 // Proposals
@@ -309,6 +314,33 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   }
 
   {
+    const channels = ['a', 'b', 'c', 'd', 'e'].map(id => ch(id))
+    const profileList = [primary(...channels), profile('p1', 'Chess', []), profile('p2', 'Puzzles', [])]
+    const channelTags = new Map([
+      ['a', { tags: ['puzzles', 'chess'], musicArtist: false }],
+      ['b', { tags: ['chess', 'puzzles'], musicArtist: false }]
+    ])
+    const result = proposeProfiles({ profileList, channelTags, collator })
+    check('channel tags can come as a Map', idsIn(result, 'profile:p1') === 'b')
+    check('of two tags naming profiles, the first decides', idsIn(result, 'profile:p2') === 'a')
+
+    const watched = watchedAs([['c', 'Music'], ['d', ' music'], ['e', 'MUSIC']])
+    const merged = proposeProfiles({ profileList, watched, collator })
+    check('categories that differ only in case or spacing are one group', keysOf(merged) === 'category:Music' && idsIn(merged, 'category:Music') === 'c,d,e')
+  }
+
+  {
+    // A dismissed category group's channels share a tag that could group them
+    const channels = ['a', 'b', 'c', 'd'].map(id => ch(id))
+    const watched = watchedAs([['a', 'Comedy'], ['b', 'Comedy'], ['c', 'Comedy']])
+    const channelTags = tagsFor([['a', ['sketch']], ['b', ['sketch']], ['c', ['sketch']], ['d', ['sketch']]])
+    const shown = proposeProfiles({ profileList: [primary(...channels)], watched, channelTags, collator })
+    check('channels grouped by category are not grouped by tag too', keysOf(shown) === 'category:Comedy')
+    const dismissed = proposeProfiles({ profileList: [primary(...channels)], watched, channelTags, collator, dismissed: new Set(['category:Comedy']) })
+    check('a dismissed category group is not regrouped by a tag', keysOf(dismissed) === '' && remainderIds(dismissed) === 'a,b,c,d')
+  }
+
+  {
     // Two tags tied on count, the collator deciding
     const channels = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ch(id))
     const channelTags = tagsFor([
@@ -414,6 +446,13 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     check('a stale keep does not apply', !isKept(stale, memberships, 'stray'))
     check('and does not suppress the move', idsIn(proposeProfiles({ profileList, watched, keeps: stale, collator }), 'profile:p2') === 'stray')
     check('adding a keep drops the stale ones', JSON.stringify(addKeep({ other: 'p2', m0: 'p2' }, memberships, 'stray', 'p1')) === JSON.stringify({ m0: 'p2', stray: 'p1' }))
+    check('pruning keeps that all apply changes nothing', pruneKeeps(keeps, memberships) === keeps)
+
+    // Moved away, the keep lapses, and moving back does not bring it back
+    const movedAway = [primary(...games, ...music, stray), profile('p1', 'Games', games), profile('p2', 'Tunes', [...music, stray])]
+    const pruned = pruneKeeps(keeps, channelMemberships(movedAway))
+    check('a keep lapses once the channel is moved', JSON.stringify(pruned) === '{}')
+    check('and once lapsed, moving back is suggested again', idsIn(proposeProfiles({ profileList, watched, keeps: pruned, collator }), 'profile:p2') === 'stray')
 
     const dismissed = proposeProfiles({ profileList, watched, collator, dismissed: new Set(['profile:p2']) })
     check('a dismissed profile proposal drops its moves', dismissed.proposals.length === 0 && remainderIds(dismissed) === '')
@@ -473,6 +512,22 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     })
     check(`${FIT_THRESHOLD} is enough for a pool channel`, 3 / 8 >= FIT_THRESHOLD && idsIn(weak, 'profile:p2') === 'new')
     check(`but a move needs ${MOVE_THRESHOLD}`, 3 / 8 < MOVE_THRESHOLD && !idsIn(weak, 'profile:p2')?.includes('stray'))
+
+    // Half of Tunes Music: exactly the threshold for a move
+    const half = proposeProfiles({
+      profileList: [
+        primary(...games, ...eight, stray),
+        profile('p1', 'Games', [...games, stray]),
+        profile('p2', 'Tunes', eight)
+      ],
+      watched: watchedAs([
+        ...games.map(c => [c.id, 'Gaming']),
+        ...eight.map((c, i) => [c.id, i < 4 ? 'Music' : 'Comedy']),
+        ['stray', 'Music']
+      ]),
+      collator
+    })
+    check(`a move at exactly ${MOVE_THRESHOLD} is suggested`, 4 / 8 === MOVE_THRESHOLD && idsIn(half, 'profile:p2') === 'stray')
   }
 }
 
