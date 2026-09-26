@@ -52,7 +52,9 @@ export function isValidQuality(quality) {
 /**
  * The arguments for a quality. Anything but the best gets a file name of its
  * own, so that it sits beside the best rather than being taken for it: yt-dlp
- * would otherwise say a file of that name has already been downloaded.
+ * would otherwise say a file of that name has already been downloaded. The
+ * name carries the height yt-dlp chose, not the one asked for, since a video
+ * may have nothing that tall.
  *
  * @param {Quality} quality
  */
@@ -66,10 +68,27 @@ function qualityArgs(quality) {
   if (quality !== 'best') {
     // The largest up to that height, or the smallest above it when there is
     // nothing that small
-    return ['-S', `res:${quality}`, '-o', `%(title)s [%(id)s] [${quality}p].%(ext)s`]
+    return ['-S', `res:${quality}`, '-o', '%(title)s [%(id)s] [%(height)sp].%(ext)s']
   }
 
   return []
+}
+
+// The extension yt-dlp gives audio it extracts without converting, by codec
+const AUDIO_EXTENSIONS = { opus: 'opus', mp4a: 'm4a', mp3: 'mp3', vorbis: 'ogg', flac: 'flac' }
+
+/**
+ * Where extracted audio will end up. yt-dlp names the file it downloads,
+ * before the audio is taken out of it into a file of its own kind, so the
+ * name it gives up front has the wrong extension.
+ *
+ * @param {string} downloadPath
+ * @param {string | null} acodec
+ */
+function audioDestination(downloadPath, acodec) {
+  const codec = acodec?.split('.')[0]
+  const ext = codec ? AUDIO_EXTENSIONS[codec] : undefined
+  return ext ? downloadPath.replace(/\.[^./\\]+$/, `.${ext}`) : downloadPath
 }
 
 /**
@@ -409,7 +428,7 @@ export function createDownloadService(deps) {
           // Named just before downloading starts: from here it is under way,
           // even when custom arguments keep the progress lines from coming
           download.status = 'downloading'
-          download.destination = parsed.path
+          download.destination = download.quality === 'audio' ? audioDestination(parsed.path, parsed.acodec) : parsed.path
           download.parts = parsed.formatIds.length > 0 ? parsed.formatIds.length : null
           download.height = parsed.height
           download.audioOnly = parsed.height === null && (download.quality === 'audio' || parsed.formatIds.length === 1)

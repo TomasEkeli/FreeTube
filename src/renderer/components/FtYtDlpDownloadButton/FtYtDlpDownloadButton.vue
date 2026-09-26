@@ -123,7 +123,7 @@ const finishedPath = computed(() => ytDlpDownloads.finished[props.videoId] ?? do
 
 const finishedTitle = computed(() => {
   const quality = download.value?.status === 'finished' ? qualityText(download.value) : ''
-  return [t('Video.yt-dlp.Show in folder', { path: finishedPath.value }), quality, t('Video.yt-dlp.Right-click for other qualities')]
+  return [t('Video.yt-dlp.Show in folder', { path: finishedPath.value }), quality, t('Video.yt-dlp.Right-click to download another quality')]
     .filter(line => line !== '')
     .join('\n')
 })

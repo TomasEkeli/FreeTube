@@ -1220,6 +1220,7 @@ Video:
     Download finished: 'Downloaded "{title}". Click to show the file'
     Download finished with quality: 'Downloaded "{title}" ({quality}). Click to show the file'
     Right-click for other qualities: 'Download with yt-dlp. Right-click or hold for another quality, or audio only'
+    Right-click to download another quality: Right-click or hold to download another quality, or audio only
     Quality:
       Height: '{height}p'
       Audio only: Audio only
