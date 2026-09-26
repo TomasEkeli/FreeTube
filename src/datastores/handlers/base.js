@@ -450,6 +450,25 @@ class SubscriptionCache {
   }
 }
 
+/**
+ * One record per channel, by channel id, holding what the app has learned
+ * about it along the way. Each kind of knowledge is a field of its own, set
+ * alone, so that one never overwrites another.
+ */
+class Channels {
+  static find() {
+    return db.channels.findAsync({})
+  }
+
+  static updateTags(channelId, channelTags) {
+    return db.channels.updateAsync(
+      { _id: channelId },
+      { $set: { channelTags } },
+      { upsert: true }
+    )
+  }
+}
+
 function loadDatastores() {
   return Promise.allSettled([
     db.settings.loadDatabaseAsync(),
@@ -458,6 +477,7 @@ function loadDatastores() {
     db.playlists.loadDatabaseAsync(),
     db.searchHistory.loadDatabaseAsync(),
     db.subscriptionCache.loadDatabaseAsync(),
+    db.channels.loadDatabaseAsync(),
   ])
 }
 
@@ -469,6 +489,7 @@ function compactAllDatastores() {
     db.playlists.compactDatafileAsync(),
     db.searchHistory.compactDatafileAsync(),
     db.subscriptionCache.compactDatafileAsync(),
+    db.channels.compactDatafileAsync(),
   ])
 }
 
@@ -479,6 +500,7 @@ export {
   Playlists as playlists,
   SearchHistory as searchHistory,
   SubscriptionCache as subscriptionCache,
+  Channels as channels,
 
   loadDatastores,
   compactAllDatastores,

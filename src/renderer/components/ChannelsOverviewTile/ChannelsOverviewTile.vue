@@ -16,6 +16,12 @@
   single stray click while sorting never navigates. The mark on a duplicate
   opens a menu of the two ways out of being one, and right-clicking the
   square opens a menu with everything that can be done to the one channel.
+
+  In a proposed column, hovering says why the channel is suggested there, and
+  a channel suggested out of the profile it is in now has a badge in that
+  profile's colour, naming it. A tick on the thumbnail's top corner accepts
+  the suggestion for this channel, and a cross on its bottom corner rejects
+  it, which leaves the channel where it is.
 -->
 <template>
   <div
@@ -38,6 +44,8 @@
       tabindex="0"
       :aria-checked="selected ? 'true' : 'false'"
       :aria-label="channel.name"
+      :aria-description="description"
+      :title="evidence === null ? null : tooltip"
       @click="emit('select', $event.shiftKey)"
       @dblclick="goToChannel"
       @keydown.space.enter.prevent="emit('select', $event.shiftKey)"
@@ -67,9 +75,17 @@
       <span
         class="name"
         dir="auto"
-        :title="channel.name"
+        :title="tooltip"
       >
         {{ channel.name }}
+      </span>
+      <span
+        v-if="badge !== null"
+        class="badge"
+        dir="auto"
+        :style="{ background: badge.bgColor, color: badgeTextColor }"
+      >
+        {{ badge.label }}
       </span>
     </span>
     <span
@@ -84,6 +100,28 @@
         <FontAwesomeIcon :icon="['fas', 'clone']" />
       </ChannelsOverviewMenuButton>
     </span>
+    <template v-if="acceptLabel !== null">
+      <button
+        type="button"
+        class="corner acceptMark"
+        :title="acceptLabel"
+        :aria-label="acceptLabel"
+        draggable="false"
+        @click.stop="emit('accept')"
+      >
+        <FontAwesomeIcon :icon="['fas', 'check']" />
+      </button>
+      <button
+        type="button"
+        class="corner rejectMark"
+        :title="rejectLabel"
+        :aria-label="rejectLabel"
+        draggable="false"
+        @click.stop="emit('reject')"
+      >
+        <FontAwesomeIcon :icon="['fas', 'xmark']" />
+      </button>
+    </template>
     <!-- A plain link that hands a plain click to the router, as a
          RouterLink would: a RouterLink in each of a few thousand rows is a
          lot of routing to work out while scrolling -->
@@ -111,6 +149,7 @@ import ChannelsOverviewMenuButton from '../ChannelsOverviewMenuButton/ChannelsOv
 
 import store from '../../store/index'
 import { invidiousImageUrlToInvidious, youtubeImageUrlToInvidious } from '../../helpers/api/invidious'
+import { calculateColorLuminance } from '../../helpers/colors'
 
 const props = defineProps({
   /** @type {import('vue').PropType<import('../../helpers/channelsOverview').Channel>} */
@@ -135,10 +174,47 @@ const props = defineProps({
   callout: {
     type: Number,
     default: null
+  },
+  /**
+   * In a proposed column, the profile a suggested move takes it out of
+   * @type {import('vue').PropType<{ label: string, bgColor: string } | null>}
+   */
+  badge: {
+    type: Object,
+    default: null
+  },
+  /** In a proposed column, why it is suggested there */
+  evidence: {
+    type: String,
+    default: null
+  },
+  /** In a proposed column, what accepting its suggestion does; null elsewhere */
+  acceptLabel: {
+    type: String,
+    default: null
+  },
+  /** In a proposed column, what rejecting its suggestion does */
+  rejectLabel: {
+    type: String,
+    default: null
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here', 'context-menu'])
+/** The name, and in a proposed column why it is there, on a line of its own */
+const tooltip = computed(() => {
+  return props.evidence === null ? props.channel.name : `${props.channel.name}\n${props.evidence}`
+})
+
+/** What a screen reader hears besides the name: the badge and the reason */
+const description = computed(() => {
+  const parts = [props.badge?.label, props.evidence].filter(part => typeof part === 'string' && part !== '')
+
+  return parts.length > 0 ? parts.join('. ') : null
+})
+
+const badgeTextColor = computed(() => props.badge ? calculateColorLuminance(props.badge.bgColor) : null)
+
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here', 'context-menu', 'accept', 'reject'])
 
 const dragging = ref(false)
 

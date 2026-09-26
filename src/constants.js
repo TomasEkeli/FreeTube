@@ -25,6 +25,7 @@ const IpcChannels = {
   DB_PLAYLISTS: 'db-playlists',
   DB_SEARCH_HISTORY: 'db-search-history',
   DB_SUBSCRIPTION_CACHE: 'db-subscription-cache',
+  DB_CHANNELS: 'db-channels',
 
   SYNC_SETTINGS: 'sync-settings',
   SYNC_HISTORY: 'sync-history',
@@ -32,6 +33,7 @@ const IpcChannels = {
   SYNC_PROFILES: 'sync-profiles',
   SYNC_PLAYLISTS: 'sync-playlists',
   SYNC_SUBSCRIPTION_CACHE: 'sync-subscription-cache',
+  SYNC_CHANNELS: 'sync-channels',
 
   GET_REPLACE_HTTP_CACHE: 'get-replace-http-cache',
   TOGGLE_REPLACE_HTTP_CACHE: 'toggle-replace-http-cache',
@@ -97,6 +99,10 @@ const DBActions = {
     UPDATE_VIDEOS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL: 25,
     UPDATE_LIVE_STREAMS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL: 26,
   },
+
+  CHANNELS: {
+    UPDATE_TAGS: 20,
+  },
 }
 
 const SyncEvents = {
@@ -138,6 +144,10 @@ const SyncEvents = {
     UPDATE_COMMUNITY_POSTS_BY_CHANNEL: 24,
     UPDATE_VIDEOS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL: 25,
     UPDATE_LIVE_STREAMS_WITH_CHANNEL_PAGE_VIDEOS_BY_CHANNEL: 26,
+  },
+
+  CHANNELS: {
+    UPDATE_TAGS: 20,
   },
 }
 

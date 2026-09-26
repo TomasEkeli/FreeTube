@@ -227,6 +227,16 @@ class SubscriptionCache {
   }
 }
 
+class Channels {
+  static find() {
+    return window.ftElectron.dbChannels(DBActions.GENERAL.FIND)
+  }
+
+  static updateTags(channelId, channelTags) {
+    return window.ftElectron.dbChannels(DBActions.CHANNELS.UPDATE_TAGS, { channelId, channelTags })
+  }
+}
+
 export {
   Settings as settings,
   History as history,
@@ -234,4 +244,5 @@ export {
   Playlists as playlists,
   SearchHistory as searchHistory,
   SubscriptionCache as subscriptionCache,
+  Channels as channels,
 }

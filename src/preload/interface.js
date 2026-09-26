@@ -244,6 +244,14 @@ export default {
   },
 
   /**
+   * @param {number} action
+   * @param {any} [data]
+   */
+  dbChannels: (action, data) => {
+    return ipcRenderer.invoke(IpcChannels.DB_CHANNELS, data ? { action, data } : { action })
+  },
+
+  /**
    * @param {(route: string) => void} handler
    */
   handleChangeView: (handler) => {
@@ -332,6 +340,15 @@ export default {
    */
   handleSyncSubscriptionCache: (handler) => {
     ipcRenderer.on(IpcChannels.SYNC_SUBSCRIPTION_CACHE, (_, { event, data }) => {
+      handler(event, data)
+    })
+  },
+
+  /**
+   * @param {(event: number, data: any) => void} handler
+   */
+  handleSyncChannels: (handler) => {
+    ipcRenderer.on(IpcChannels.SYNC_CHANNELS, (_, { event, data }) => {
       handler(event, data)
     })
   }

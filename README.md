@@ -50,6 +50,8 @@ A channel in more than one profile sorts to the top of each column it is in. Whe
 
 Make a profile with New profile at the end of the strip and type its name right there. Right-click a bubble to rename it, change its colour or remove it; removing a profile leaves its channels subscribed, and those in no other profile go back to Unassigned. Drag bubbles to put the profiles in your own order, which every list of profiles in the app follows, or move the focused one with Ctrl+Shift+Left and Right. A bar shows where a dragged bubble will land, and it lands there: Chromium quietly loses some drops, so the palette catches those itself. New profiles go at the end.
 
+Suggest profiles adds proposed columns, with dashed edges, for where channels might belong: Unassigned channels that fit one of your profiles, channels that fit another profile clearly better than their own (badged with where they are now), and groups for a new profile by YouTube category or by a shared tag. They come from what the app already sees, the tags on the channel pages a refresh fetches anyway and the category of every video you watch, so they cost no requests and get better as you go. Hover a channel to see why it is there. Nothing changes until you act: file a whole suggestion from the menu on its heading, make a new profile of it, send it to any profile, dismiss it, or drag channels out of it as usual. Right-click a badged channel to keep it where it is.
+
 Profile settings still handle a profile's default. The channel lists there are gone.
 
 ### Explore

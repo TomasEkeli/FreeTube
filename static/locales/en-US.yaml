@@ -254,6 +254,47 @@ Channels:
     Profile Colours: Colours for {profile}
     Profile Moved: Moved {profile} to position {position} of {count}
     Reorder Hint: Drag to reorder, or Ctrl+Shift+Arrow
+    # Proposed columns: where the page suggests channels could go, worked out
+    # from what FreeTube has already seen of them. Nothing changes until one
+    # is acted on.
+    Suggestions:
+      Suggest Profiles: Suggest profiles
+      Hide Suggestions: Hide suggestions
+      Coverage: FreeTube knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Watch videos in a channel to get suggestions for it.
+      # Headings of the proposed columns: for an existing profile, for a new
+      # profile from a YouTube category, and for one from a shared tag
+      Profile Heading: '{profile} suggestions'
+      Category Heading: 'Suggested: {category}'
+      Tag Heading: 'Tagged: {tag}'
+      # The menu on a proposed column's heading, beside the tick that accepts
+      # all of it
+      Actions: More for {suggestion}
+      # On a suggested channel that is in another profile now
+      Now In: now in {profile}
+      File In Profile: File 1 channel in {profile} | File {count} channels in {profile}
+      File In Profile With Moves: File 1 channel in {profile} ({moved} moved from another profile) | File {count} channels in {profile} ({moved} moved from other profiles)
+      Create Profile: Create profile with 1 channel | Create profile with {count} channels
+      Send To Profile: Send to profile…
+      Send To Profile Menu: Send 1 channel to | Send {count} channels to
+      Dismiss: Hide until restart
+      # The tick and the cross on each suggested channel
+      Accept Channel: Accept, put it in {profile}
+      Accept Channel New Profile: Accept, make a profile "{profile}" with it
+      Reject Channel: Reject, leave it where it is
+      # Why a channel is suggested, on hovering it
+      Evidence Watched: '{category}: 1 watched video | {category}: {count} watched videos'
+      Evidence Artist: 'Music: a YouTube music artist or Topic channel'
+      Evidence Category Share: '{category}, like {share} of the known channels in {profile}'
+      Evidence Tag Share: 'Shares "{tag}" with {count} of {total} channels in {profile}'
+      Evidence Tag Names Profile: 'Tagged "{tag}"'
+      Evidence Tags: 'Tagged: {tags}'
+      Evidence Placed: Put here by you
+      # Shown where the suggestions would be, when there are none
+      None Title: No suggestions right now
+      None How: FreeTube suggests where channels belong from what it has already seen of them, and never asks YouTube anything to find out. It reads the tags on each channel's page as your subscriptions refresh, and remembers the category of every video you watch. It then compares each channel with the ones already in your profiles, and gathers the rest into groups by category, or by a tag several of them share.
+      None Why: 'There is nothing to suggest yet. Either every channel it knows enough about is where it fits, or it does not know enough: it knows something about {known} of {total} channels, and can recognise {profiles} of {profileCount} profiles. A profile is recognised once enough of its channels are known.'
+      None Seed: Many channels have no tags at all, and for those only watching tells FreeTube what they are. Watch a video or two from a channel, and it will be suggested somewhere. Refreshing your subscriptions picks up the tags of the rest.
+      None Rejected: Suggestions you rejected stay rejected until you move the channel yourself, and those you hid come back after a restart.
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown

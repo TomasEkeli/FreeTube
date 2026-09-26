@@ -856,6 +856,8 @@ async function importFreeTubeWatchHistory(textDecode) {
     'lastViewedPlaylistType',
     'viewCount',
     'description',
+    // The video's YouTube category, recorded as it is watched
+    'category',
   ]
 
   const ignoredKeys = [

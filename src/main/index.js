@@ -2228,6 +2228,37 @@ function runApp() {
   })
 
   // *********** //
+  // Channels
+  ipcMain.handle(IpcChannels.DB_CHANNELS, async (event, { action, data }) => {
+    if (!isFreeTubeUrl(event.senderFrame.url)) {
+      return
+    }
+
+    try {
+      switch (action) {
+        case DBActions.GENERAL.FIND:
+          return await baseHandlers.channels.find()
+
+        case DBActions.CHANNELS.UPDATE_TAGS:
+          await baseHandlers.channels.updateTags(data.channelId, data.channelTags)
+          syncOtherWindows(
+            IpcChannels.SYNC_CHANNELS,
+            event,
+            { event: SyncEvents.CHANNELS.UPDATE_TAGS, data }
+          )
+          return null
+
+        default:
+          // eslint-disable-next-line no-throw-literal
+          throw 'invalid channels db action'
+      }
+    } catch (err) {
+      if (typeof err === 'string') throw err
+      else throw err.toString()
+    }
+  })
+
+  // *********** //
 
   function syncOtherWindows(channel, event, payload) {
     const otherWindows = BrowserWindow.getAllWindows().filter((window) => {
