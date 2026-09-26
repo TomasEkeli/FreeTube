@@ -63,6 +63,13 @@
   margin-inline-start: auto;
 }
 
+.coverage {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--tertiary-text-color);
+  font-size: 14px;
+}
+
 .columns {
   display: flex;
   align-items: stretch;

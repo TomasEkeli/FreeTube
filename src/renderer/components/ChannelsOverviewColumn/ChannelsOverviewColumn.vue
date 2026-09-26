@@ -1,6 +1,9 @@
 <!--
-  One column of the Channels overview: a profile's channels, or the pool of
-  channels no profile has claimed.
+  One column of the Channels overview: a profile's channels, the pool of
+  channels no profile has claimed, or a proposed column, which suggests
+  channels for a profile and is not one. A proposed column has a dashed
+  border, a menu on its heading of what can be done with the suggestion, and
+  takes no drops: there is nothing there to file a channel into.
 
   A column can hold a couple of thousand channels, and drawing them all at once
   is what made the old channel list slow to open. So it draws the first
@@ -12,17 +15,18 @@
 <template>
   <section
     class="column"
-    :class="{ pool: isPool, dropTarget: dragOver }"
+    :class="{ pool: isPool, proposed, dropTarget: dragOver }"
+    :style="proposed && backgroundColor ? { '--proposal-colour': backgroundColor } : null"
     :aria-labelledby="headingId"
-    v-on="dropHandlers"
+    v-on="proposed ? {} : dropHandlers"
   >
     <header
       class="columnHeader"
-      :style="isPool ? null : { background: backgroundColor, color: headerTextColor }"
+      :style="isPool || !backgroundColor ? null : { background: backgroundColor, color: headerTextColor }"
     >
       <!-- A profile's heading makes it the active profile, the one the rest of the app shows -->
       <h3
-        v-if="!isPool"
+        v-if="!isPool && !proposed"
         :id="headingId"
         class="activateHeading"
       >
@@ -63,6 +67,19 @@
           {{ countLabel }}
         </span>
       </template>
+      <span
+        v-if="proposed && menuItems.length > 0"
+        ref="proposalMenu"
+        class="proposalMenu"
+      >
+        <ChannelsOverviewMenuButton
+          :label="menuLabel"
+          :items="menuItems"
+          @choose="chooseFromMenu"
+        >
+          <FontAwesomeIcon :icon="['fas', 'ellipsis-vertical']" />
+        </ChannelsOverviewMenuButton>
+      </span>
       <!-- What is shown: while searching, the matches -->
       <button
         v-if="channels.length > 0"
@@ -94,6 +111,8 @@
         :selected="selectedIds.has(channel.id)"
         :duplicate-profiles="duplicateProfiles.get(channel.id) ?? null"
         :callout="calloutColours.get(channel.id) ?? null"
+        :badge="badges.get(channel.id) ?? null"
+        :evidence="evidence.get(channel.id) ?? null"
         @thumbnail-error="emit('thumbnail-error', $event)"
         @drag-start="(event, channel) => emit('drag-start', event, channel)"
         @select="(extend) => emit('select', channel, extend)"
@@ -117,6 +136,7 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useI18n } from 'vue-i18n'
 
+import ChannelsOverviewMenuButton from '../ChannelsOverviewMenuButton/ChannelsOverviewMenuButton.vue'
 import ChannelsOverviewTile from '../ChannelsOverviewTile/ChannelsOverviewTile.vue'
 
 import { useChannelDropTarget } from '../../composables/useChannelDropTarget'
@@ -186,10 +206,58 @@ const props = defineProps({
   calloutColours: {
     type: Map,
     default: () => new Map()
+  },
+  /** A proposed column: a suggestion, not a profile */
+  proposed: {
+    type: Boolean,
+    default: false
+  },
+  /**
+   * What can be done with a proposed column's suggestion, for the menu on
+   * its heading
+   * @type {import('vue').PropType<import('../ChannelsOverviewMenu/ChannelsOverviewMenu.vue').MenuItem[]>}
+   */
+  menuItems: {
+    type: Array,
+    default: () => []
+  },
+  /** The menu's name, for its button's tooltip and a screen reader */
+  menuLabel: {
+    type: String,
+    default: ''
+  },
+  /**
+   * For a suggested channel in some other profile now, which one
+   * @type {import('vue').PropType<Map<string, { label: string, bgColor: string }>>}
+   */
+  badges: {
+    type: Map,
+    default: () => new Map()
+  },
+  /**
+   * Why each channel of a proposed column is suggested, for its tooltip
+   * @type {import('vue').PropType<Map<string, string>>}
+   */
+  evidence: {
+    type: Map,
+    default: () => new Map()
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu', 'activate'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu', 'activate', 'menu'])
+
+const proposalMenu = useTemplateRef('proposalMenu')
+
+/**
+ * Hands the page the choice, and where the menu was, as one of the choices
+ * opens a second menu in its place.
+ * @param {string} value
+ */
+function chooseFromMenu(value) {
+  const button = proposalMenu.value?.querySelector('button')
+
+  emit('menu', value, button ? { rect: button.getBoundingClientRect() } : null)
+}
 
 const { t } = useI18n()
 

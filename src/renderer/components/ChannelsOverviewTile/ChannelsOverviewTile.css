@@ -60,6 +60,19 @@
   -webkit-box-orient: vertical;
 }
 
+/* Where a suggested move takes the channel from, in that profile's colour */
+.badge {
+  max-inline-size: 100%;
+  padding-block: 1px;
+  padding-inline: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tile.selected {
   background-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
   color: inherit;

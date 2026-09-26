@@ -185,6 +185,11 @@ const state = {
   // does not name comes after those it does, alphabetically, and a deleted
   // one is skipped when read.
   profileOrder: [],
+  // Channels the Channels page is not to suggest moving, as the user said to
+  // keep them where they are: channel id to the profile kept in. An entry
+  // applies only while that is the channel's one profile, and is dropped the
+  // next time one is added once it no longer does.
+  profileSuggestionKeeps: {},
   disableSmoothScrolling: false,
   disableChannelLinks: false,
   displayVideoPlayButton: false,

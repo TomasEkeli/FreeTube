@@ -254,6 +254,36 @@ Channels:
     Profile Colours: Colours for {profile}
     Profile Moved: Moved {profile} to position {position} of {count}
     Reorder Hint: Drag to reorder, or Ctrl+Shift+Arrow
+    # Proposed columns: where the page suggests channels could go, worked out
+    # from what FreeTube has already seen of them. Nothing changes until one
+    # is acted on.
+    Suggestions:
+      Suggest Profiles: Suggest profiles
+      Hide Suggestions: Hide suggestions
+      Coverage: FreeTube knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Suggestions improve as subscriptions refresh and you watch.
+      # Headings of the proposed columns: for an existing profile, for a new
+      # profile from a YouTube category, and for one from a shared tag
+      Profile Heading: Suggested for {profile}
+      Category Heading: 'Suggested: {category}'
+      Tag Heading: 'Tagged: {tag}'
+      # The menu on a proposed column's heading
+      Actions: What to do with {suggestion}
+      # On a suggested channel that is in another profile now
+      Now In: now in {profile}
+      File In Profile: File 1 channel in {profile} | File {count} channels in {profile}
+      File In Profile With Moves: File 1 channel in {profile} ({moved} moved from another profile) | File {count} channels in {profile} ({moved} moved from other profiles)
+      Create Profile: Create profile with 1 channel | Create profile with {count} channels
+      Send To Profile: Send to profile…
+      Send To Profile Menu: Send 1 channel to | Send {count} channels to
+      Dismiss: Dismiss
+      Keep In: Keep in {profile}
+      # Why a channel is suggested, on hovering it
+      Evidence Watched: '{category}: 1 watched video | {category}: {count} watched videos'
+      Evidence Artist: 'Music: a YouTube music artist or Topic channel'
+      Evidence Category Share: '{category}, like {share} of the known channels in {profile}'
+      Evidence Tag Share: 'Shares "{tag}" with {count} of {total} channels in {profile}'
+      Evidence Tag Names Profile: 'Tagged "{tag}"'
+      Evidence Tags: 'Tagged: {tags}'
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown

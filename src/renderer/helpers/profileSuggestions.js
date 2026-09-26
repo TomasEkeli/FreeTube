@@ -520,9 +520,11 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
   const profiles = nonPrimaryProfiles(profileList)
   const subscribed = uniqueChannels(primaryProfile(profileList)?.subscriptions ?? [])
 
+  // A plain read, which a reactive store object notices even for a channel
+  // it has nothing for yet, so tags arriving later are picked up
   const tagsOf = channelTags instanceof Map
     ? id => channelTags.get(id)
-    : id => (Object.hasOwn(channelTags ?? {}, id) ? channelTags[id] : undefined)
+    : id => channelTags?.[id]
 
   /** @type {Map<string, KnownChannel>} */
   const known = new Map()

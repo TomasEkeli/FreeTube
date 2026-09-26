@@ -241,6 +241,18 @@ const actions = {
     }
   },
 
+  // Shown at once, then written, for the same reason as the order: keeping
+  // two channels in quick succession would otherwise lose the first
+  async saveProfileSuggestionKeeps({ commit }, keeps) {
+    commit('setProfileSuggestionKeeps', keeps)
+
+    try {
+      await DBSettingHandlers.upsert('profileSuggestionKeeps', keeps)
+    } catch (errMessage) {
+      console.error(errMessage)
+    }
+  },
+
   async updateProfile({ commit }, profile) {
     try {
       await DBProfileHandlers.upsert(profile)

@@ -181,3 +181,42 @@
 .activateButton .columnCount {
   font-weight: normal;
 }
+
+/*
+ * A proposed column is drawn apart from every profile: a dashed edge, in
+ * its profile's colour where it suggests one, and a body that is not the
+ * card's own. It is a suggestion, and never mistaken for a profile.
+ */
+.proposed {
+  border: 2px dashed var(--proposal-colour, var(--tertiary-text-color));
+  background-color: var(--bg-color);
+  box-shadow: none;
+}
+
+.proposed .columnHeader {
+  align-items: center;
+
+  /* A profile's colour, where it has one, is set on the header itself */
+  background-color: var(--secondary-card-bg-color);
+}
+
+.proposed .columnTitle {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-style: italic;
+}
+
+.proposalMenu {
+  flex: 0 0 auto;
+  display: flex;
+  inline-size: 28px;
+  block-size: 28px;
+  font-size: 15px;
+}
+
+/* On a profile's colour as well as on the card's */
+.proposalMenu :deep(.menuButton:hover),
+.proposalMenu :deep(.menuButton:focus-visible),
+.proposalMenu :deep(.menuButton[aria-expanded='true']) {
+  background-color: color-mix(in srgb, currentcolor 18%, transparent);
+}

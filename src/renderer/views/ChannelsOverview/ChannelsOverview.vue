@@ -7,6 +7,12 @@
   every subscription. Its place, pinned leftmost, goes to the channels no other
   profile has claimed, and that column is there to be emptied: once it is, it
   goes away, and it only comes back when something new lands in it.
+
+  Suggest profiles adds proposed columns after the pool: channels the app
+  thinks belong in one of the profiles, or together in a new one, from what
+  it has seen of them. The pool then holds only what no suggestion took.
+  Nothing changes until a suggestion is acted on, from the menu on its
+  heading or by dragging its channels out.
 -->
 <template>
   <div class="channelsOverview">
@@ -63,6 +69,11 @@
           @input="(value) => query = value"
           @clear="query = ''"
         />
+        <FtButton
+          class="suggestButton"
+          :label="suggestionsShown ? t('Channels.Overview.Suggestions.Hide Suggestions') : t('Channels.Overview.Suggestions.Suggest Profiles')"
+          @click="toggleSuggestions"
+        />
         <!-- Always there, so that a screen reader is listening before the count changes -->
         <span
           class="selectedCount"
@@ -112,9 +123,15 @@
           class="trash"
           :has-selection="selectedCount > 0"
           @drop-channels="askToUnsubscribe"
-          @unsubscribe-selection="askToUnsubscribe(selectedChannels(selection))"
+          @unsubscribe-selection="askToUnsubscribe(draggedSelection())"
         />
       </div>
+      <p
+        v-if="suggestions !== null"
+        class="coverage"
+      >
+        {{ t('Channels.Overview.Suggestions.Coverage', suggestions.coverage) }}
+      </p>
       <!-- Opened and closed columns grow in and fade, fade and fold away -->
       <TransitionGroup
         tag="div"
@@ -123,14 +140,20 @@
       >
         <ChannelsOverviewColumn
           v-for="column in columns"
-          :key="column.profile?._id ?? 'pool'"
-          :class="{ poolColumn: column.profile === null }"
-          :is-pool="column.profile === null"
-          :active="column.profile !== null && column.profile._id === activeProfileId"
-          :title="column.profile?.name ?? t('Channels.Overview.Unassigned')"
+          :key="column.key"
+          :class="{ poolColumn: column.kind === 'pool' }"
+          :data-proposal-key="column.kind === 'proposal' ? column.key : null"
+          :is-pool="column.kind === 'pool'"
+          :proposed="column.kind === 'proposal'"
+          :active="column.kind === 'profile' && column.profile._id === activeProfileId"
+          :title="columnTitle(column)"
           :count-label="countLabel(column)"
           :empty-label="searching ? t('Channels.Overview.No Matches') : t('Channels.Overview.Empty Profile')"
-          :background-color="column.profile?.bgColor"
+          :background-color="columnColour(column)"
+          :menu-items="column.kind === 'proposal' ? proposalMenuItems(column.proposal) : []"
+          :menu-label="column.kind === 'proposal' ? t('Channels.Overview.Suggestions.Actions', { suggestion: columnTitle(column) }) : ''"
+          :badges="proposalDetails.get(column.key)?.badges"
+          :evidence="proposalDetails.get(column.key)?.evidence"
           :channels="column.channels"
           :animate="animatingChange"
           :reset-key="normalisedQuery"
@@ -142,11 +165,12 @@
           @select-all="selectColumn(column)"
           @activate="activateProfile(column.profile)"
           @select-none="deselectColumn(column)"
-          @drag-start="(event, channel) => dragChannel(event, channel, column.id)"
+          @drag-start="(event, channel) => dragChannel(event, channel, column)"
           @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
           @remove-here="(channel) => removeDuplicate(channel, column.id)"
           @keep-here="(channel) => keepOnlyIn(channel, column.id)"
           @context-menu="(event, channel) => openContextMenu(event, channel, column)"
+          @menu="(value, anchor) => chooseProposalAction(column.proposal, value, anchor)"
         />
         <p
           v-if="openColumns.length === 0 && profiles.length > 0"
@@ -174,6 +198,15 @@
       focus-first
       @choose="chooseFromProfileMenu"
       @close="closeProfileMenu"
+    />
+    <ChannelsOverviewMenu
+      v-if="sendMenu !== null"
+      :label="t('Channels.Overview.Suggestions.Send To Profile Menu', { count: sendMenu.count }, sendMenu.count)"
+      :items="sendTargets"
+      :anchor="sendMenu.anchor"
+      focus-first
+      @choose="chooseSendTarget"
+      @close="closeSendMenu"
     />
     <ChannelsOverviewColourMenu
       v-if="colourMenu !== null"
@@ -216,6 +249,8 @@ import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
 import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/local'
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
 import { useProfilePaletteEditing } from '../../composables/useProfilePaletteEditing'
+import { useProfileSuggestions } from '../../composables/useProfileSuggestions'
+import { calculateColorLuminance, colors } from '../../helpers/colors'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
   assignCalloutColours,
@@ -227,6 +262,7 @@ import {
   isSelected,
   nonPrimaryProfiles,
   normaliseQuery,
+  pickUnusedColour,
   planTransfer,
   planUnsubscribe,
   primaryProfile,
@@ -248,6 +284,7 @@ import {
 
 /** @import { Profile, Channel } from '../../helpers/channelsOverview' */
 /** @import { DraggedChannel } from '../../helpers/channelDragAndDrop' */
+/** @import { Evidence, Proposal } from '../../helpers/profileSuggestions' */
 
 const { locale, t } = useI18n()
 const route = useRoute()
@@ -307,8 +344,12 @@ function saveOpenProfileIds(profileIds) {
 
 /**
  * @typedef {object} Column
- * @property {string | null} id the profile's, or null for the pool
- * @property {Profile | null} profile
+ * @property {'pool' | 'profile' | 'proposal'} kind
+ * @property {string} key unique among the columns, to draw them by
+ * @property {string | null} id where its selection is kept: the profile's
+ * id, null for the pool, the proposal's key for a proposed column
+ * @property {Profile | null} profile a profile column's
+ * @property {Proposal | null} [proposal] a proposed column's
  * @property {Channel[]} channels shown, in the order shown
  * @property {Channel[]} allChannels every channel in the column, shown or not
  * @property {number} total how many channels the column has, shown or not
@@ -344,6 +385,8 @@ const sortedOpenColumns = computed(() => {
 /** @type {import('vue').ComputedRef<Column[]>} */
 const openColumns = computed(() => {
   return sortedOpenColumns.value.map(({ profile, allChannels }) => ({
+    kind: 'profile',
+    key: profile._id,
     id: profile._id,
     profile,
     channels: filterChannels(allChannels, normalisedQuery.value),
@@ -352,27 +395,192 @@ const openColumns = computed(() => {
   }))
 })
 
+const {
+  shown: suggestionsShown,
+  suggestions,
+  toggleSuggestions,
+  dismiss,
+  keepIn
+} = useProfileSuggestions({ profileList, collator })
+
 /**
- * Everything drawn, pool first. The pool is left out once it is empty, and
- * with it the one place to drop a channel out of every profile. A search that
- * matches nothing in it leaves it in place, as it still has channels.
+ * The pool as drawn: while suggestions are shown, only the channels no
+ * suggestion took, so that every Unassigned channel is in one place.
+ * @type {import('vue').ComputedRef<Channel[]>}
+ */
+const shownPool = computed(() => suggestions.value?.remainder ?? pool.value)
+
+/** @type {import('vue').ComputedRef<Column[]>} */
+const proposalColumns = computed(() => {
+  if (suggestions.value === null) { return [] }
+
+  return suggestions.value.proposals.map(proposal => {
+    const allChannels = proposal.channels.map(suggested => suggested.channel)
+
+    return {
+      kind: 'proposal',
+      key: proposal.key,
+      id: proposal.key,
+      profile: null,
+      proposal,
+      channels: filterChannels(allChannels, normalisedQuery.value),
+      allChannels,
+      total: allChannels.length
+    }
+  })
+})
+
+/**
+ * Everything drawn, pool first, then any suggestions, then the open
+ * profiles. The pool is left out once it is empty, and with it the one place
+ * to drop a channel out of every profile. A search that matches nothing in
+ * it leaves it in place, as it still has channels.
  * @type {import('vue').ComputedRef<Column[]>}
  */
 const columns = computed(() => {
-  if (pool.value.length === 0) {
-    return openColumns.value
+  if (shownPool.value.length === 0) {
+    return [...proposalColumns.value, ...openColumns.value]
   }
 
   const poolColumn = {
+    kind: 'pool',
+    key: 'pool',
     id: null,
     profile: null,
-    channels: filterChannels(pool.value, normalisedQuery.value),
-    allChannels: pool.value,
-    total: pool.value.length
+    channels: filterChannels(shownPool.value, normalisedQuery.value),
+    allChannels: shownPool.value,
+    total: shownPool.value.length
   }
 
-  return [poolColumn, ...openColumns.value]
+  return [poolColumn, ...proposalColumns.value, ...openColumns.value]
 })
+
+/** @type {import('vue').ComputedRef<Map<string, Profile>>} */
+const profilesById = computed(() => new Map(profiles.value.map(profile => [profile._id, profile])))
+
+/**
+ * @param {Column} column
+ * @returns {string}
+ */
+function columnTitle(column) {
+  switch (column.kind) {
+    case 'pool':
+      return t('Channels.Overview.Unassigned')
+    case 'profile':
+      return column.profile.name
+    default: {
+      const { kind, name } = column.proposal
+
+      if (kind === 'profile') {
+        return t('Channels.Overview.Suggestions.Profile Heading', { profile: name })
+      }
+
+      return kind === 'category'
+        ? t('Channels.Overview.Suggestions.Category Heading', { category: name })
+        : t('Channels.Overview.Suggestions.Tag Heading', { tag: name })
+    }
+  }
+}
+
+/**
+ * A profile's colour on its column, and on a suggestion for it. A suggested
+ * new profile has none yet.
+ * @param {Column} column
+ * @returns {string | null}
+ */
+function columnColour(column) {
+  if (column.kind === 'profile') { return column.profile.bgColor }
+  if (column.kind === 'proposal' && column.proposal.profileId !== null) {
+    return profilesById.value.get(column.proposal.profileId)?.bgColor ?? null
+  }
+
+  return null
+}
+
+/**
+ * Why a suggested channel is where it is, as its tooltip says it.
+ * @param {Evidence} evidence
+ * @param {Intl.NumberFormat} percent
+ * @returns {string}
+ */
+function describeEvidence(evidence, percent) {
+  const profileName = id => profilesById.value.get(id)?.name ?? ''
+
+  switch (evidence.type) {
+    case 'watched':
+      return t('Channels.Overview.Suggestions.Evidence Watched', { category: evidence.category, count: evidence.count }, evidence.count)
+    case 'artist':
+      return t('Channels.Overview.Suggestions.Evidence Artist')
+    case 'categoryShare':
+      return t('Channels.Overview.Suggestions.Evidence Category Share', {
+        category: evidence.category,
+        share: percent.format(evidence.share),
+        profile: profileName(evidence.profileId)
+      })
+    case 'tagShare':
+      return t('Channels.Overview.Suggestions.Evidence Tag Share', {
+        tag: evidence.tag,
+        count: evidence.count,
+        total: evidence.total,
+        profile: profileName(evidence.profileId)
+      })
+    case 'tagged':
+      return t('Channels.Overview.Suggestions.Evidence Tag Names Profile', { tag: evidence.tag })
+    case 'tags':
+      return t('Channels.Overview.Suggestions.Evidence Tags', { tags: evidence.tags.join(', ') })
+    default:
+      return ''
+  }
+}
+
+/**
+ * For each proposed column, by its key: where each of its channels is now,
+ * the badge on those in a profile, and why each is there.
+ * @type {import('vue').ComputedRef<Map<string, { sources: Map<string, string | null>, badges: Map<string, { label: string, bgColor: string }>, evidence: Map<string, string> }>>}
+ */
+const proposalDetails = computed(() => {
+  const details = new Map()
+
+  if (suggestions.value === null) { return details }
+
+  const percent = new Intl.NumberFormat([locale.value, 'en'], { style: 'percent', maximumFractionDigits: 0 })
+
+  for (const proposal of suggestions.value.proposals) {
+    const sources = new Map()
+    const badges = new Map()
+    const evidence = new Map()
+
+    for (const suggested of proposal.channels) {
+      const channelId = suggested.channel.id
+      const source = suggested.sourceProfileId === null ? null : profilesById.value.get(suggested.sourceProfileId)
+
+      sources.set(channelId, suggested.sourceProfileId)
+      evidence.set(channelId, describeEvidence(suggested.evidence, percent))
+
+      if (source) {
+        badges.set(channelId, { label: t('Channels.Overview.Suggestions.Now In', { profile: source.name }), bgColor: source.bgColor })
+      }
+    }
+
+    details.set(proposal.key, { sources, badges, evidence })
+  }
+
+  return details
+})
+
+/**
+ * Where a channel drags from: its column's profile, or for a proposed column,
+ * the profile the channel is in now, null for the pool. A suggested move
+ * therefore drags as it would from its own profile's column.
+ * @param {Column} column
+ * @param {string} channelId
+ * @returns {string | null}
+ */
+function dragSource(column, channelId) {
+  if (column.kind !== 'proposal') { return column.id }
+
+  return proposalDetails.value.get(column.key)?.sources.get(channelId) ?? null
+}
 
 /**
  * The names of every profile each duplicated channel is in, for the mark on
@@ -422,7 +630,7 @@ const matchCounts = computed(() => {
 function countLabel(column) {
   const shown = column.channels.length
 
-  if (column.profile === null) {
+  if (column.kind === 'pool') {
     return searching.value
       ? t('Channels.Overview.Unassigned Match Count', { matches: shown, count: column.total }, column.total)
       : t('Channels.Overview.Unassigned Count', { count: column.total }, column.total)
@@ -456,6 +664,33 @@ const hiddenSelectedCount = computed(() => {
 
   return selectedCount.value - selectionSize(shown)
 })
+
+/**
+ * The selection as a drag payload, each channel with where it drags from. A
+ * channel selected in a proposed column drags from where it is now, and one
+ * selected there and in its own profile's column as well is dragged once.
+ * @returns {DraggedChannel[]}
+ */
+function draggedSelection() {
+  const dragged = []
+  const seen = new Set()
+
+  for (const { channelId, profileId: columnId } of selectedChannels(selection.value)) {
+    const sources = typeof columnId === 'string' ? proposalDetails.value.get(columnId)?.sources : undefined
+
+    if (sources && !sources.has(channelId)) { continue }
+
+    const profileId = sources ? sources.get(channelId) : columnId
+    const key = `${channelId}\n${profileId}`
+
+    if (seen.has(key)) { continue }
+
+    seen.add(key)
+    dragged.push({ channelId, profileId })
+  }
+
+  return dragged
+}
 
 /**
  * @param {Column[]} columns
@@ -569,19 +804,19 @@ function toggleColumn(profileId) {
 /**
  * @param {DragEvent} event
  * @param {Channel} channel
- * @param {string | null} profileId the column it is dragged out of, null for the pool
+ * @param {Column} column the column it is dragged out of
  */
-function dragChannel(event, channel, profileId) {
+function dragChannel(event, channel, column) {
   // A selected row carries the whole selection with it; any other row only itself
-  if (isSelected(selection.value, profileId, channel.id)) {
-    const dragged = selectedChannels(selection.value)
+  if (isSelected(selection.value, column.id, channel.id)) {
+    const dragged = draggedSelection()
     const label = dragged.length === 1
       ? channel.name ?? channel.id
       : t('Channels.Overview.Channel Count', { count: dragged.length }, dragged.length)
 
     startChannelDrag(event, dragged, label)
   } else {
-    startChannelDrag(event, [{ channelId: channel.id, profileId }], channel.name ?? channel.id)
+    startChannelDrag(event, [{ channelId: channel.id, profileId: dragSource(column, channel.id) }], channel.name ?? channel.id)
   }
 }
 
@@ -677,27 +912,36 @@ const {
  * @returns {Promise<number>} how many channels were filed
  */
 function fileChannels(dragged, targetProfileId, copy) {
-  return afterPendingChanges(async () => {
-    const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
+  return afterPendingChanges(() => transferChannels(dragged, targetProfileId, copy))
+}
 
-    if (updated.length === 0) { return 0 }
+/**
+ * The filing itself, for a change already in the queue.
+ * @param {DraggedChannel[]} dragged
+ * @param {string | null} targetProfileId
+ * @param {boolean} copy
+ * @returns {Promise<number>} how many channels were filed
+ */
+async function transferChannels(dragged, targetProfileId, copy) {
+  const updated = planTransfer(profileList.value, dragged, targetProfileId, copy)
 
-    // Counted before saving, as saving changes the profile list in place
-    const count = countTransferred(profileList.value, updated, targetProfileId)
-    const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
-    const saved = updated.map(profile => deepCopy(profile))
+  if (updated.length === 0) { return 0 }
 
-    // Shown at once, before the database has it, so the channel does not sit
-    // where it was for as long as the save takes. The save then writes the
-    // same again, and tells the other windows.
-    animateChange(count)
-    saved.forEach(profile => store.commit('upsertProfileToList', deepCopy(profile)))
-    setPrunedSelection(selectionAfter)
+  // Counted before saving, as saving changes the profile list in place
+  const count = countTransferred(profileList.value, updated, targetProfileId)
+  const selectionAfter = selectionAfterTransfer(selection.value, dragged, targetProfileId, copy)
+  const saved = updated.map(profile => deepCopy(profile))
 
-    await Promise.all(saved.map(profile => store.dispatch('updateProfile', profile)))
+  // Shown at once, before the database has it, so the channel does not sit
+  // where it was for as long as the save takes. The save then writes the
+  // same again, and tells the other windows.
+  animateChange(count)
+  saved.forEach(profile => store.commit('upsertProfileToList', deepCopy(profile)))
+  setPrunedSelection(selectionAfter)
 
-    return count
-  })
+  await Promise.all(saved.map(profile => store.dispatch('updateProfile', profile)))
+
+  return count
 }
 
 /** The pool's place in the move menu, as a profile id can never be empty */
@@ -729,7 +973,7 @@ const isMac = process.platform === 'darwin'
  * @param {boolean} copy
  */
 async function fileSelection(target, copy) {
-  const dragged = selectedChannels(selection.value)
+  const dragged = draggedSelection()
 
   if (target === POOL_TARGET) {
     await fileChannels(dragged, null, false)
@@ -849,11 +1093,18 @@ const contextMenuItems = computed(() => {
     items.push({ value: 'open', label: t('Channels.Overview.Open Channel') })
   }
 
-  if (column.profile !== null && duplicateProfiles.value.has(channel.id)) {
+  if (column.kind === 'profile' && duplicateProfiles.value.has(channel.id)) {
     items.push(
       { value: 'remove-here', label: t('Channels.Overview.Remove This Duplicate') },
       { value: 'keep-here', label: t('Channels.Overview.Keep Here Only') }
     )
+  }
+
+  // A suggested move can be told to stay where it is
+  const source = column.kind === 'proposal' ? profilesById.value.get(dragSource(column, channel.id)) : undefined
+
+  if (source) {
+    items.push({ value: 'keep-suggested', label: t('Channels.Overview.Suggestions.Keep In', { profile: source.name }) })
   }
 
   if (!hideUnsubscribeButton.value) {
@@ -881,9 +1132,165 @@ function chooseFromContextMenu(value) {
     case 'keep-here':
       keepOnlyIn(channel, column.id)
       break
+    case 'keep-suggested': {
+      const source = dragSource(column, channel.id)
+
+      if (source !== null) {
+        keepIn(channel.id, source)
+      }
+      break
+    }
     case 'unsubscribe':
       askToUnsubscribe([{ channelId: channel.id, profileId: column.id }])
       break
+  }
+}
+
+const COLOUR_VALUES = colors.map(colour => colour.value)
+
+/**
+ * Every channel of a suggestion, each as dragged from where it is now: the
+ * whole of it, whatever the search is showing, which is why the menu says
+ * how many.
+ * @param {Proposal} proposal
+ * @returns {DraggedChannel[]}
+ */
+function proposalDragged(proposal) {
+  return proposal.channels.map(suggested => ({ channelId: suggested.channel.id, profileId: suggested.sourceProfileId }))
+}
+
+/**
+ * @param {Proposal} proposal
+ */
+function proposalMenuItems(proposal) {
+  const count = proposal.channels.length
+  const items = []
+
+  if (proposal.kind === 'profile') {
+    const moved = proposal.channels.filter(suggested => suggested.sourceProfileId !== null).length
+
+    items.push({
+      value: 'file',
+      label: moved > 0
+        ? t('Channels.Overview.Suggestions.File In Profile With Moves', { count, profile: proposal.name, moved }, count)
+        : t('Channels.Overview.Suggestions.File In Profile', { count, profile: proposal.name }, count)
+    })
+  } else {
+    items.push({ value: 'create', label: t('Channels.Overview.Suggestions.Create Profile', { count }, count) })
+  }
+
+  if (profiles.value.length > 0) {
+    items.push({ value: 'send', label: t('Channels.Overview.Suggestions.Send To Profile') })
+  }
+
+  items.push({ value: 'dismiss', label: t('Channels.Overview.Suggestions.Dismiss') })
+
+  return items
+}
+
+/**
+ * A suggestion acted on goes, and its menu button with it, which leaves the
+ * focus nowhere; it goes to the search, as it does after a move.
+ */
+async function keepFocusOnPage() {
+  await nextTick()
+
+  if (!document.activeElement || document.activeElement === document.body) {
+    toolbar.value?.querySelector('input')?.focus()
+  }
+}
+
+/**
+ * @param {Proposal} proposal
+ * @param {string} value
+ * @param {{ rect: DOMRect } | null} anchor where its menu was
+ */
+async function chooseProposalAction(proposal, value, anchor) {
+  switch (value) {
+    case 'file':
+      await fileChannelsFromPalette(proposal.profileId, proposalDragged(proposal), false)
+      break
+    case 'create':
+      await createFromProposal(proposal)
+      break
+    case 'send':
+      if (anchor !== null) {
+        sendMenu.value = { key: proposal.key, count: proposal.channels.length, anchor }
+      }
+      return
+    case 'dismiss':
+      dismiss(proposal.key)
+      break
+  }
+
+  await keepFocusOnPage()
+}
+
+/**
+ * Makes a profile of a suggested new group, named after it and in a colour no
+ * profile has, at the end of the order as New profile makes one, and files
+ * the group's channels in it. One change in the queue, so that a rename or a
+ * drop straight after cannot come between the two. Its column is not opened:
+ * the bubble says where the channels went.
+ * @param {Proposal} proposal
+ */
+function createFromProposal(proposal) {
+  const dragged = proposalDragged(proposal)
+
+  return afterPendingChanges(async () => {
+    const bgColor = pickUnusedColour(COLOUR_VALUES, profileList.value)
+    const created = await store.dispatch('createProfile', {
+      name: proposal.name,
+      bgColor,
+      textColor: calculateColorLuminance(bgColor),
+      subscriptions: []
+    })
+
+    if (!created) { return }
+
+    showToast(t('Profile.Profile has been created'))
+
+    await transferChannels(dragged, created._id, false)
+  })
+}
+
+/**
+ * The list of profiles Send to profile opens, where its menu was. Null while
+ * it is closed.
+ * @type {import('vue').ShallowRef<{ key: string, count: number, anchor: { rect: DOMRect } } | null>}
+ */
+const sendMenu = shallowRef(null)
+
+const sendTargets = computed(() => profiles.value.map(profile => ({ value: profile._id, label: profile.name })))
+
+/**
+ * @param {string} profileId
+ */
+async function chooseSendTarget(profileId) {
+  const key = sendMenu.value?.key
+  const proposal = suggestions.value?.proposals.find(candidate => candidate.key === key)
+
+  if (!proposal) { return }
+
+  await fileChannelsFromPalette(profileId, proposalDragged(proposal), false)
+  await keepFocusOnPage()
+}
+
+/**
+ * @param {boolean} returnFocus
+ */
+function closeSendMenu(returnFocus) {
+  const key = sendMenu.value?.key
+  sendMenu.value = null
+
+  if (returnFocus && key) {
+    const button = document.querySelector(`[data-proposal-key="${CSS.escape(key)}"] .proposalMenu button`)
+
+    if (button) {
+      button.focus()
+    } else {
+      toolbar.value?.querySelector('input')?.focus()
+    }
   }
 }
 
