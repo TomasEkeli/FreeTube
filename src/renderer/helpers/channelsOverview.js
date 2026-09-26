@@ -644,3 +644,77 @@ export function deselectAll(selection, columns) {
 
   return next
 }
+
+/**
+ * Profiles in the user's own order: the primary profile first, then those the
+ * stored order names, as it names them, then any it does not name,
+ * alphabetically. An empty order is therefore plain alphabetical order, which
+ * is what every list of profiles showed before there was an order to keep.
+ * The order is a setting, and trusted for nothing: a deleted profile in it is
+ * skipped, a repeated one counts at its first place.
+ * @param {Profile[]} profileList
+ * @param {unknown} order
+ * @param {Intl.Collator} collator
+ * @returns {Profile[]} a new array
+ */
+export function orderProfiles(profileList, order, collator) {
+  const byId = new Map(profileList.map(profile => [profile._id, profile]))
+  const placed = new Set([MAIN_PROFILE_ID])
+  const ordered = byId.has(MAIN_PROFILE_ID) ? [byId.get(MAIN_PROFILE_ID)] : []
+
+  if (Array.isArray(order)) {
+    for (const id of order) {
+      if (typeof id !== 'string' || placed.has(id) || !byId.has(id)) { continue }
+
+      placed.add(id)
+      ordered.push(byId.get(id))
+    }
+  }
+
+  const rest = profileList
+    .filter(profile => !placed.has(profile._id))
+    .sort((a, b) => collator.compare((a.name ?? '').normalize('NFC'), (b.name ?? '').normalize('NFC')))
+
+  return [...ordered, ...rest]
+}
+
+/**
+ * The order as it is stored: every profile but the primary one.
+ * @param {Profile[]} profileList in order
+ * @returns {string[]}
+ */
+export function profileOrderIds(profileList) {
+  return nonPrimaryProfiles(profileList).map(profile => profile._id)
+}
+
+/**
+ * The order to store once a profile is created: every profile as it is shown
+ * now, then the new one. Written out in full, as appending to the stored order
+ * alone would put the new profile ahead of every profile it does not name yet.
+ * @param {Profile[]} orderedProfiles as the store's getProfileList has them
+ * @param {string} newProfileId
+ * @returns {string[]}
+ */
+export function appendToOrder(orderedProfiles, newProfileId) {
+  return [...profileOrderIds(orderedProfiles).filter(id => id !== newProfileId), newProfileId]
+}
+
+/**
+ * @param {string[]} orderedIds
+ * @param {string} id
+ * @param {number} toIndex its place in the list without it
+ * @returns {string[]} a new array, or `orderedIds` itself when nothing moves,
+ * so that a caller can tell there is nothing to save
+ */
+export function moveInOrder(orderedIds, id, toIndex) {
+  const from = orderedIds.indexOf(id)
+
+  if (from === -1) { return orderedIds }
+
+  const rest = orderedIds.filter(other => other !== id)
+  const to = Math.max(0, Math.min(toIndex, rest.length))
+
+  if (to === from) { return orderedIds }
+
+  return [...rest.slice(0, to), id, ...rest.slice(to)]
+}

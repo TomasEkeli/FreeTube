@@ -11,6 +11,7 @@
  */
 
 import {
+  appendToOrder,
   assignCalloutColours,
   channelMemberships,
   countTransferred,
@@ -19,10 +20,13 @@ import {
   filterChannels,
   isDuplicate,
   isSelected,
+  moveInOrder,
   nonPrimaryProfiles,
   normaliseQuery,
+  orderProfiles,
   planTransfer,
   planUnsubscribe,
+  profileOrderIds,
   profilesOutsideHome,
   pruneSelection,
   restoreOpenProfiles,
@@ -329,6 +333,52 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 
   const many = assignCalloutColours([['1', '2', '3'], ['1', '2', '3']], 2)
   check('the colours start over once all are used', many.get('1') === 0 && many.get('2') === 1 && many.get('3') === 0)
+}
+
+// The user's own order of profiles
+{
+  const list = [
+    profile('p3', 'science', []),
+    profile(MAIN_PROFILE_ID, 'All Channels', []),
+    profile('p1', 'Gaming', []),
+    profile('p2', 'Music', []),
+    profile('p4', 'Art', [])
+  ]
+  const order = stored => ids(orderProfiles(list, stored, collator))
+  const main = MAIN_PROFILE_ID
+
+  check('with no order the profiles are alphabetical, the primary first', order([]) === `${main},p4,p1,p2,p3`)
+  check('the stored order is followed', order(['p3', 'p1', 'p4', 'p2']) === `${main},p3,p1,p4,p2`)
+  check('profiles the order does not name come last, alphabetically', order(['p2']) === `${main},p2,p4,p1,p3`)
+  check('a deleted profile in the order is skipped', order(['gone', 'p2']) === `${main},p2,p4,p1,p3`)
+  check('a profile named twice counts at its first place', order(['p2', 'p1', 'p2']) === `${main},p2,p1,p4,p3`)
+  check('the primary profile is first wherever the order names it', order(['p2', main]) === `${main},p2,p4,p1,p3`)
+  check('an order that is not a list is no order', order('p2') === order([]) && order(null) === order([]))
+  check('things in the order that are not ids are ignored', order([3, null, 'p2', {}]) === `${main},p2,p4,p1,p3`)
+  check('ordering leaves the list alone', list[0]._id === 'p3')
+  check('the order to store leaves out the primary profile', profileOrderIds(orderProfiles(list, [], collator)).join(',') === 'p4,p1,p2,p3')
+}
+
+// A new profile goes at the end
+{
+  const list = [profile(MAIN_PROFILE_ID, 'All Channels', []), profile('p1', 'Gaming', []), profile('p2', 'Art', [])]
+
+  check('over an empty order, after every other', appendToOrder(orderProfiles(list, [], collator), 'new').join(',') === 'p2,p1,new')
+  check('over a partial order, after every other', appendToOrder(orderProfiles(list, ['p1'], collator), 'new').join(',') === 'p1,p2,new')
+  check('a new profile already listed is listed once, last', appendToOrder([...list, profile('new', 'Zed', [])], 'new').join(',') === 'p1,p2,new')
+}
+
+// Moving a profile in the order
+{
+  const order = ['a', 'b', 'c', 'd']
+
+  check('a move to the start', moveInOrder(order, 'c', 0).join(',') === 'c,a,b,d')
+  check('a move to the end', moveInOrder(order, 'b', 3).join(',') === 'a,c,d,b')
+  check('one place later', moveInOrder(order, 'b', 2).join(',') === 'a,c,b,d')
+  check('one place earlier', moveInOrder(order, 'c', 1).join(',') === 'a,c,b,d')
+  check('a move to where it is returns the same list', moveInOrder(order, 'b', 1) === order)
+  check('an id not in the order changes nothing', moveInOrder(order, 'z', 0) === order)
+  check('moving leaves the list alone', order.join(',') === 'a,b,c,d')
 }
 
 if (failures > 0) {
