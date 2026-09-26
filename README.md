@@ -1,117 +1,160 @@
-# Fjernsyn, a personal fork of FreeTube
+# Fjernsyn
 
-Fjernsyn is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, one subscriptions feed in place of four tabs, a page for sorting channels into profiles by drag and drop, and a download button that hands the video to yt-dlp. It is not the official FreeTube, and the FreeTube team does not support or endorse it.
+<img src="_icons/fjernsyn.svg" alt="" width="128">
 
-Fjernsyn is Norwegian (and Danish) for television, literally "far-sight", tele-vision translated word for word. It has a name of its own so that nobody mistakes it for FreeTube.
+Fjernsyn is a desktop YouTube client for Windows, macOS and Linux. It talks to YouTube directly, or through an Invidious instance, and keeps your subscriptions, profiles, history and playlists in files on your own machine. There is no account and no login.
 
-If you want FreeTube, you almost certainly want the official project: [FreeTubeApp/FreeTube](https://github.com/FreeTubeApp/FreeTube), with downloads at [freetubeapp.io](https://freetubeapp.io/#download). All credit for the application belongs to its contributors.
+I built it around how I watch. Everything my subscriptions publish goes into one stream, and I can keep a few hundred channels sorted into profiles. Playback recovers when YouTube stops trusting a session, comments load as I scroll, and the download button hands the video to yt-dlp.
 
-If you want the fixes and modifications in this version, you are welcome to them. FreeTube is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE), which this fork honours, and which gives anyone the right to use, study, change and share it. Builds for Windows, macOS and Linux are produced on every push to `main`: pick the newest [build workflow run](https://github.com/TomasEkeli/Fjernsyn/actions/workflows/build.yml) and download the artifact for your platform (downloading artifacts needs a GitHub account).
+Fjernsyn is Norwegian (and Danish) for television, literally "far-sight", tele-vision translated word for word.
 
-Since this is my personal fork no effort is spent on translations. I merge the official project's, but the strings this fork adds exist only in English, so picking another language leaves those in English and the rest translated.
+## Download
 
-`main` is upstream plus my fixes, and upstream is merged into it as it moves. This repository takes no issues, and I am not looking for help with it; if you want FreeTube to change, [the official project](https://github.com/FreeTubeApp/FreeTube/issues) is where to go. The same goes for contributing: the official project and [its contributing guidelines](https://github.com/FreeTubeApp/FreeTube/blob/development/CONTRIBUTING.md) are where you do that.
+Every push to `main` builds Fjernsyn for Windows, macOS and Linux. There are no releases. Pick the newest [build workflow run](https://github.com/TomasEkeli/Fjernsyn/actions/workflows/build.yml) and download the artefact for your platform. You need a GitHub account to download it. The builds are unsigned, so Windows and macOS warn you the first time you open them.
 
-## Differences from upstream
+## Where it comes from
 
-### Name and data
+Fjernsyn started as a fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube), and most of it still comes from there: the application programming interface (API) layer, the player, the settings and nearly all of the interface. I merge FreeTube's development branch as it moves, bringing its fixes and features into Fjernsyn alongside my own changes. Credit for FreeTube belongs to its contributors.
 
-Fjernsyn keeps its data in a folder of its own, has its own `fjernsyn://` links, and installs beside an official FreeTube, so the two can run on one machine without touching each other's data.
+The FreeTube team has no part in Fjernsyn, so please do not take problems with it to them. If you want FreeTube itself, go to the [official project](https://github.com/FreeTubeApp/FreeTube), with downloads at [freetubeapp.io](https://freetubeapp.io/#download).
 
-On its first launch it copies what it finds in a FreeTube data folder: subscriptions, profiles, history, playlists, settings, and the yt-dlp, ffmpeg and Deno it installed. It copies and never moves, so the FreeTube folder is left as it was, and an official FreeTube keeps working with it. From then on the two keep their data apart. Exports are named `fjernsyn-*.db` and have the same format as FreeTube's, so each app imports the other's.
+The version numbers started again at 0.0.1 when it got its own name.
 
-It also opens `freetube://` links, which the browser redirect extensions send, until you switch that off in the general settings.
+### Coming from FreeTube
 
-Windows sees a build of this fork from before the rename as a different app. Fjernsyn installs beside it, and the old one has to be uninstalled by hand.
+Fjernsyn installs beside FreeTube and keeps its data in a folder of its own, so the two run on one machine without touching each other's data.
+
+On its first launch it copies what it finds in FreeTube's data folder: subscriptions, profiles, history, playlists and settings, along with any yt-dlp, ffmpeg and Deno installed there. FreeTube keeps its original data, and from then on the two apps keep their data apart.
+
+Flatpak and Snap installations of FreeTube keep their data inside a sandbox, where Fjernsyn does not look. For those, export from FreeTube and import into Fjernsyn.
+
+Exports are named `fjernsyn-*.db` and use FreeTube's format, so each app imports the other's.
+
+Fjernsyn opens its own `fjernsyn://` links and the `freetube://` links that browser redirect extensions send. Both apps claim `freetube://` links each time they start, so the one started last gets them. Switch this off in Fjernsyn's general settings to leave them to FreeTube.
+
+Builds of this repository from before the rename were called FreeTube. Windows sees Fjernsyn as a different app, so it installs beside such a build, and the old one has to be uninstalled by hand.
+
+## Features
 
 ### Playback
 
-YouTube's SABR streaming stops trusting a playback session now and then, and upstream's player answers that by reloading the page. Here a recovery ladder owns the decision: retry, re-mint credentials, rebuild the manifest, and reload only when nothing else is left. Nothing else in the app may reload the player without going through it, and "Reconnecting to YouTube" sits over the player while it works.
+YouTube's server-side adaptive bitrate (SABR) streaming stops trusting a playback session now and then. Fjernsyn retries, gets fresh credentials and rebuilds the manifest, reloading the page only when it has run out of options. All player reloads go through this recovery process. The player shows "Reconnecting to YouTube" while it works.
 
-Around that: proof of origin (PO) token minting retries, and survives YouTube's captcha by taking the challenge from the homepage. Livestreams that come back without a web manifest are recovered. Metadata that cannot be read no longer stops the video from playing. The error screen says which failure you hit and offers Try Again.
+Fjernsyn retries failed proof of origin (PO) token requests and handles YouTube's captcha by taking the challenge from the homepage. It recovers live streams that come back without a web manifest, and unreadable metadata does not stop playback. The error screen says what failed and offers Try Again.
 
-The player runs shaka-player 5.2, a minor version ahead of upstream's. This is to get a fix the 5.1 line never got: request headers stay isolated across retry attempts, which every SABR request depends on. 5.2 turns the playback rate menu into a slider with presets beside it; the presets here are half steps, and the rate interval keeps stepping the keyboard shortcuts.
+The player uses shaka-player 5.2 for a fix the 5.1 line never got: request headers stay isolated across retry attempts, which every SABR request depends on. Playback speed has a slider with half-step presets beside it. Keyboard shortcuts use the configured rate interval.
 
-Another change is that the volume bar runs past 100%. Some videos are mastered so quietly that they are inaudible at FreeTube's maximum volume. In this version the volume can go up to a configurable ceiling of 1000% (+20 dB). Optional loudness normalisation corrects each video for how loud it was mastered (YouTube provides this information). This also lowers the volume on very loud videos automatically. The feature is off by default, but I have it enabled.
+Some videos are inaudible at 100% volume. Fjernsyn's volume bar goes up to a configurable ceiling of 1000% (+20 decibels).
 
-A small pin on the control bar keeps the player's controls on screen instead of letting them fade, and the choice sticks between videos.
+Optional loudness normalisation corrects each video for how loud it was mastered (YouTube provides this information), which also turns very loud videos down. It is off by default, but I have it on.
+
+A small pin on the control bar keeps the player's controls from fading, and the choice sticks between videos.
 
 ### SponsorBlock
 
-Some channels read their sponsors as part of the show. Skipping SponsorBlock's categories can now be set per-channel. This is for channels where ads are actually fun and cool. The switch for this is on the channel page and on the video you are watching, and there is a list in the SponsorBlock settings, where you can take any of them out again.
+Some channels read their sponsors as part of the show. You can change SponsorBlock skipping per channel, for those where the ads are actually fun and cool. The switch is on the channel page and on the video you are watching. SponsorBlock settings list the channels you have changed, and you can remove any of them there.
 
 ### Subscriptions
 
-Videos, shorts, live streams and posts are consolidated to one stream instead of four tabs. A row of chips turns each kind on and off. All four are fetched every refresh whatever the chips say, so switching one on is instant.
+Videos, shorts, live streams and posts share one feed. A row of filters turns each kind on and off. Every refresh fetches all four, so switching one on is instant.
 
-The subscription list does not empty on refresh. Old entries are kept around and the new entries populate as they come in.
+On refresh, the subscription list keeps its old entries while the new ones come in.
 
-A channel is no longer declared terminated on one service's word. A gone verdict has to be corroborated by an independent endpoint, and an uncorroborated one counts as a failed fetch: retried later, with the cache left alone. Past a threshold of them in a single refresh the guard stops believing verdicts at all, and stops probing, which during an outage saves several hundred pointless requests.
+If one service reports a channel as terminated, Fjernsyn checks an independent endpoint. Without confirmation, it keeps the cached data and retries later. If too many channels come back as terminated in one refresh, it stops accepting those reports and checking them. During an outage this saves several hundred pointless requests.
 
-Scheduled premieres and live streams are in a shelf over the other videos, collapsed by default. "Hide Upcoming Premieres" does what it says again: the rule never worked well in the official version. Now it does.
+Scheduled premieres and live streams are in a shelf over the other videos, collapsed by default, and "Hide Upcoming Premieres" does what it says.
 
 ### Channels and profiles
 
-With a few hundred subscriptions the checkbox lists in the profile settings were unusable, and my profiles went stale. The Channels page replaces the flat list of every channel with a place to sort them into profiles.
+With a few hundred subscriptions, a checkbox list of every channel is unusable, and my profiles went stale. The Channels page is a place to sort channels into profiles.
 
-Every profile is a bubble along the top. Click one to open its column, open as many as you like, and the columns scroll sideways once they do not fit. Each window keeps its own open columns, so one window can work on two profiles while another works on three others. Channels in no profile sit in an Unassigned column on the left, which goes away once it is empty. The goal is every channel in a profile.
+Every profile is a bubble along the top. Click one to open its column. Open as many as you like; the columns scroll sideways once they do not fit. Each window keeps its own open columns, so you can work on different profiles in different windows.
 
-Drag a channel to another column to move it, or hold Ctrl to copy it. Dropping it on a bubble files it without opening that column. Click to select, Shift-click for a range, or use Select all on a column; dragging any selected channel moves the whole selection. The search box narrows every column at once, and each bubble shows how many of its channels match. Dropping on the trash unsubscribes, after asking. For the keyboard, the Move to and Copy to menus do what a drag does.
+Channels in no profile sit in an Unassigned column on the left, which goes away once it is empty. The goal is every channel in a profile.
 
-A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to take it out of that profile, or to make that profile its home and take it out of the others. Double-click a channel to go to it, and click a column's heading to make that profile the active one.
+Drag a channel to another column to move it, or hold Ctrl to copy it. Drop it on a bubble to file it without opening the column, or on the trash to unsubscribe, after confirmation. The Move to and Copy to menus do the same with the keyboard.
 
-Make a profile with New profile at the end of the strip and type its name right there. Right-click a bubble to rename it, change its colour or remove it; removing a profile leaves its channels subscribed, and those in no other profile go back to Unassigned. Drag bubbles to put the profiles in your own order, which every list of profiles in the app follows, or move the focused one with Ctrl+Shift+Left and Right. A bar shows where a dragged bubble will land, and it lands there: Chromium quietly loses some drops, so the palette catches those itself. New profiles go at the end.
+Click to select, Shift-click for a range, or use Select all on a column; dragging any selected channel moves the whole selection. The search box narrows every column at once, and each bubble shows how many of its channels match.
 
-Suggest profiles swaps the profile columns for proposed ones, with dashed edges, for where channels might belong: Unassigned channels that fit one of your profiles, channels that fit another profile clearly better than their own (badged with where they are now), and groups for a new profile by YouTube category or by a shared tag. They come from what the app already sees, the tags on the channel pages a refresh fetches anyway and the category of every video you watch, so they cost no requests and get better as you go. Hover a channel to see why it is there. Nothing changes until you act: the tick on a channel files it, the cross leaves it where it is for good, the tick on a heading takes the whole suggestion, and dropping a channel on a suggestion adds it there to be filed with the rest.
+A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to remove it from that profile, or keep it there and remove it from all the others.
 
-Probe, on the Unassigned column and on every profile's, goes further for that column's channels the app knows too little about: it looks at three recent videos of each, one request at a time, never while subscriptions refresh, and it stops the moment YouTube pushes back. It carries on in the background as the suggestions fill in, a second column's Probe queues behind the first, and pressing it again after a stop takes up where it left off. What it finds is kept with the channel.
+Double-click a channel to visit its page. Click a column's heading to make that profile active.
 
-Profile settings still handle a profile's default. The channel lists there are gone.
+Click New profile at the end of the strip and type its name there. New profiles go at the end. Right-click a bubble to rename it, change its colour or remove it. Removing a profile leaves its channels subscribed, and those in no other profile go back to Unassigned.
+
+Drag bubbles to put profiles in your own order, or move the focused one with Ctrl+Shift+Left and Right. Every profile list in the app follows that order. A bar shows where a dragged bubble will land. Chromium sometimes loses drops, so Fjernsyn catches those itself.
+
+Suggest profiles replaces the profile columns with proposed ones, drawn with dashed edges:
+
+- Unassigned channels that fit one of your profiles.
+- Channels that fit another profile clearly better than their own, badged with where they are now.
+- Groups for a new profile, by YouTube category or by a shared tag.
+
+Suggestions use the tags from channel pages fetched during a refresh and the categories of videos you watch. They need no extra requests and get better as you go. Hover a channel to see why it is there.
+
+Nothing changes until you act:
+
+- Tick a channel to file it.
+- Click its cross to dismiss the suggestion for that channel permanently.
+- Tick a heading to accept the whole suggestion.
+- Drop a channel on a suggestion to include it when you accept the rest.
+
+Each column, including Unassigned, has a Probe button for channels the app knows too little about. It checks three recent videos from each channel, one request at a time, and saves what it finds with the channel. It runs in the background as suggestions fill in, never during subscription refreshes, and stops the moment YouTube pushes back.
+
+Probing a second column queues it behind the first. Press Probe again after a stop to pick up where it left off.
+
+Set the default profile in the profile settings.
 
 ### Explore
 
-The Trending page is now called Explore, and shows every trending category at once. The categories come from what YouTube's own guide offers here, plus the categories it serves without mentioning them.
+Explore shows every trending category at once. The categories come from what YouTube's own guide offers here, plus the categories it serves without mentioning them.
 
-You can now easily change region on the page, and the last four you looked at stay a click away. Pinning a region keeps it there for good, and a pin does not spend one of the four, so you can pin the places you care about and still wander.
+You can change region on the page, and the last four you looked at stay a click away. Pinned regions stay there and do not count towards the four, so you can pin the places you care about and still wander.
 
 ### Layout
 
-Navigation has moved to the top bar, which gives the page back the width the sidebar was taking. Cards come in tight, standard, spacious and wall density. I use wall. Wall packs spacious-sized thumbnails edge to edge with the text over them. The control row stays on screen while you scroll. With wall and full window as the default viewing mode the app gets mostly out of the way and the content is king.
+Navigation is in the top bar, which gives the page the full width of the window. The control row stays on screen while you scroll.
 
-Hovering a video card shows a checkmark beside the playlist buttons, which marks the video as watched, or takes it back out of the history if it is already there. The external player button is gone from the cards, since I never used it.
+Cards come in tight, standard, spacious and wall density. Wall packs spacious-sized thumbnails edge to edge with the text over them. I use wall with full window as the default viewing mode, so the app mostly gets out of the way.
+
+Hover over a video card to show a tick beside the playlist buttons. Click it to mark the video as watched, or remove it from history if it is already there. I removed the external player button from the cards because I never used it.
 
 ### Comments
 
-On the local API, comments load themselves as you scroll to them, keep paging, and open each thread to its first few replies with the rest behind a button. Loading follows what is visible, so a page of twenty threads does not fire twenty requests at once. Invidious keeps click-to-load. This is essentially a limited endless-scroll for comments. It remains impossible to comment, as there is no login functionality, but it is easier to read the comments now.
+With the local API, comments load as you scroll. Each thread opens with its first few replies and a button to load the rest. Only visible threads load, so a page of twenty threads does not fire twenty requests at once. With Invidious, you click to load comments.
+
+You cannot post comments, since there is no login.
 
 ### Downloads
 
-The download button is back. Upstream removed theirs in January 2026, since it had long been half broken and SABR broke it completely. This one hands the video to [yt-dlp](https://github.com/yt-dlp/yt-dlp). Switch it on in the yt-dlp section of the settings (desktop builds only).
+The download button hands the video to [yt-dlp](https://github.com/yt-dlp/yt-dlp). FreeTube removed downloads early in 2026; Fjernsyn brings them back. Switch it on in the yt-dlp section of the settings (desktop builds only).
 
-If yt-dlp, or the ffmpeg and Deno it needs, is missing, the first press offers to install them and then downloads. The settings section can do the same, and can update yt-dlp when YouTube downloads start failing.
+If yt-dlp, ffmpeg or Deno is missing, the first click offers to install what is needed before downloading. You can also install them from settings, or update yt-dlp there when YouTube downloads start failing.
 
-A click downloads the best quality available. Right-click or hold for a lower one, or the audio alone. A downloads indicator in the top bar shows progress, time left and where the file is going, and can cancel. A cancelled download picks up where it stopped. Once finished, the button becomes Show in folder.
+A click downloads the best quality available. Right-click or hold to choose a lower quality, or just the audio. The downloads indicator in the top bar shows progress, time left and where the file is going. You can cancel a download there and resume it later. Once it finishes, the button becomes Show in folder.
 
-### Build and tooling
+## Languages
 
-Builds for Windows, macOS and Linux run on every push to `main`, and the artefacts are named after the build as well as the version. A devcontainer is included for working on the code.
+I spend no effort on translations. They come from FreeTube, so picking another language translates what the two apps share and leaves what Fjernsyn adds in English. Some translated text will probably say FreeTube where it means this app.
 
-Everything else about FreeTube, what it is, its features, screenshots, download links and community, lives in [the official README](https://github.com/FreeTubeApp/FreeTube#readme) and at [freetubeapp.io](https://freetubeapp.io/).
+## Issues and contributing
 
-## Donate to the official project
+Fjernsyn is a personal project. The repository takes no issues, and I am not looking for help with it. The code is here to use, study, change and share, as the licence allows, and a devcontainer is included for working on it. Problems with FreeTube itself belong with [the FreeTube project](https://github.com/FreeTubeApp/FreeTube/issues).
 
-Donations should go to the official FreeTube project. They are awesome. The address below is theirs, for keeping their website running and for eventual code signing costs. I have no connection to it.
+## Donations
+
+I am not looking for donations. If you want to donate, support the FreeTube project. They are awesome. The address below is theirs, for keeping their website running and for future code signing costs. I have no connection to it.
 
 * Bitcoin Address: `1Lih7Ho5gnxb1CwPD4o59ss78pwo2T91eS`
 
 > [!TIP]
 > If you are using the Invidious API, donate to the instance you use. You can also donate to the [Invidious team](https://invidious.io/donate/) or the [Local API developer](https://github.com/sponsors/LuanRT).
 
-## License
+## Licence
 
 [![GNU AGPLv3 Image](https://www.gnu.org/graphics/agplv3-155x51.png)](https://www.gnu.org/licenses/agpl-3.0.html)
 
-FreeTube, including this fork, is Free Software: you can use, study, share and improve it at your
+Fjernsyn is Free Software: you can use, study, share and improve it at your
 will. Specifically you can redistribute and/or modify it under the terms of the
 [GNU Affero General Public License](https://www.gnu.org/licenses/agpl-3.0.html) as
 published by the Free Software Foundation, either version 3 of the License, or
