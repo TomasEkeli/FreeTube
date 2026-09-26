@@ -92,6 +92,8 @@
           <FontAwesomeIcon :icon="['fas', 'ellipsis-vertical']" />
         </ChannelsOverviewMenuButton>
       </span>
+      <!-- Anything else the page puts on the heading -->
+      <slot name="header-actions" />
       <!-- What is shown: while searching, the matches -->
       <button
         v-if="channels.length > 0"

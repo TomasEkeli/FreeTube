@@ -2248,6 +2248,15 @@ function runApp() {
           )
           return null
 
+        case DBActions.CHANNELS.UPDATE_VIDEO_SAMPLES:
+          await baseHandlers.channels.updateVideoSamples(data.channelId, data.videoSamples)
+          syncOtherWindows(
+            IpcChannels.SYNC_CHANNELS,
+            event,
+            { event: SyncEvents.CHANNELS.UPDATE_VIDEO_SAMPLES, data }
+          )
+          return null
+
         default:
           // eslint-disable-next-line no-throw-literal
           throw 'invalid channels db action'

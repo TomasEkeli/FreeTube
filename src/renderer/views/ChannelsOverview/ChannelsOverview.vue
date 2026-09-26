@@ -138,6 +138,16 @@
         class="coverage"
       >
         {{ t('Channels.Overview.Suggestions.Coverage', suggestions.coverage) }}
+        <!-- The pool's heading has this, but the pool is not always there -->
+        <button
+          v-if="!columns.some(column => column.kind === 'pool') && (learning.running || channelsNeedingLearning.length > 0)"
+          type="button"
+          class="learnButton"
+          :title="learnTitle"
+          @click="toggleLearning"
+        >
+          {{ learnLabel }}
+        </button>
       </p>
       <!-- Opened and closed columns grow in and fade, fade and fold away -->
       <TransitionGroup
@@ -184,7 +194,19 @@
           @accept-all="acceptProposal(column.proposal)"
           @accept-channel="(channel) => acceptChannel(column, channel)"
           @reject-channel="(channel) => rejectChannel(column, channel)"
-        />
+        >
+          <template #header-actions>
+            <button
+              v-if="column.kind === 'pool' && (learning.running || channelsNeedingLearning.length > 0)"
+              type="button"
+              class="learnButton"
+              :title="learnTitle"
+              @click="toggleLearning"
+            >
+              {{ learnLabel }}
+            </button>
+          </template>
+        </ChannelsOverviewColumn>
         <p
           v-if="openColumns.length === 0 && profiles.length > 0 && !suggestionsShown"
           key="hint"
@@ -206,6 +228,14 @@
           <p>{{ t('Channels.Overview.Suggestions.None Why', suggestions.coverage) }}</p>
           <p>{{ t('Channels.Overview.Suggestions.None Seed') }}</p>
           <p>{{ t('Channels.Overview.Suggestions.None Rejected') }}</p>
+          <FtButton
+            v-if="learning.running || channelsNeedingLearning.length > 0"
+            :label="learning.running
+              ? learnLabel
+              : t('Channels.Overview.Suggestions.Learn About', { count: channelsNeedingLearning.length }, channelsNeedingLearning.length)"
+            :title="learnTitle"
+            @click="toggleLearning"
+          />
         </section>
       </TransitionGroup>
     </template>
@@ -279,6 +309,8 @@ import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/loca
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
 import { useProfilePaletteEditing } from '../../composables/useProfilePaletteEditing'
 import { useProfileSuggestions } from '../../composables/useProfileSuggestions'
+import { channelLearningProgress, learnAboutChannels, stopLearning } from '../../helpers/channelLearning'
+import { channelsToLearn } from '../../helpers/profileSuggestions'
 import { calculateColorLuminance, colors } from '../../helpers/colors'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
@@ -434,8 +466,56 @@ const {
   dismiss,
   reject,
   place,
-  dropLapsedKeeps
+  dropLapsedKeeps,
+  channelTags,
+  videoSamples
 } = useProfileSuggestions({ profileList, collator })
+
+const learning = channelLearningProgress
+
+/**
+ * The channels FreeTube knows too little about, which Learn would look at:
+ * the pool first, then those in one profile.
+ */
+const channelsNeedingLearning = computed(() => {
+  return channelsToLearn(profileList.value, channelTags.value, videoSamples.value, collator.value)
+})
+
+const learnLabel = computed(() => {
+  return learning.running
+    ? t('Channels.Overview.Suggestions.Learning', { done: learning.done, total: learning.total })
+    : t('Channels.Overview.Suggestions.Learn')
+})
+
+const learnTitle = computed(() => {
+  if (learning.running) { return t('Channels.Overview.Suggestions.Learning Hint') }
+
+  const count = channelsNeedingLearning.value.length
+
+  return t('Channels.Overview.Suggestions.Learn Hint', { count }, count)
+})
+
+/**
+ * Starts looking at the recent videos of the channels FreeTube knows too
+ * little about, or stops. It goes on in the background, off the page too,
+ * and shows what it learns in the suggestions as it goes.
+ */
+function toggleLearning() {
+  if (learning.running) {
+    stopLearning()
+    return
+  }
+
+  const channels = channelsNeedingLearning.value
+
+  learnAboutChannels(channels).then(() => {
+    if (learning.ended === 'refused') {
+      showToast(t('Channels.Overview.Suggestions.Learn Refused'))
+    } else if (learning.ended === 'finished') {
+      showToast(t('Channels.Overview.Suggestions.Learn Finished', { count: learning.done }, learning.done))
+    }
+  })
+}
 
 /**
  * The pool as drawn: while suggestions are shown, only the channels no
@@ -575,6 +655,8 @@ function describeEvidence(evidence, percent) {
       return t('Channels.Overview.Suggestions.Evidence Tags', { tags: evidence.tags.join(', ') })
     case 'placed':
       return t('Channels.Overview.Suggestions.Evidence Placed')
+    case 'sampled':
+      return t('Channels.Overview.Suggestions.Evidence Sampled', { category: evidence.category, count: evidence.count, total: evidence.total })
     default:
       return ''
   }

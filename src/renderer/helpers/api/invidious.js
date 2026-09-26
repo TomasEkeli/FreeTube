@@ -130,6 +130,24 @@ export async function invidiousGetChannelId(url) {
  *  relatedChannels: InvidiousChannelObject[]
  * }>}
  */
+/**
+ * What a video is, for learning what a channel makes: its genre, which is
+ * YouTube's category, and its tags.
+ * @param {string} videoId
+ * @returns {Promise<{ category: string, keywords: string[] } | null>}
+ */
+export async function invidiousGetVideoMetadata(videoId) {
+  const video = await invidiousAPICall({
+    resource: 'videos',
+    id: videoId,
+    params: { fields: 'genre,keywords' }
+  })
+
+  if (typeof video?.genre !== 'string' && !Array.isArray(video?.keywords)) { return null }
+
+  return { category: video.genre ?? '', keywords: Array.isArray(video.keywords) ? video.keywords : [] }
+}
+
 export async function invidiousGetChannelInfo(channelId) {
   const channelInfo = await invidiousAPICall({
     resource: 'channels',
