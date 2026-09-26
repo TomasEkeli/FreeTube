@@ -3,10 +3,13 @@
   display: inline-flex;
 }
 
-/* Around the button, not over it: clicks go through to the button */
+/*
+ * Around the button, not over it, since the button is the ring's colour:
+ * clicks go through to the button
+ */
 .ring {
   position: absolute;
-  inset: -3px;
-  inline-size: calc(100% + 6px);
-  block-size: calc(100% + 6px);
+  inset: -6px;
+  inline-size: calc(100% + 12px);
+  block-size: calc(100% + 12px);
 }
