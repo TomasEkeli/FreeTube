@@ -1,10 +1,10 @@
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import store from '../store/index'
 import { calculateColorLuminance, colors } from '../helpers/colors'
 import { pickUnusedColour } from '../helpers/channelsOverview'
-import { showToast } from '../helpers/utils'
+import { deepCopy, showToast } from '../helpers/utils'
 
 /** @import { Profile } from '../helpers/channelsOverview' */
 
@@ -85,10 +85,104 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     }
   }
 
+  /** @type {import('vue').Ref<string | null>} */
+  const renamingProfileId = ref(null)
+
+  /**
+   * Saves a change to one profile, shown at once and then written, as a drop
+   * is. In the page's queue, and reading the profile when its turn comes: the
+   * whole profile is written, subscriptions and all, and one read before an
+   * earlier drop had landed would put back what the drop changed.
+   * @param {string} profileId
+   * @param {Partial<Profile>} changes
+   * @returns {Promise<void>}
+   */
+  function saveProfile(profileId, changes) {
+    return afterPendingChanges(async () => {
+      const profile = profileList.value.find(candidate => candidate._id === profileId)
+
+      if (!profile) { return }
+
+      const saved = { ...deepCopy(profile), ...changes }
+
+      store.commit('upsertProfileToList', deepCopy(saved))
+      await store.dispatch('updateProfile', saved)
+    })
+  }
+
+  /**
+   * @param {string} profileId
+   * @param {string | null} name null when it was given up
+   */
+  function finishRename(profileId, name) {
+    renamingProfileId.value = null
+
+    const profile = profileList.value.find(candidate => candidate._id === profileId)
+
+    if (name === null || !profile || name === profile.name) { return }
+
+    saveProfile(profileId, { name })
+  }
+
+  /**
+   * The menu a right-click on a bubble opens. Null while it is closed.
+   * @type {import('vue').ShallowRef<{ profileId: string, name: string, anchor: object } | null>}
+   */
+  const profileMenu = shallowRef(null)
+
+  /**
+   * @param {string} profileId
+   * @param {{ rect: DOMRect } | { x: number, y: number }} anchor
+   */
+  function openProfileMenu(profileId, anchor) {
+    const profile = profileList.value.find(candidate => candidate._id === profileId)
+
+    if (profile) {
+      profileMenu.value = { profileId, name: profile.name, anchor }
+    }
+  }
+
+  const profileMenuItems = computed(() => [
+    { value: 'rename', label: t('Channels.Overview.Rename Profile') }
+  ])
+
+  /**
+   * @param {string} value
+   */
+  function chooseFromProfileMenu(value) {
+    if (profileMenu.value === null) { return }
+
+    const { profileId } = profileMenu.value
+
+    if (value === 'rename') {
+      renamingProfileId.value = profileId
+    }
+  }
+
+  /**
+   * @param {boolean} returnFocus
+   */
+  function closeProfileMenu(returnFocus) {
+    const profileId = profileMenu.value?.profileId
+    profileMenu.value = null
+
+    if (returnFocus && profileId) {
+      focusBubble(profileId)
+    }
+  }
+
   return {
     draft,
     startDraft,
     commitDraft,
-    cancelDraft
+    cancelDraft,
+    renamingProfileId,
+    saveProfile,
+    finishRename,
+    profileMenu,
+    profileMenuItems,
+    openProfileMenu,
+    chooseFromProfileMenu,
+    closeProfileMenu
   }
 }

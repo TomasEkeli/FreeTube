@@ -24,8 +24,11 @@
       :match-count="matchCounts?.get(profile._id) ?? null"
       :channel-count="new Set(profile.subscriptions.map(channel => channel.id)).size"
       :duplicate-count="duplicateCounts.get(profile._id) ?? 0"
+      :editing="profile._id === renamingProfileId"
       @toggle="emit('toggle', profile._id)"
       @drop-channels="(dragged, copy) => emit('drop-channels', profile._id, dragged, copy)"
+      @rename="(name) => emit('rename', profile._id, name)"
+      @menu="(anchor) => emit('menu', profile._id, anchor)"
     />
     <ChannelsOverviewProfileNameField
       v-if="draft !== null"
@@ -88,10 +91,15 @@ defineProps({
   draft: {
     type: Object,
     default: null
+  },
+  /** The profile whose name is being typed in place, if any */
+  renamingProfileId: {
+    type: String,
+    default: null
   }
 })
 
-const emit = defineEmits(['toggle', 'drop-channels', 'new-profile', 'commit-draft', 'cancel-draft'])
+const emit = defineEmits(['toggle', 'drop-channels', 'new-profile', 'commit-draft', 'cancel-draft', 'rename', 'menu'])
 
 const { t } = useI18n()
 

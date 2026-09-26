@@ -29,11 +29,14 @@
           :match-counts="matchCounts"
           :duplicate-counts="duplicateCountsByProfile"
           :draft="draft"
+          :renaming-profile-id="renamingProfileId"
           @toggle="toggleColumn"
           @drop-channels="fileChannelsFromPalette"
           @new-profile="startDraft"
           @commit-draft="commitDraft"
           @cancel-draft="cancelDraft"
+          @rename="finishRename"
+          @menu="openProfileMenu"
         />
         <p
           v-if="profiles.length === 0 && draft === null"
@@ -161,6 +164,15 @@
       focus-first
       @choose="chooseFromContextMenu"
       @close="closeContextMenu"
+    />
+    <ChannelsOverviewMenu
+      v-if="profileMenu !== null"
+      :label="profileMenu.name"
+      :items="profileMenuItems"
+      :anchor="profileMenu.anchor"
+      focus-first
+      @choose="chooseFromProfileMenu"
+      @close="closeProfileMenu"
     />
     <FtPrompt
       v-if="unsubscribeChannelIds.length > 0"
@@ -630,7 +642,14 @@ const {
   draft,
   startDraft,
   commitDraft,
-  cancelDraft
+  cancelDraft,
+  renamingProfileId,
+  finishRename,
+  profileMenu,
+  profileMenuItems,
+  openProfileMenu,
+  chooseFromProfileMenu,
+  closeProfileMenu
 } = useProfilePaletteEditing({ profileList, afterPendingChanges, openColumn })
 
 /**

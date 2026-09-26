@@ -6,53 +6,70 @@
 
   Under the name, how many channels the profile has, and how many of those
   are shared with some other profile: the ones to sort out.
+
+  Right-click it, or press the ContextMenu key or Shift+F10 on it, to rename
+  it or change its colour. Renaming happens in place.
 -->
 <template>
   <div
+    ref="entry"
     class="paletteEntry"
     :class="{ dropTarget: dragOver, acknowledged }"
     :data-profile-id="profile._id"
     :style="{ '--profile-colour': profile.bgColor }"
-    :title="summary"
+    :title="editing ? null : summary"
     v-on="dropHandlers"
+    @contextmenu="openMenu"
+    @keydown="onKeydown"
   >
-    <FtProfileBubble
-      class="paletteBubble"
-      :class="{ open }"
-      :profile-name="profile.name"
-      :is-main-profile="false"
-      :background-color="profile.bgColor"
-      :text-color="calculateColorLuminance(profile.bgColor)"
-      :aria-pressed="open ? 'true' : 'false'"
-      @click="emit('toggle')"
+    <ChannelsOverviewProfileNameField
+      v-if="editing"
+      :initial-name="profile.name"
+      :bg-color="profile.bgColor"
+      :label="t('Channels.Overview.Rename Profile')"
+      @commit="(name, hadFocus) => finishRename(name, hadFocus)"
+      @cancel="(hadFocus) => finishRename(null, hadFocus)"
     />
-    <span
-      v-if="matchCount !== null"
-      class="badge matchBadge"
-      :class="{ noMatches: matchCount === 0 }"
-      :title="t('Channels.Overview.Profile Matches', { count: matchCount }, matchCount)"
-    >
-      {{ matchCount }}
-    </span>
-    <span
-      class="counts"
-      :class="{ open }"
-      aria-hidden="true"
-    >
-      {{ channelCount }}
+    <template v-else>
+      <FtProfileBubble
+        class="paletteBubble"
+        :class="{ open }"
+        :profile-name="profile.name"
+        :is-main-profile="false"
+        :background-color="profile.bgColor"
+        :text-color="calculateColorLuminance(profile.bgColor)"
+        :aria-pressed="open ? 'true' : 'false'"
+        @click="emit('toggle')"
+      />
       <span
-        v-if="duplicateCount > 0"
-        class="sharedCount"
-      >{{ t('Channels.Overview.Shared Count', { count: duplicateCount }) }}</span>
-    </span>
+        v-if="matchCount !== null"
+        class="badge matchBadge"
+        :class="{ noMatches: matchCount === 0 }"
+        :title="t('Channels.Overview.Profile Matches', { count: matchCount }, matchCount)"
+      >
+        {{ matchCount }}
+      </span>
+      <span
+        class="counts"
+        :class="{ open }"
+        aria-hidden="true"
+      >
+        {{ channelCount }}
+        <span
+          v-if="duplicateCount > 0"
+          class="sharedCount"
+        >{{ t('Channels.Overview.Shared Count', { count: duplicateCount }) }}</span>
+      </span>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtProfileBubble from '../FtProfileBubble/FtProfileBubble.vue'
+import ChannelsOverviewProfileNameField from '../ChannelsOverviewProfileNameField/ChannelsOverviewProfileNameField.vue'
 
 import { calculateColorLuminance } from '../../helpers/colors'
 
@@ -82,10 +99,15 @@ const props = defineProps({
   duplicateCount: {
     type: Number,
     default: 0
+  },
+  /** Its name is being typed in place */
+  editing: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['toggle', 'drop-channels'])
+const emit = defineEmits(['toggle', 'drop-channels', 'rename', 'menu'])
 
 const { t } = useI18n()
 
@@ -119,6 +141,51 @@ function acknowledge() {
     acknowledged.value = true
     acknowledgeTimeout = setTimeout(() => { acknowledged.value = false }, 900)
   })
+}
+
+const entry = useTemplateRef('entry')
+
+/**
+ * At the pointer for a right-click; under the bubble when it came from the
+ * keyboard, which has no pointer to speak of.
+ * @param {MouseEvent} event
+ */
+function openMenu(event) {
+  if (props.editing) { return }
+
+  event.preventDefault()
+
+  emit('menu', event.button === 2
+    ? { x: event.clientX, y: event.clientY }
+    : { rect: entry.value.getBoundingClientRect() })
+}
+
+/**
+ * The ContextMenu key and Shift+F10 open the menu here as well as through the
+ * contextmenu event, which not every platform fires for them. Opening it
+ * twice opens the same menu in the same place.
+ * @param {KeyboardEvent} event
+ */
+function onKeydown(event) {
+  if (props.editing) { return }
+
+  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+    event.preventDefault()
+    emit('menu', { rect: entry.value.getBoundingClientRect() })
+  }
+}
+
+/**
+ * @param {string | null} name null when it was given up
+ * @param {boolean} hadFocus finished in the field, so the focus goes back to the bubble
+ */
+async function finishRename(name, hadFocus) {
+  emit('rename', name)
+
+  if (!hadFocus) { return }
+
+  await nextTick()
+  entry.value?.querySelector('[role="button"]')?.focus()
 }
 
 onBeforeUnmount(() => clearTimeout(acknowledgeTimeout))
