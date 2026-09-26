@@ -127,6 +127,39 @@
   color: var(--tertiary-text-color);
 }
 
+.acceptMark,
+.rejectMark {
+  inset-inline-end: 4px;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+.acceptMark {
+  color: var(--primary-color);
+}
+
+.rejectMark {
+  inset-block: auto 4px;
+  color: var(--tertiary-text-color);
+}
+
+.acceptMark:hover,
+.acceptMark:focus-visible {
+  background-color: var(--primary-color);
+  color: var(--text-with-main-color, #fff);
+}
+
+.rejectMark:hover,
+.rejectMark:focus-visible {
+  color: var(--primary-text-color);
+}
+
+/* Room at the bottom for the cross, clear of the name and the badge */
+.tile.suggested .selectArea {
+  padding-block-end: 38px;
+}
+
 .channelLink {
   inset-inline-start: 4px;
   color: var(--tertiary-text-color);

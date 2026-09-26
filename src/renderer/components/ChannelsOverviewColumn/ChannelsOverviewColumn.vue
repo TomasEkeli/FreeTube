@@ -2,8 +2,10 @@
   One column of the Channels overview: a profile's channels, the pool of
   channels no profile has claimed, or a proposed column, which suggests
   channels for a profile and is not one. A proposed column has a dashed
-  border, a menu on its heading of what can be done with the suggestion, and
-  takes no drops: there is nothing there to file a channel into.
+  border, a tick on its heading that accepts the whole suggestion, and a menu
+  of what else can be done with it. Each of its channels has a tick and a
+  cross of its own. A channel dropped on it joins the suggestion, and is
+  filed nowhere until the suggestion is accepted.
 
   A column can hold a couple of thousand channels, and drawing them all at once
   is what made the old channel list slow to open. So it draws the first
@@ -18,7 +20,7 @@
     :class="{ pool: isPool, proposed, dropTarget: dragOver }"
     :style="proposed && backgroundColor ? { '--proposal-colour': backgroundColor } : null"
     :aria-labelledby="headingId"
-    v-on="proposed ? {} : dropHandlers"
+    v-on="dropHandlers"
   >
     <header
       class="columnHeader"
@@ -67,6 +69,16 @@
           {{ countLabel }}
         </span>
       </template>
+      <button
+        v-if="proposed && acceptLabel !== ''"
+        type="button"
+        class="acceptAllButton"
+        :title="acceptLabel"
+        :aria-label="acceptLabel"
+        @click="emit('accept-all')"
+      >
+        <FontAwesomeIcon :icon="['fas', 'check']" />
+      </button>
       <span
         v-if="proposed && menuItems.length > 0"
         ref="proposalMenu"
@@ -113,6 +125,10 @@
         :callout="calloutColours.get(channel.id) ?? null"
         :badge="badges.get(channel.id) ?? null"
         :evidence="evidence.get(channel.id) ?? null"
+        :accept-label="proposed ? channelAcceptLabel : null"
+        :reject-label="proposed ? channelRejectLabel : null"
+        @accept="emit('accept-channel', channel)"
+        @reject="emit('reject-channel', channel)"
         @thumbnail-error="emit('thumbnail-error', $event)"
         @drag-start="(event, channel) => emit('drag-start', event, channel)"
         @select="(extend) => emit('select', channel, extend)"
@@ -226,6 +242,21 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  /** What the tick on a proposed column's heading does, to all of it */
+  acceptLabel: {
+    type: String,
+    default: ''
+  },
+  /** What the tick on each of a proposed column's channels does */
+  channelAcceptLabel: {
+    type: String,
+    default: ''
+  },
+  /** What the cross on each of a proposed column's channels does */
+  channelRejectLabel: {
+    type: String,
+    default: ''
+  },
   /**
    * For a suggested channel in some other profile now, which one
    * @type {import('vue').PropType<Map<string, { label: string, bgColor: string }>>}
@@ -244,7 +275,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu', 'activate', 'menu'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'drop-channels', 'select', 'remove-here', 'keep-here', 'select-all', 'select-none', 'context-menu', 'activate', 'menu', 'accept-all', 'accept-channel', 'reject-channel'])
 
 const proposalMenu = useTemplateRef('proposalMenu')
 
@@ -297,8 +328,9 @@ watch(() => props.resetKey, () => {
 
 const { dragOver, handlers: dropHandlers } = useChannelDropTarget({
   onDrop: (dragged, copy) => emit('drop-channels', dragged, copy),
-  // A copy into the pool means nothing: the pool is where no profile has it
-  canCopy: () => !props.isPool
+  // A copy into the pool means nothing: the pool is where no profile has it.
+  // Nor into a suggestion, which files nothing yet.
+  canCopy: () => !props.isPool && !props.proposed
 })
 
 /**

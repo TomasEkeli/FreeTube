@@ -31,7 +31,7 @@
       <FtCard class="paletteCard">
         <ChannelsOverviewPalette
           :profiles="profiles"
-          :open-profile-ids="openProfileIds"
+          :open-profile-ids="suggestionsShown ? [] : openProfileIds"
           :match-counts="matchCounts"
           :duplicate-counts="duplicateCountsByProfile"
           :draft="draft"
@@ -151,6 +151,9 @@
           :empty-label="searching ? t('Channels.Overview.No Matches') : t('Channels.Overview.Empty Profile')"
           :background-color="columnColour(column)"
           :menu-items="column.kind === 'proposal' ? proposalMenuItems(column.proposal) : []"
+          :accept-label="column.kind === 'proposal' ? acceptAllLabel(column.proposal) : ''"
+          :channel-accept-label="column.kind === 'proposal' ? acceptChannelLabel(column.proposal) : ''"
+          :channel-reject-label="t('Channels.Overview.Suggestions.Reject Channel')"
           :menu-label="column.kind === 'proposal' ? t('Channels.Overview.Suggestions.Actions', { suggestion: columnTitle(column) }) : ''"
           :badges="proposalDetails.get(column.key)?.badges"
           :evidence="proposalDetails.get(column.key)?.evidence"
@@ -166,14 +169,17 @@
           @activate="activateProfile(column.profile)"
           @select-none="deselectColumn(column)"
           @drag-start="(event, channel) => dragChannel(event, channel, column)"
-          @drop-channels="(dragged, copy) => fileChannels(dragged, column.id, copy)"
+          @drop-channels="(dragged, copy) => dropOnColumn(column, dragged, copy)"
           @remove-here="(channel) => removeDuplicate(channel, column.id)"
           @keep-here="(channel) => keepOnlyIn(channel, column.id)"
           @context-menu="(event, channel) => openContextMenu(event, channel, column)"
           @menu="(value, anchor) => chooseProposalAction(column.proposal, value, anchor)"
+          @accept-all="acceptProposal(column.proposal)"
+          @accept-channel="(channel) => acceptChannel(column, channel)"
+          @reject-channel="(channel) => rejectChannel(column, channel)"
         />
         <p
-          v-if="openColumns.length === 0 && profiles.length > 0"
+          v-if="openColumns.length === 0 && profiles.length > 0 && !suggestionsShown"
           key="hint"
           class="message columnsHint"
         >
@@ -372,6 +378,9 @@ const searching = computed(() => normalisedQuery.value !== '')
  * profile's column is always in the same place among the others.
  */
 const sortedOpenColumns = computed(() => {
+  // The suggestions take their place while shown; which were open is kept
+  if (suggestionsShown.value) { return [] }
+
   const open = new Set(openProfileIds.value)
 
   return profiles.value
@@ -400,7 +409,8 @@ const {
   suggestions,
   toggleSuggestions,
   dismiss,
-  keepIn,
+  reject,
+  place,
   dropLapsedKeeps
 } = useProfileSuggestions({ profileList, collator })
 
@@ -529,6 +539,8 @@ function describeEvidence(evidence, percent) {
       return t('Channels.Overview.Suggestions.Evidence Tag Names Profile', { tag: evidence.tag })
     case 'tags':
       return t('Channels.Overview.Suggestions.Evidence Tags', { tags: evidence.tags.join(', ') })
+    case 'placed':
+      return t('Channels.Overview.Suggestions.Evidence Placed')
     default:
       return ''
   }
@@ -670,7 +682,7 @@ const hiddenSelectedCount = computed(() => {
  * The selection as a drag payload, each channel with where it drags from. A
  * channel selected in a proposed column drags from where it is now, and one
  * selected there and in its own profile's column as well is dragged once.
- * One from a proposed column also says so, in `selectedIn`, so that once
+ * One from a proposed column also says so, in `fromProposal`, so that once
  * moved it is selected where it lands, as from any other column.
  * @returns {DraggedChannel[]}
  */
@@ -689,7 +701,7 @@ function draggedSelection() {
     if (seen.has(key)) { continue }
 
     seen.add(key)
-    dragged.push(sources ? { channelId, profileId, selectedIn: columnId } : { channelId, profileId })
+    dragged.push(sources ? { channelId, profileId, fromProposal: columnId } : { channelId, profileId })
   }
 
   return dragged
@@ -801,6 +813,14 @@ watch(() => route.query.open, (profileId) => {
  * @param {string} profileId
  */
 function toggleColumn(profileId) {
+  // While the suggestions are shown the profiles' columns are not, so a
+  // bubble clicked goes back to them, with its own column open
+  if (suggestionsShown.value) {
+    toggleSuggestions()
+
+    if (openProfileIds.value.includes(profileId)) { return }
+  }
+
   saveOpenProfileIds(toggleOpenProfile(openProfileIds.value, profileId))
 }
 
@@ -819,7 +839,9 @@ function dragChannel(event, channel, column) {
 
     startChannelDrag(event, dragged, label)
   } else {
-    startChannelDrag(event, [{ channelId: channel.id, profileId: dragSource(column, channel.id) }], channel.name ?? channel.id)
+    const dragged = { channelId: channel.id, profileId: dragSource(column, channel.id) }
+
+    startChannelDrag(event, [column.kind === 'proposal' ? { ...dragged, fromProposal: column.key } : dragged], channel.name ?? channel.id)
   }
 }
 
@@ -935,7 +957,7 @@ async function transferChannels(dragged, targetProfileId, copy) {
   const count = countTransferred(profileList.value, updated, targetProfileId)
   // Where each channel is selected, which for a proposed column is not
   // where it is dragged from
-  const selected = dragged.map(({ channelId, profileId, selectedIn }) => ({ channelId, profileId: selectedIn ?? profileId }))
+  const selected = dragged.map(({ channelId, profileId, fromProposal }) => ({ channelId, profileId: fromProposal ?? profileId }))
   const selectionAfter = selectionAfterTransfer(selection.value, selected, targetProfileId, copy)
   const saved = updated.map(profile => deepCopy(profile))
 
@@ -1118,13 +1140,6 @@ const contextMenuItems = computed(() => {
     )
   }
 
-  // A suggested move can be told to stay where it is
-  const source = column.kind === 'proposal' ? profilesById.value.get(dragSource(column, channel.id)) : undefined
-
-  if (source) {
-    items.push({ value: 'keep-suggested', label: t('Channels.Overview.Suggestions.Keep In', { profile: source.name }) })
-  }
-
   if (!hideUnsubscribeButton.value) {
     items.push({ value: 'unsubscribe', label: t('Channels.Overview.Unsubscribe Channel'), destructive: true })
   }
@@ -1150,14 +1165,6 @@ function chooseFromContextMenu(value) {
     case 'keep-here':
       keepOnlyIn(channel, column.id)
       break
-    case 'keep-suggested': {
-      const source = dragSource(column, channel.id)
-
-      if (source !== null) {
-        keepIn(channel.id, source)
-      }
-      break
-    }
     case 'unsubscribe':
       askToUnsubscribe([{ channelId: channel.id, profileId: column.id }])
       break
@@ -1197,24 +1204,42 @@ async function fileProposal(key, profileId) {
 }
 
 /**
+ * What the tick on a proposed column's heading does: files the lot in its
+ * profile, or makes a profile of a new group. Says how many, as it takes them
+ * all, whatever the search is showing.
+ * @param {Proposal} proposal
+ * @returns {string}
+ */
+function acceptAllLabel(proposal) {
+  const count = proposal.channels.length
+
+  if (proposal.kind !== 'profile') {
+    return t('Channels.Overview.Suggestions.Create Profile', { count }, count)
+  }
+
+  const moved = proposal.channels.filter(suggested => suggested.sourceProfileId !== null).length
+
+  return moved > 0
+    ? t('Channels.Overview.Suggestions.File In Profile With Moves', { count, profile: proposal.name, moved }, count)
+    : t('Channels.Overview.Suggestions.File In Profile', { count, profile: proposal.name }, count)
+}
+
+/**
+ * What the tick on each channel of a proposed column does
+ * @param {Proposal} proposal
+ * @returns {string}
+ */
+function acceptChannelLabel(proposal) {
+  return proposal.kind === 'profile'
+    ? t('Channels.Overview.Suggestions.Accept Channel', { profile: proposal.name })
+    : t('Channels.Overview.Suggestions.Accept Channel New Profile', { profile: proposal.name })
+}
+
+/**
  * @param {Proposal} proposal
  */
 function proposalMenuItems(proposal) {
-  const count = proposal.channels.length
   const items = []
-
-  if (proposal.kind === 'profile') {
-    const moved = proposal.channels.filter(suggested => suggested.sourceProfileId !== null).length
-
-    items.push({
-      value: 'file',
-      label: moved > 0
-        ? t('Channels.Overview.Suggestions.File In Profile With Moves', { count, profile: proposal.name, moved }, count)
-        : t('Channels.Overview.Suggestions.File In Profile', { count, profile: proposal.name }, count)
-    })
-  } else {
-    items.push({ value: 'create', label: t('Channels.Overview.Suggestions.Create Profile', { count }, count) })
-  }
 
   if (profiles.value.length > 0) {
     items.push({ value: 'send', label: t('Channels.Overview.Suggestions.Send To Profile') })
@@ -1223,6 +1248,114 @@ function proposalMenuItems(proposal) {
   items.push({ value: 'dismiss', label: t('Channels.Overview.Suggestions.Dismiss') })
 
   return items
+}
+
+/**
+ * Accepts a whole suggestion, from the tick on its heading.
+ * @param {Proposal} proposal
+ */
+async function acceptProposal(proposal) {
+  if (proposal.kind === 'profile') {
+    await fileProposal(proposal.key, proposal.profileId)
+  } else {
+    await createFromProposal(proposal.key, proposal.name)
+  }
+
+  await keepFocusOnPage()
+}
+
+/**
+ * Where the focus goes once a channel has left its proposed column: the same
+ * button on the channel that took its place, or failing that the search.
+ * @param {Column} column
+ * @param {string} channelId
+ * @param {string} button the button's class
+ * @returns {() => Promise<void>} to call once it has left
+ */
+function focusAfterLeaving(column, channelId, button) {
+  const ids = column.channels.map(channel => channel.id)
+  const index = ids.indexOf(channelId)
+  const nextId = ids[index + 1] ?? ids[index - 1]
+
+  return async () => {
+    await nextTick()
+
+    const focused = document.activeElement
+
+    if (focused && focused !== document.body && focused.isConnected) { return }
+
+    const next = nextId === undefined
+      ? null
+      : document.querySelector(`[data-proposal-key="${CSS.escape(column.key)}"] [data-channel-id="${CSS.escape(nextId)}"] .${button}`)
+
+    if (next) {
+      next.focus()
+    } else {
+      toolbar.value?.querySelector('input')?.focus()
+    }
+  }
+}
+
+/**
+ * Accepts one channel's suggestion, from the tick on it: filed in the
+ * profile it is suggested for, out of any it is in now. For a new group,
+ * the profile is made with this one channel in it, and the rest of the group
+ * stays suggested for it.
+ * @param {Column} column
+ * @param {Channel} channel
+ */
+async function acceptChannel(column, channel) {
+  const { proposal } = column
+  const refocus = focusAfterLeaving(column, channel.id, 'acceptMark')
+
+  if (proposal.kind === 'profile') {
+    await fileChannels([{ channelId: channel.id, profileId: dragSource(column, channel.id) }], proposal.profileId, false)
+  } else {
+    await createFromProposal(proposal.key, proposal.name, channel.id)
+  }
+
+  await refocus()
+}
+
+/**
+ * Rejects one channel's suggestion, from the cross on it: it stays where it
+ * is, in the pool or in its profile, and is not suggested again while it
+ * does.
+ * @param {Column} column
+ * @param {Channel} channel
+ */
+async function rejectChannel(column, channel) {
+  const refocus = focusAfterLeaving(column, channel.id, 'rejectMark')
+
+  reject(channel.id)
+  await refocus()
+}
+
+/**
+ * A drop on a column. On a proposed column the channels join the suggestion
+ * and are filed nowhere yet. On the pool, one that was only suggested out of
+ * it is left there, which is rejecting its suggestion; anything else is filed
+ * as a drop always is.
+ * @param {Column} column
+ * @param {DraggedChannel[]} dragged
+ * @param {boolean} copy
+ */
+function dropOnColumn(column, dragged, copy) {
+  if (column.kind === 'proposal') {
+    place(column.key, dragged.filter(channel => channel.fromProposal !== column.key).map(channel => channel.channelId))
+    return
+  }
+
+  if (column.kind === 'pool') {
+    const leftInPool = dragged.filter(channel => channel.profileId === null && channel.fromProposal !== undefined)
+
+    leftInPool.forEach(channel => reject(channel.channelId))
+    dragged = dragged.filter(channel => !leftInPool.includes(channel))
+
+    if (dragged.length === 0) { return }
+  }
+
+  fileChannels(dragged, column.id, copy)
 }
 
 /**
@@ -1247,12 +1380,6 @@ async function keepFocusOnPage() {
  */
 async function chooseProposalAction(proposal, value, anchor) {
   switch (value) {
-    case 'file':
-      await fileProposal(proposal.key, proposal.profileId)
-      break
-    case 'create':
-      await createFromProposal(proposal.key, proposal.name)
-      break
     case 'send':
       if (anchor !== null) {
         sendMenu.value = { key: proposal.key, count: proposal.channels.length, anchor }
@@ -1274,12 +1401,13 @@ async function chooseProposalAction(proposal, value, anchor) {
  * the bubble says where the channels went.
  * @param {string} key
  * @param {string} name
+ * @param {string} [channelId] only this one of the group's channels
  */
-function createFromProposal(key, name) {
+function createFromProposal(key, name, channelId) {
   return afterPendingChanges(async () => {
     // Before the profile exists: once it does, its channels are suggested
     // for it under another key
-    const dragged = proposalDragged(key)
+    const dragged = proposalDragged(key).filter(channel => channelId === undefined || channel.channelId === channelId)
 
     if (dragged.length === 0) { return }
 

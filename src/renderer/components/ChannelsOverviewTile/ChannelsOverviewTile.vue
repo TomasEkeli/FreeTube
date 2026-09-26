@@ -19,12 +19,14 @@
 
   In a proposed column, hovering says why the channel is suggested there, and
   a channel suggested out of the profile it is in now has a badge in that
-  profile's colour, naming it.
+  profile's colour, naming it. A tick in the top corner accepts the
+  suggestion for this channel, and a cross in the bottom one rejects it,
+  which leaves the channel where it is.
 -->
 <template>
   <div
     class="tile"
-    :class="[{ dragging, selected }, callout === null ? null : `callout callout${callout}`]"
+    :class="[{ dragging, selected, suggested: acceptLabel !== null }, callout === null ? null : `callout callout${callout}`]"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="dragging = false"
@@ -98,6 +100,28 @@
         <FontAwesomeIcon :icon="['fas', 'clone']" />
       </ChannelsOverviewMenuButton>
     </span>
+    <template v-if="acceptLabel !== null">
+      <button
+        type="button"
+        class="corner acceptMark"
+        :title="acceptLabel"
+        :aria-label="acceptLabel"
+        draggable="false"
+        @click.stop="emit('accept')"
+      >
+        <FontAwesomeIcon :icon="['fas', 'check']" />
+      </button>
+      <button
+        type="button"
+        class="corner rejectMark"
+        :title="rejectLabel"
+        :aria-label="rejectLabel"
+        draggable="false"
+        @click.stop="emit('reject')"
+      >
+        <FontAwesomeIcon :icon="['fas', 'xmark']" />
+      </button>
+    </template>
     <!-- A plain link that hands a plain click to the router, as a
          RouterLink would: a RouterLink in each of a few thousand rows is a
          lot of routing to work out while scrolling -->
@@ -163,6 +187,16 @@ const props = defineProps({
   evidence: {
     type: String,
     default: null
+  },
+  /** In a proposed column, what accepting its suggestion does; null elsewhere */
+  acceptLabel: {
+    type: String,
+    default: null
+  },
+  /** In a proposed column, what rejecting its suggestion does */
+  rejectLabel: {
+    type: String,
+    default: null
   }
 })
 
@@ -180,7 +214,7 @@ const description = computed(() => {
 
 const badgeTextColor = computed(() => props.badge ? calculateColorLuminance(props.badge.bgColor) : null)
 
-const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here', 'context-menu'])
+const emit = defineEmits(['thumbnail-error', 'drag-start', 'select', 'remove-here', 'keep-here', 'context-menu', 'accept', 'reject'])
 
 const dragging = ref(false)
 

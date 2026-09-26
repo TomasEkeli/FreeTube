@@ -260,14 +260,15 @@ Channels:
     Suggestions:
       Suggest Profiles: Suggest profiles
       Hide Suggestions: Hide suggestions
-      Coverage: FreeTube knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Suggestions improve as subscriptions refresh and you watch.
+      Coverage: FreeTube knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Watch videos in a channel to get suggestions for it.
       # Headings of the proposed columns: for an existing profile, for a new
       # profile from a YouTube category, and for one from a shared tag
       Profile Heading: Suggested for {profile}
       Category Heading: 'Suggested: {category}'
       Tag Heading: 'Tagged: {tag}'
-      # The menu on a proposed column's heading
-      Actions: What to do with {suggestion}
+      # The menu on a proposed column's heading, beside the tick that accepts
+      # all of it
+      Actions: More for {suggestion}
       # On a suggested channel that is in another profile now
       Now In: now in {profile}
       File In Profile: File 1 channel in {profile} | File {count} channels in {profile}
@@ -275,8 +276,11 @@ Channels:
       Create Profile: Create profile with 1 channel | Create profile with {count} channels
       Send To Profile: Send to profile…
       Send To Profile Menu: Send 1 channel to | Send {count} channels to
-      Dismiss: Dismiss
-      Keep In: Keep in {profile}
+      Dismiss: Hide until restart
+      # The tick and the cross on each suggested channel
+      Accept Channel: Accept, put it in {profile}
+      Accept Channel New Profile: Accept, make a profile "{profile}" with it
+      Reject Channel: Reject, leave it where it is
       # Why a channel is suggested, on hovering it
       Evidence Watched: '{category}: 1 watched video | {category}: {count} watched videos'
       Evidence Artist: 'Music: a YouTube music artist or Topic channel'
@@ -284,6 +288,7 @@ Channels:
       Evidence Tag Share: 'Shares "{tag}" with {count} of {total} channels in {profile}'
       Evidence Tag Names Profile: 'Tagged "{tag}"'
       Evidence Tags: 'Tagged: {tags}'
+      Evidence Placed: Put here by you
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown

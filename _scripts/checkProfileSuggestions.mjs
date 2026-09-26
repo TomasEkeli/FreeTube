@@ -28,6 +28,7 @@ import {
   proposeProfiles,
   pruneKeeps,
   TAG_LIMIT,
+  UNASSIGNED,
   watchedCategories,
 } from '../src/renderer/helpers/profileSuggestions.js'
 import { channelMemberships } from '../src/renderer/helpers/channelsOverview.js'
@@ -529,6 +530,54 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     })
     check(`a move at exactly ${MOVE_THRESHOLD} is suggested`, 4 / 8 === MOVE_THRESHOLD && idsIn(half, 'profile:p2') === 'stray')
   }
+}
+
+// Rejecting and placing by hand
+{
+  const ch = (id, name = `Channel ${id}`) => ({ id, name, thumbnail: '' })
+  const profile = (_id, name, channels) => ({ _id, name, bgColor: '#000000', textColor: '#FFFFFF', subscriptions: channels })
+  const idsIn = (result, key) => result.proposals.find(found => found.key === key)?.channels.map(suggested => suggested.channel.id).join(',')
+  const keysOf = result => result.proposals.map(found => found.key).join(',')
+  const remainderIds = result => result.remainder.map(channel => channel.id).join(',')
+  const watchedAs = pairs => watchedCategories(pairs.map(([authorId, category]) => ({ authorId, category, timeWatched: 1 })))
+
+  const [a, b, c, d, e] = ['a', 'b', 'c', 'd', 'e'].map(id => ch(id))
+  const profileList = [
+    profile(MAIN_PROFILE_ID, 'All Channels', [a, b, c, d, e]),
+    profile('p1', 'Games', [c]),
+    profile('p2', 'Science', [d]),
+    profile('p3', 'Both', [d, e]),
+    profile('p4', 'Music', [])
+  ]
+  const memberships = channelMemberships(profileList)
+  const watched = watchedAs([['a', 'Music'], ['b', 'Comedy']])
+
+  // Rejecting a pool channel's suggestion keeps it in the pool
+  const keeps = { a: UNASSIGNED }
+  check('a keep in the pool applies while the channel is unassigned', isKept(keeps, memberships, 'a'))
+  const rejected = proposeProfiles({ profileList, watched, keeps, collator })
+  check('a rejected pool channel is suggested nowhere', idsIn(rejected, 'profile:p4') === undefined && remainderIds(rejected) === 'a')
+  check('once filed, a keep in the pool lapses', !isKept(keeps, channelMemberships([...profileList.slice(0, 4), profile('p4', 'Music', [a])]), 'a'))
+
+  // Placing by hand
+  const placements = {
+    b: { key: 'profile:p1', from: UNASSIGNED }, // a pool channel into a profile's suggestion
+    c: { key: 'tag:retro', from: 'p1' }, // one in Games into a new group
+    d: { key: 'profile:p1', from: 'p2' } // one in two profiles: left alone
+  }
+  const placed = proposeProfiles({ profileList, watched, placements, collator })
+  check('a channel placed by hand goes where it was put', idsIn(placed, 'profile:p1') === 'b')
+  check('with that as its evidence', placed.proposals[0].channels[0].evidence.type === 'placed')
+  check('and nowhere else', idsIn(placed, 'category:Comedy') === undefined)
+  check('a channel placed from a profile is a move out of it', idsIn(placed, 'tag:retro') === 'c' && placed.proposals.find(found => found.key === 'tag:retro').channels[0].sourceProfileId === 'p1')
+  check('a channel in two profiles is never placed', !keysOf(placed).includes('p1') || !idsIn(placed, 'profile:p1').includes('d'))
+
+  const moved = proposeProfiles({ profileList, watched, placements: { b: { key: 'profile:p1', from: 'p2' } }, collator })
+  check('a placement lapses once the channel is somewhere else', idsIn(moved, 'category:Comedy') === 'b')
+  check('placing a channel in its own profile does nothing', idsIn(proposeProfiles({ profileList, placements: { c: { key: 'profile:p1', from: 'p1' } }, collator }), 'profile:p1') === undefined)
+  check('a placement wins over a keep', idsIn(proposeProfiles({ profileList, keeps: { b: UNASSIGNED }, placements: { b: { key: 'profile:p1', from: UNASSIGNED } }, collator }), 'profile:p1') === 'b')
+  check('a group named as a profile by now is that profile\'s', idsIn(proposeProfiles({ profileList, placements: new Map([['b', { key: 'category:Music', from: UNASSIGNED }]]), collator }), 'profile:p4') === 'b')
+  check('a placement into a profile that is gone is ignored', idsIn(proposeProfiles({ profileList, watched, placements: { b: { key: 'profile:gone', from: UNASSIGNED } }, collator }), 'category:Comedy') === 'b')
 }
 
 if (failures > 0) {

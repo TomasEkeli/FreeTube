@@ -2,7 +2,7 @@ import { computed, onScopeDispose, ref, shallowRef, toRaw } from 'vue'
 
 import store from '../store/index'
 import { channelMemberships } from '../helpers/channelsOverview'
-import { addKeep, proposeProfiles, pruneKeeps, watchedCategories } from '../helpers/profileSuggestions'
+import { addKeep, channelLocation, proposeProfiles, pruneKeeps, watchedCategories } from '../helpers/profileSuggestions'
 
 /** @import { Profile } from '../helpers/channelsOverview' */
 /** @import { Proposals } from '../helpers/profileSuggestions' */
@@ -16,6 +16,13 @@ const shown = ref(false)
 
 /** @type {import('vue').ShallowRef<Set<string>>} */
 const dismissed = shallowRef(new Set())
+
+/**
+ * Channels put in a proposed column by hand, for as long as the window lasts.
+ * Each lapses by itself once the channel is filed anywhere.
+ * @type {import('vue').ShallowRef<Map<string, import('../helpers/profileSuggestions').Placement>>}
+ */
+const placements = shallowRef(new Map())
 
 /** The mutations that change what is remembered of channels' tags */
 const TAG_MUTATIONS = new Set(['updateChannelTagsByChannel', 'setChannelTags'])
@@ -83,6 +90,7 @@ export function useProfileSuggestions({ profileList, collator }) {
       channelTags: channelTags.value,
       watched: watched.value,
       keeps: keeps.value,
+      placements: placements.value,
       collator: collator.value,
       dismissed: dismissed.value
     })
@@ -102,15 +110,56 @@ export function useProfileSuggestions({ profileList, collator }) {
   }
 
   /**
-   * Tells the app a channel stays in the profile it is in, which it
-   * remembers until the channel is moved.
+   * Rejects a channel's suggestion: it stays where it is, in its profile or
+   * in the pool, and is suggested nowhere while it does. Remembered until the
+   * channel is moved.
    * @param {string} channelId
-   * @param {string} profileId
    */
-  function keepIn(channelId, profileId) {
-    const next = addKeep(keeps.value, channelMemberships(profileList.value), channelId, profileId)
+  function reject(channelId) {
+    const memberships = channelMemberships(profileList.value)
+    const location = channelLocation(memberships, channelId)
 
-    store.dispatch('saveProfileSuggestionKeeps', next)
+    if (location === null) { return }
+
+    if (placements.value.has(channelId)) {
+      const next = new Map(placements.value)
+      next.delete(channelId)
+      placements.value = next
+    }
+
+    store.dispatch('saveProfileSuggestionKeeps', addKeep(keeps.value, memberships, channelId, location))
+  }
+
+  /**
+   * Puts channels in a proposed column by hand, from wherever they are now,
+   * which undoes any rejection of theirs. Filed nowhere yet.
+   * @param {string} key the proposal's
+   * @param {string[]} channelIds
+   */
+  function place(key, channelIds) {
+    const memberships = channelMemberships(profileList.value)
+    const next = new Map(placements.value)
+    const current = keeps.value
+    let nextKeeps = current
+
+    for (const channelId of channelIds) {
+      const from = channelLocation(memberships, channelId)
+
+      if (from === null) { continue }
+
+      next.set(channelId, { key, from })
+
+      if (Object.hasOwn(nextKeeps, channelId)) {
+        nextKeeps = { ...nextKeeps }
+        delete nextKeeps[channelId]
+      }
+    }
+
+    placements.value = next
+
+    if (nextKeeps !== current) {
+      store.dispatch('saveProfileSuggestionKeeps', nextKeeps)
+    }
   }
 
   /**
@@ -127,5 +176,5 @@ export function useProfileSuggestions({ profileList, collator }) {
     }
   }
 
-  return { shown, suggestions, toggleSuggestions, dismiss, keepIn, dropLapsedKeeps }
+  return { shown, suggestions, toggleSuggestions, dismiss, reject, place, dropLapsedKeeps }
 }

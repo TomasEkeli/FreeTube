@@ -14,7 +14,9 @@
  * Unassigned channels the steps before it left:
  *
  * 1. Every subscribed channel in no profile (the pool) or in exactly one is
- *    considered. One in two or more is the duplicates UI's to settle.
+ *    considered. One in two or more is the duplicates UI's to settle. One
+ *    put in a proposed column by hand goes there, and one whose suggestion
+ *    was rejected stays where it is.
  * 2. Each profile's character is worked out from its own members. A pool
  *    channel that fits one well enough is suggested for it; a channel in a
  *    profile that fits another clearly better is a suggested move.
@@ -269,7 +271,9 @@ export function watchedCategories(historyEntries) {
  *   `tag` with it
  * - `tagged`: its tag `tag` names the profile or group
  * - `tags`: its first few tags, `tags`, for a tag group
+ * - `placed`: put there by hand
  * @typedef {{ type: 'watched', category: string, count: number }
+ *   | { type: 'placed' }
  *   | { type: 'artist' }
  *   | { type: 'categoryShare', category: string, share: number, profileId: string }
  *   | { type: 'tagShare', tag: string, count: number, total: number, profileId: string }
@@ -452,25 +456,58 @@ export function channelFit(character, known, profileId, isMember) {
 }
 
 /**
- * Tells the app a channel stays where it is: channel id to the profile it was
- * kept in. Kept as a setting, so it lasts and reaches every window.
+ * Where a keep or a placement says the channel is: a profile's id, or
+ * `UNASSIGNED` for the pool.
+ */
+export const UNASSIGNED = ''
+
+/**
+ * Tells the app a channel stays where it is, which is what rejecting its
+ * suggestion means: channel id to the profile it was kept in, or `UNASSIGNED`
+ * for one left in the pool. Kept as a setting, so it lasts and reaches every
+ * window.
  * @typedef {Record<string, string>} Keeps
  */
 
 /**
- * Whether a keep still applies: while the channel's only profile is the one it
- * was kept in. Moved anywhere since, by whatever means, it no longer does.
+ * Where a channel is now: its one profile, `UNASSIGNED` in the pool, or null
+ * when it is in two or more, which suggestions leave alone.
+ * @param {Map<string, string[]>} memberships from `channelMemberships`
+ * @param {string} channelId
+ * @returns {string | null}
+ */
+export function channelLocation(memberships, channelId) {
+  const profileIds = memberships.get(channelId)
+
+  if (profileIds === undefined) { return UNASSIGNED }
+
+  return profileIds.length === 1 ? profileIds[0] : null
+}
+
+/**
+ * Whether a keep still applies: while the channel is where it was kept. Moved
+ * anywhere since, by whatever means, it no longer does.
  * @param {Keeps | null | undefined} keeps
  * @param {Map<string, string[]>} memberships from `channelMemberships`
  * @param {string} channelId
  * @returns {boolean}
  */
 export function isKept(keeps, memberships, channelId) {
-  const profileId = keeps?.[channelId]
-  const profileIds = memberships.get(channelId)
+  const kept = keeps?.[channelId]
 
-  return typeof profileId === 'string' && profileIds?.length === 1 && profileIds[0] === profileId
+  return typeof kept === 'string' && channelLocation(memberships, channelId) === kept
 }
+
+/**
+ * A channel put in a proposed column by hand: the proposal's key, and where
+ * the channel was when it was put there. It holds while the channel stays
+ * there, so that filing it, or moving it any other way, ends it.
+ * @typedef {{ key: string, from: string }} Placement
+ */
+
+/**
+ * @typedef {Record<string, Placement> | Map<string, Placement>} Placements by channel id
+ */
 
 /**
  * The keeps less any that no longer apply, or the same object when all do, so
@@ -536,6 +573,7 @@ export function addKeep(keeps, memberships, channelId, profileId) {
  * @property {Record<string, ChannelTags> | Map<string, ChannelTags>} [channelTags] by channel id
  * @property {Map<string, Map<string, WatchedCategory>>} [watched] from `watchedCategories`
  * @property {Keeps} [keeps]
+ * @property {Placements} [placements] channels put in proposed columns by hand
  * @property {Intl.Collator} collator
  * @property {Set<string>} [dismissed] proposal keys dismissed this session
  */
@@ -554,7 +592,7 @@ export function addKeep(keeps, memberships, channelId, profileId) {
  * @param {ProposeInput} input
  * @returns {Proposals}
  */
-export function proposeProfiles({ profileList, channelTags = {}, watched = new Map(), keeps = {}, collator, dismissed = new Set() }) {
+export function proposeProfiles({ profileList, channelTags = {}, watched = new Map(), keeps = {}, placements = {}, collator, dismissed = new Set() }) {
   const memberships = channelMemberships(profileList)
   const profiles = nonPrimaryProfiles(profileList)
   const subscribed = uniqueChannels(primaryProfile(profileList)?.subscriptions ?? [])
@@ -666,11 +704,79 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
     return best
   }
 
+  /** @type {Map<string, Proposal>} by the category's name as tags are kept */
+  const categoryGroups = new Map()
+
+  /**
+   * The proposal a placement names, as it stands now. A new group named as a
+   * profile is by now that profile's, as when a group has just been made one.
+   * @param {string} key
+   * @returns {Proposal | null}
+   */
+  function placedProposal(key) {
+    const colon = key.indexOf(':')
+    const kind = key.slice(0, colon)
+    const name = key.slice(colon + 1)
+
+    if (kind === 'profile') {
+      const profile = profiles.find(candidate => candidate._id === name)
+
+      return profile ? profileProposal(profile) : null
+    }
+
+    if (kind !== 'category' && kind !== 'tag') { return null }
+
+    const profile = profileNames.get(normaliseTag(name))
+
+    if (profile) { return profileProposal(profile) }
+
+    if (kind === 'tag') { return proposal(key, 'tag', name, null) }
+
+    const normalised = normaliseTag(name)
+    let group = categoryGroups.get(normalised)
+
+    if (!group) {
+      group = proposal(key, 'category', name, null)
+      categoryGroups.set(normalised, group)
+    }
+
+    return group
+  }
+
+  const placementOf = placements instanceof Map
+    ? id => placements.get(id)
+    : id => placements?.[id]
+
+  /** @type {Set<string>} */
+  const placedByHand = new Set()
+
+  // 1. By hand, before anything is worked out, for as long as the channel
+  // stays where it was put there from
+  for (const channel of subscribed) {
+    const placement = placementOf(channel.id)
+
+    if (!placement || typeof placement.key !== 'string') { continue }
+
+    const location = channelLocation(memberships, channel.id)
+
+    if (location === null || location !== placement.from) { continue }
+
+    const target = placedProposal(placement.key)
+
+    if (target === null || target.profileId === location) { continue }
+
+    target.channels.push({ channel, sourceProfileId: location === UNASSIGNED ? null : location, evidence: { type: 'placed' } })
+    placedByHand.add(channel.id)
+  }
+
   /** @type {KnownChannel[]} */
   let left = []
 
-  // 2. Fit against the profiles, for the pool and for the channels in one
+  // 2. Fit against the profiles, for the pool and for the channels in one.
+  // A channel kept where it is, as its suggestion was rejected, is left there.
   for (const channel of subscribed) {
+    if (placedByHand.has(channel.id) || isKept(keeps, memberships, channel.id)) { continue }
+
     const entry = known.get(channel.id)
     const profileIds = memberships.get(channel.id)
 
@@ -686,7 +792,7 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
       const ownId = profileIds[0]
       const ownCharacter = characters.get(ownId)
 
-      if (!ownCharacter || isKept(keeps, memberships, channel.id)) { continue }
+      if (!ownCharacter) { continue }
 
       const own = channelFit(ownCharacter, entry, ownId, true)
 
@@ -717,8 +823,6 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
   // 4. By category, a category named as a profile is going to that profile.
   // Categories that differ only in case or spacing are one group, under the
   // name first seen.
-  /** @type {Map<string, Proposal>} by the category's name as tags are kept */
-  const categoryGroups = new Map()
 
   left = left.filter(entry => {
     if (entry.category === null) { return true }
@@ -804,7 +908,7 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
   const kept = []
 
   for (const found of byKey.values()) {
-    if (dismissed.has(found.key)) { continue }
+    if (dismissed.has(found.key) || found.channels.length === 0) { continue }
 
     for (const suggested of found.channels) {
       placed.add(suggested.channel.id)
