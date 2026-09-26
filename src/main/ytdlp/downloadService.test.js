@@ -52,7 +52,7 @@ function isVersionProbe(args) {
  * @param {string[]} [options.executables] files that exist and can be run
  * @param {string[]} [options.broken] files that exist but do not answer their version probe
  * @param {Partial<typeof SETTING_DEFAULTS>} [options.settings]
- * @param {Record<string, string[]>} [options.directories] what each folder holds
+ * @param {Record<string, string[]> | ((dir: string) => string[])} [options.directories] what each folder holds
  */
 function setup({ respond = () => SUCCESS, executables = ON_PATH, broken = [], settings = {}, directories = {} } = {}) {
   const fake = createFakeSpawn((command, args) => {
@@ -73,7 +73,7 @@ function setup({ respond = () => SUCCESS, executables = ON_PATH, broken = [], se
     spawn: fake.spawn,
     readSetting: async id => stored[id],
     isExecutableFile: async filePath => executables.includes(filePath),
-    listDirectory: async dir => directories[dir] ?? [],
+    listDirectory: async dir => (typeof directories === 'function' ? directories(dir) : directories[dir] ?? []),
     managedDir: MANAGED_DIR,
     defaultDownloadFolder: () => DOWNLOADS,
     platform: 'linux',
@@ -474,6 +474,20 @@ describe('download service', () => {
       expect(ours()[0].download.resuming).toBe(true)
     })
 
+    it('does not take a fresh download\'s first progress line for a resume', async () => {
+      const { service, report, progress } = setup({
+        respond: () => ({
+          stdout: [DEST_LINE, '[freetube]progress downloading 1000000 5000000000 NA 8000000 380 401 av01 none', ''].join('\n'),
+          hang: true,
+        }),
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => progress().some(p => p.status === 'downloading'))
+
+      expect(progress().at(-1).resuming).toBe(false)
+    })
+
     it('does not, with nothing of it there, or only the finished file itself', async () => {
       const { service, report, ours, ended } = setup({
         directories: { [DOWNLOADS]: ['A video [dQw4w9WgXcQ].webm', 'Another video [aaaaaaaaaaa].f401.mp4.part'] },
@@ -485,10 +499,26 @@ describe('download service', () => {
       expect(ours()[0].download.resuming).toBe(false)
     })
 
-    it('notices a resumed part from its first progress line, when the files said nothing', async () => {
+    it('looks at the folder as it was before yt-dlp started, not after it made its own .part', async () => {
+      let listings = 0
+      const { service, report, ours, ended } = setup({
+        directories: () => (listings++ === 0 ? [] : ['A video [dQw4w9WgXcQ].f401.mp4.part']),
+      })
+
+      await service.start(REQUEST, report)
+      await until(ended)
+
+      expect(ours()[0].download.resuming).toBe(false)
+    })
+
+    it('notices a resumed part from its first progress line, when the file goes outside the folder it looked at', async () => {
       const { service, report, progress } = setup({
         respond: () => ({
-          stdout: [DEST_LINE, '[freetube]progress downloading 1977751871 5000000000 NA 8000000 380 401 av01 none', ''].join('\n'),
+          stdout: [
+            `[freetube]dest 401+251 ${DOWNLOADS}/Channel/A video [dQw4w9WgXcQ].webm`,
+            '[freetube]progress downloading 1977751871 5000000000 NA 8000000 380 401 av01 none',
+            '',
+          ].join('\n'),
           hang: true,
         }),
       })

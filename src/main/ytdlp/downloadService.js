@@ -226,7 +226,15 @@ export function createDownloadService(deps) {
       return
     }
 
-    run(download, tools['yt-dlp'].path, command, report)
+    // What the folder held before yt-dlp could add anything, to tell a
+    // resumed download from a fresh one once it names the file: yt-dlp
+    // creates its .part moments after naming it, too soon to look then
+    let before = null
+    try {
+      before = await listDirectory(download.folder)
+    } catch {}
+
+    run(download, tools['yt-dlp'].path, command, before, report)
   }
 
   /**
@@ -268,9 +276,10 @@ export function createDownloadService(deps) {
    * @param {DownloadSnapshot} download
    * @param {string} executable
    * @param {{ args: string[], extraEnv: Record<string, string> }} command
+   * @param {string[] | null} before what the download folder held before spawning
    * @param {(outcome: DownloadOutcome) => void} report
    */
-  function run(download, executable, { args, extraEnv }, report) {
+  function run(download, executable, { args, extraEnv }, before, report) {
     const { videoId, title } = download
 
     let child
@@ -299,6 +308,8 @@ export function createDownloadService(deps) {
     let lastSent = 0
     /** Parts seen so far, by format id, in the order they started */
     const partOrder = []
+    /** Whether the partial files were checked; if not, a first progress line decides */
+    let resumeChecked = false
 
     const snapshot = () => ({ ...download })
 
@@ -343,15 +354,20 @@ export function createDownloadService(deps) {
       }
 
       switch (parsed.kind) {
-        case 'dest':
+        case 'dest': {
           download.destination = parsed.path
           download.parts = parsed.formatIds.length > 0 ? parsed.formatIds.length : null
-          detectResume(parsed.path).then((resuming) => {
-            download.resuming ||= resuming
-            sendProgress(true)
-            announce()
-          })
+
+          const resuming = hasPartialFiles(parsed.path, download.folder, before)
+          if (resuming !== null) {
+            resumeChecked = true
+            download.resuming = resuming
+          }
+
+          sendProgress(true)
+          announce()
           break
+        }
 
         case 'progress': {
           let index = partOrder.indexOf(parsed.formatId)
@@ -361,8 +377,9 @@ export function createDownloadService(deps) {
             index = partOrder.length - 1
 
             // A part that starts with bytes already there was carried on
-            // from an earlier attempt
-            if (parsed.status === 'downloading' && (parsed.downloadedBytes ?? 0) >= RESUMED_BYTES) {
+            // from an earlier attempt: the fallback, for a file saved where
+            // the folder listing does not reach
+            if (!resumeChecked && parsed.status === 'downloading' && (parsed.downloadedBytes ?? 0) >= RESUMED_BYTES) {
               download.resuming = true
             }
           }
@@ -448,29 +465,32 @@ export function createDownloadService(deps) {
   }
 
   /**
-   * Whether earlier partial files for this destination are there: the final
-   * file's own `.part`, or the per-format files yt-dlp merges from, finished
-   * or not.
+   * Whether earlier partial files for this destination were there before
+   * yt-dlp started: the final file's own `.part`, or the per-format files
+   * yt-dlp merges from, finished or not. Null when there is no telling: no
+   * listing, or a destination outside the folder listed (a custom output
+   * template with folders of its own).
    *
    * @param {string} destination
+   * @param {string} folder
+   * @param {string[] | null} before
+   * @returns {boolean | null}
    */
-  async function detectResume(destination) {
-    try {
-      const dir = pathModule.dirname(destination)
-      const base = pathModule.basename(destination)
-      const stem = base.slice(0, base.length - pathModule.extname(base).length)
-      const names = await listDirectory(dir)
-
-      return names.some((name) => {
-        if (name === base || !name.startsWith(`${stem}.`)) {
-          return false
-        }
-        const tail = name.slice(stem.length)
-        return tail.endsWith('.part') || /^\.f[\w-]+\.\w+$/.test(tail)
-      })
-    } catch {
-      return false
+  function hasPartialFiles(destination, folder, before) {
+    if (before === null || pathModule.resolve(pathModule.dirname(destination)) !== pathModule.resolve(folder)) {
+      return null
     }
+
+    const base = pathModule.basename(destination)
+    const stem = base.slice(0, base.length - pathModule.extname(base).length)
+
+    return before.some((name) => {
+      if (name === base || !name.startsWith(`${stem}.`)) {
+        return false
+      }
+      const tail = name.slice(stem.length)
+      return tail.endsWith('.part') || /^\.f[\w-]+\.\w+$/.test(tail)
+    })
   }
 
   /**
