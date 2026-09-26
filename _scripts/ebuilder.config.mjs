@@ -61,6 +61,10 @@ export default {
     // One image per size, so the sizes of 32 and below get the simpler
     // design drawn for them rather than the full one scaled down
     icon: '_icons/linux',
+    // Names the desktop entry and its StartupWMClass after package.json's
+    // desktopName, which Electron also takes as the window's app id, so the
+    // desktop can tell which entry, and which icon, a running window belongs to
+    syncDesktopName: true,
     target: ['deb', 'zip', '7z', 'rpm', 'AppImage', 'pacman'], // 'flatpak'],
   },
   // See the following issues for more information
