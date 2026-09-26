@@ -185,6 +185,21 @@
         >
           {{ t('Channels.Overview.Open a Profile') }}
         </p>
+        <!-- Where the suggestions would be, when there are none: why, and how to get some -->
+        <section
+          v-if="suggestions !== null && suggestions.proposals.length === 0"
+          key="no-suggestions"
+          class="noSuggestions"
+          aria-labelledby="noSuggestionsHeading"
+        >
+          <h3 id="noSuggestionsHeading">
+            {{ t('Channels.Overview.Suggestions.None Title') }}
+          </h3>
+          <p>{{ t('Channels.Overview.Suggestions.None How') }}</p>
+          <p>{{ t('Channels.Overview.Suggestions.None Why', suggestions.coverage) }}</p>
+          <p>{{ t('Channels.Overview.Suggestions.None Seed') }}</p>
+          <p>{{ t('Channels.Overview.Suggestions.None Rejected') }}</p>
+        </section>
       </TransitionGroup>
     </template>
     <ChannelsOverviewMenu

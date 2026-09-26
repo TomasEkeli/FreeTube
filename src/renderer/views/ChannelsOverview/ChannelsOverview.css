@@ -158,6 +158,28 @@
   align-self: center;
 }
 
+/* A few paragraphs, readably narrow, in the middle of the space the
+   suggestions would have taken */
+.noSuggestions {
+  flex: 1 1 0;
+  align-self: center;
+  max-inline-size: 60ch;
+  margin-inline: auto;
+  padding-inline: 24px;
+  color: var(--tertiary-text-color);
+  line-height: 1.5;
+}
+
+.noSuggestions h3 {
+  margin-block: 0 12px;
+  color: var(--primary-text-color);
+  font-size: 18px;
+}
+
+.noSuggestions p {
+  margin-block: 0 10px;
+}
+
 @media only screen and (width <= 680px) {
   .channelsOverview {
     inline-size: 100%;
