@@ -209,6 +209,12 @@ class TarReader {
   async startEntry(header, onEntry) {
     const typeFlag = String.fromCharCode(header[156])
     const size = parseSize(header.subarray(124, 136))
+
+    // Garbage rather than a header: stop, rather than misread what follows
+    if (!Number.isSafeInteger(size) || size < 0 || !checksumMatches(header)) {
+      throw new Error('The archive is corrupt')
+    }
+
     const padding = (BLOCK - (size % BLOCK)) % BLOCK
 
     // Headers whose contents are the name, or the attributes, of the next entry
@@ -305,10 +311,29 @@ class TarReader {
 function headerName(header) {
   const decoder = new TextDecoder()
   const name = decoder.decode(header.subarray(0, 100)).replace(/\0.*$/s, '')
-  const isUstar = decoder.decode(header.subarray(257, 262)) === 'ustar'
-  const prefix = isUstar ? decoder.decode(header.subarray(345, 500)).replace(/\0.*$/s, '') : ''
+  // POSIX ustar only: GNU's "ustar  " keeps other things where the prefix goes
+  const isPosixUstar = decoder.decode(header.subarray(257, 265)) === 'ustar\u000000'
+  const prefix = isPosixUstar ? decoder.decode(header.subarray(345, 500)).replace(/\0.*$/s, '') : ''
 
   return prefix ? `${prefix}/${name}` : name
+}
+
+/**
+ * The header's own checksum: the sum of its bytes, with the checksum field
+ * counted as spaces.
+ *
+ * @param {Uint8Array} header
+ */
+function checksumMatches(header) {
+  const field = new TextDecoder().decode(header.subarray(148, 156)).replace(/\0.*$/s, '').trim()
+  const stored = /^[0-7]+$/.test(field) ? Number.parseInt(field, 8) : Number.NaN
+
+  let sum = 0
+  for (let index = 0; index < BLOCK; index++) {
+    sum += index >= 148 && index < 156 ? 0x20 : header[index]
+  }
+
+  return sum === stored
 }
 
 /**

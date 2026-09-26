@@ -55,7 +55,7 @@ function setup({ respond = () => ({}), executables = ON_PATH, broken = [], setti
   })
 
   const report = outcome => outcomes.push(outcome)
-  const downloads = () => fake.calls.filter(call => call.command !== 'taskkill' && !isVersionProbe(call.args))
+  const downloads = () => fake.calls.filter(call => !call.command.endsWith('taskkill.exe') && !isVersionProbe(call.args))
 
   return { service, fake, outcomes, report, downloads }
 }
@@ -134,11 +134,24 @@ describe('download service', () => {
       await until(() => outcomes.length >= 2)
 
       const { args } = downloads()[0]
-      expect(args[args.indexOf('--proxy') + 1]).toBe('socks5://10.0.0.2:1080')
+      // socks5h, so that yt-dlp looks names up through the proxy, not beside it
+      expect(args[args.indexOf('--proxy') + 1]).toBe('socks5h://10.0.0.2:1080')
       expect(args.indexOf('--proxy')).toBeLessThan(args.indexOf('--'))
     })
 
-    it('passes the proxy credentials for an HTTP proxy', async () => {
+    it('passes a socks4 proxy as socks4a, for the same reason', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        settings: { useProxy: true, proxyProtocol: 'socks4', proxyHostname: '10.0.0.2', proxyPort: '1080' },
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args[args.indexOf('--proxy') + 1]).toBe('socks4a://10.0.0.2:1080')
+    })
+
+    it('passes an HTTP proxy with credentials through the environment, keeping the password off the command line', async () => {
       const { service, report, downloads, outcomes } = setup({
         settings: {
           useProxy: true,
@@ -153,8 +166,11 @@ describe('download service', () => {
       await service.start(REQUEST, report)
       await until(() => outcomes.length >= 2)
 
-      const { args } = downloads()[0]
-      expect(args[args.indexOf('--proxy') + 1]).toBe('http://me:p%40ss%3Aword@proxy.lan:3128')
+      const { args, options } = downloads()[0]
+      expect(args).not.toContain('--proxy')
+      expect(args.join(' ')).not.toContain('p%40ss')
+      expect(options.env.HTTPS_PROXY).toBe('http://me:p%40ss%3Aword@proxy.lan:3128')
+      expect(options.env.HTTP_PROXY).toBe('http://me:p%40ss%3Aword@proxy.lan:3128')
     })
 
     it('passes no proxy when FreeTube\'s proxy is off', async () => {
@@ -390,6 +406,18 @@ describe('download service', () => {
   })
 
   describe('quitting', () => {
+    it('never starts a download that was still being prepared', async () => {
+      const { service, report, outcomes, downloads } = setup({ respond: () => ({ hang: true }) })
+
+      const starting = service.start(REQUEST, report)
+      service.stopAll()
+      await starting
+
+      expect(downloads()).toHaveLength(0)
+      expect(outcomes).toEqual([])
+      expect(service.isBusy()).toBe(false)
+    })
+
     it('terminates the running children, and reports nothing for them', async () => {
       const { service, report, outcomes, downloads } = setup({ respond: () => ({ hang: true }) })
 

@@ -166,10 +166,11 @@ const STALL_MS = 30_000
  * @param {string} deps.platform
  * @param {string} deps.arch
  * @param {typeof import('node:child_process').spawn} [deps.spawn] for updating yt-dlp
+ * @param {Record<string, string | undefined>} [deps.env] for updating yt-dlp
  * @param {(progress: InstallProgress) => void} [deps.onProgress]
  * @param {number} [deps.stallMs]
  */
-export function createToolInstaller({ fetch, fs, detector, managedDir, platform, arch, spawn, onProgress = () => {}, stallMs = STALL_MS }) {
+export function createToolInstaller({ fetch, fs, detector, managedDir, platform, arch, spawn, env = {}, onProgress = () => {}, stallMs = STALL_MS }) {
   const pathModule = platform === 'win32' ? path.win32 : path.posix
 
   /** @type {Promise<InstallResult> | null} */
@@ -200,19 +201,19 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
    * @returns {Promise<InstallResult>}
    */
   async function installMissing() {
-    const before = await detector.detect({ fresh: true })
-    const missing = TOOLS.filter(tool => !before[tool].found)
-    const installable = missing.filter(tool => chooseAsset(tool, platform, arch) !== null)
-    const notCovered = missing.filter(tool => !installable.includes(tool))
-
-    // Something is missing, and none of it can be fetched for this platform:
-    // the viewer is told what to install instead
-    if (missing.length > 0 && installable.length === 0) {
-      return { ok: false, error: 'unsupported', notCovered }
-    }
-
     let current = null
     try {
+      const before = await detector.detect({ fresh: true })
+      const missing = TOOLS.filter(tool => !before[tool].found)
+      const installable = missing.filter(tool => chooseAsset(tool, platform, arch) !== null)
+      const notCovered = missing.filter(tool => !installable.includes(tool))
+
+      // Something is missing, and none of it can be fetched for this
+      // platform: the viewer is told what to install instead
+      if (missing.length > 0 && installable.length === 0) {
+        return { ok: false, error: 'unsupported', notCovered }
+      }
+
       if (installable.length > 0) {
         await fs.mkdir(managedDir)
       }
@@ -221,13 +222,15 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
         current = tool
         await installTool(tool, chooseAsset(tool, platform, arch))
       }
+
+      current = null
+      detector.invalidate()
+      return { ok: true, installed: installable, notCovered, statuses: await detector.detect({ fresh: true }) }
     } catch (error) {
       return { ok: false, error: 'failed', tool: current, reason: String(error?.message ?? error) }
     } finally {
       detector.invalidate()
     }
-
-    return { ok: true, installed: installable, notCovered, statuses: await detector.detect({ fresh: true }) }
   }
 
   /**
@@ -285,6 +288,9 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
    * @param {{ temporary: string, destination: string }[]} files
    */
   async function placeExecutables(files) {
+    /** @type {string[]} */
+    const placed = []
+
     try {
       for (const { temporary } of files) {
         await fs.chmod(temporary, 0o755)
@@ -292,7 +298,12 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
 
       for (const { temporary, destination } of files) {
         await fs.rename(temporary, destination)
+        placed.push(destination)
       }
+    } catch (error) {
+      // Not half a set: ffmpeg without the ffprobe beside it
+      await Promise.all(placed.map(destination => fs.rm(destination)))
+      throw error
     } finally {
       await Promise.all(files.map(({ temporary }) => fs.rm(temporary)))
     }
@@ -377,33 +388,69 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
     })
   }
 
+  /** @type {Promise<UpdateResult> | null} */
+  let updating = null
+
   /**
    * Runs yt-dlp's own self-update on the yt-dlp that downloads use, which
-   * keeps the channel it came from: nightly, for the managed copy.
+   * keeps the channel it came from: nightly, for the managed copy. Asking
+   * again while it runs joins it.
    *
+   * @param {{ args: string[], env: Record<string, string> }} [proxy] FreeTube's proxy, as `ytDlpProxy` gives it
    * @returns {Promise<UpdateResult>}
    */
-  async function updateYtDlp() {
-    const ytDlp = (await detector.detect({ fresh: true }))['yt-dlp']
-
-    if (!ytDlp.found) {
-      return { status: 'missing' }
+  function updateYtDlp(proxy = { args: [], env: {} }) {
+    if (updating === null) {
+      updating = selfUpdate(proxy).finally(() => {
+        updating = null
+      })
     }
 
-    const { code, stdout, stderr, error } = await runCapture(spawn, ytDlp.path, ['-U'], { timeoutMs: UPDATE_TIMEOUT_MS })
-    detector.invalidate()
-
-    const outcome = interpretUpdate({ code, stdout, stderr, error })
-
-    if (outcome.status === 'updated' || outcome.status === 'current') {
-      const after = (await detector.detect({ fresh: true }))['yt-dlp']
-      return { ...outcome, version: after.version ?? outcome.version }
-    }
-
-    return outcome
+    return updating
   }
 
-  return { install, isInstalling, updateYtDlp }
+  /**
+   * @param {{ args: string[], env: Record<string, string> }} proxy
+   * @returns {Promise<UpdateResult>}
+   */
+  async function selfUpdate(proxy) {
+    try {
+      const ytDlp = (await detector.detect({ fresh: true }))['yt-dlp']
+
+      if (!ytDlp.found) {
+        return { status: 'missing' }
+      }
+
+      const { code, stdout, stderr, error } = await runCapture(spawn, ytDlp.path, [...proxy.args, '-U'], {
+        timeoutMs: UPDATE_TIMEOUT_MS,
+        env: Object.keys(proxy.env).length > 0 ? { ...env, ...proxy.env } : undefined,
+      })
+      detector.invalidate()
+
+      const outcome = interpretUpdate({ code, stdout, stderr, error })
+
+      if (outcome.status === 'updated' || outcome.status === 'current') {
+        const after = (await detector.detect({ fresh: true }))['yt-dlp']
+        return { ...outcome, version: after.version ?? outcome.version }
+      }
+
+      return outcome
+    } catch (error) {
+      return { status: 'failed', reason: String(error?.message ?? error) }
+    }
+  }
+
+  /**
+   * An install or an update in progress, for a download to wait on: neither
+   * may have yt-dlp replaced under it.
+   *
+   * @returns {Promise<unknown> | null}
+   */
+  function pendingWork() {
+    return running ?? updating
+  }
+
+  return { install, isInstalling, updateYtDlp, pendingWork }
 }
 
 // The self-update downloads the whole binary again

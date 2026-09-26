@@ -8,6 +8,7 @@ import { IpcChannels } from '../../constants'
 import { settings } from '../../datastores/handlers/base'
 import { isFreeTubeUrl } from '../utils'
 import { createDownloadService, isValidVideoId } from './downloadService'
+import { ytDlpProxy } from './proxy'
 import { createSettingsReader } from './settings'
 import { createToolDetector } from './toolDetection'
 import { createToolInstaller, installCoverage } from './toolInstaller'
@@ -59,6 +60,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     platform: process.platform,
     arch: process.arch,
     spawn,
+    env: process.env,
     onProgress: (progress) => {
       broadcastToFreeTube(IpcChannels.YTDLP_INSTALL_PROGRESS, progress)
     },
@@ -80,7 +82,9 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       return
     }
 
-    startDownload(event.sender, payload.videoId, payload.title)
+    startDownload(event.sender, payload.videoId, payload.title).catch((error) => {
+      console.error('yt-dlp download could not start', error)
+    })
   })
 
   const coverage = installCoverage(process.platform, process.arch)
@@ -110,10 +114,12 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     }
 
     // A press during an install waits for it rather than being told the
-    // tools are missing, then goes ahead
-    if (installer.isInstalling()) {
+    // tools are missing, and one during an update waits rather than have
+    // yt-dlp replaced under it; then it goes ahead
+    const pending = installer.pendingWork()
+    if (pending !== null) {
       report({ type: 'waiting-for-install', ...request })
-      await installer.install()
+      await pending
     }
 
     await downloadService.start(request, report)
@@ -189,7 +195,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       return { status: 'busy' }
     }
 
-    return await installer.updateYtDlp()
+    return await installer.updateYtDlp(await ytDlpProxy(readSetting))
   })
 
   ipcMain.handle(IpcChannels.YTDLP_INSTALL_TOOLS, async (event, payload) => {
@@ -204,7 +210,9 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     // asked for, once the install has succeeded
     const download = payload?.thenDownload
     if (result.ok && download != null && isValidVideoId(download.videoId) && await readSetting('ytDlpEnabled')) {
-      startDownload(event.sender, download.videoId, download.title)
+      startDownload(event.sender, download.videoId, download.title).catch((error) => {
+        console.error('yt-dlp download could not start', error)
+      })
     }
 
     return result

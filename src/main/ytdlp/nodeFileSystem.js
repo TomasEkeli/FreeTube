@@ -25,7 +25,13 @@ export const nodeFileSystem = {
     const handle = await fs.open(filePath, 'w')
     return {
       write: async (chunk) => {
-        await handle.write(chunk)
+        // A short write is possible, and would otherwise leave a file shorter
+        // than the bytes that were checked
+        let offset = 0
+        while (offset < chunk.length) {
+          const { bytesWritten } = await handle.write(chunk, offset, chunk.length - offset)
+          offset += bytesWritten
+        }
       },
       close: () => handle.close(),
     }

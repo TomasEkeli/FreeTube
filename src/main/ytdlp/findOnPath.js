@@ -32,6 +32,11 @@ export async function findOnPath(name, { platform, env, isExecutableFile }) {
     // Quoted entries are legal on Windows
     const unquoted = directory.replace(/^"(.*)"$/, '$1')
 
+    // A relative entry means whatever the working directory holds
+    if (!pathModule.isAbsolute(unquoted)) {
+      continue
+    }
+
     for (const extension of extensions) {
       const candidate = pathModule.join(unquoted, name + extension)
 

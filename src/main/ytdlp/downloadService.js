@@ -1,4 +1,6 @@
-import { buildProxyUrl } from '../utils'
+import path from 'node:path'
+
+import { ytDlpProxy } from './proxy'
 import { parseCustomArgs } from './settings'
 import { createToolDetector, TOOLS } from './toolDetection'
 
@@ -69,6 +71,9 @@ export function createDownloadService(deps) {
   /** @type {Set<import('node:child_process').ChildProcess>} */
   const stopped = new Set()
 
+  /** Set on quit, so that a download still being prepared is never started */
+  let stopping = false
+
   /**
    * The last finished file per video id, so that "show in folder" can be asked
    * for by id and never by a path the renderer supplies.
@@ -89,12 +94,12 @@ export function createDownloadService(deps) {
     running.set(videoId, null)
 
     let tools
-    let args
+    let command
     let folder
     try {
       tools = await detector.detect()
       folder = (await readSetting('ytDlpDownloadFolder')) || defaultDownloadFolder()
-      args = await buildArgs({ videoId, folder, tools })
+      command = await buildCommand({ videoId, folder, tools })
     } catch (error) {
       running.delete(videoId)
       report({ type: 'failed', videoId, title, reason: String(error?.message ?? error), exitCode: null })
@@ -111,9 +116,12 @@ export function createDownloadService(deps) {
       return
     }
 
-    const executable = tools['yt-dlp'].path
+    if (stopping) {
+      running.delete(videoId)
+      return
+    }
 
-    run({ videoId, title, executable, args, folder }, report)
+    run({ videoId, title, executable: tools['yt-dlp'].path, ...command, folder }, report)
   }
 
   /**
@@ -121,8 +129,9 @@ export function createDownloadService(deps) {
    * arguments, then the end-of-options marker and the URL.
    *
    * @param {{ videoId: string, folder: string, tools: import('./toolDetection').ToolStatuses }} options
+   * @returns {Promise<{ args: string[], extraEnv: Record<string, string> }>}
    */
-  async function buildArgs({ videoId, folder, tools }) {
+  async function buildCommand({ videoId, folder, tools }) {
     const args = [
       '--paths', `home:${folder}`,
       // Printed once the file is in its final place, so that the finished
@@ -142,31 +151,20 @@ export function createDownloadService(deps) {
 
     // Through the same proxy as the rest of FreeTube, so that downloading
     // does not step around the privacy setup
-    if (await readSetting('useProxy')) {
-      const protocol = await readSetting('proxyProtocol')
-      const withCredentials = protocol === 'http' || protocol === 'https'
-
-      args.push('--proxy', buildProxyUrl({
-        protocol,
-        hostname: await readSetting('proxyHostname'),
-        port: await readSetting('proxyPort'),
-        username: withCredentials ? await readSetting('proxyUsername') : '',
-        password: withCredentials ? await readSetting('proxyPassword') : '',
-      }))
-    }
+    const proxy = await ytDlpProxy(readSetting)
 
     const customArgs = parseCustomArgs(await readSetting('ytDlpCustomArgs'))
 
-    args.push(...customArgs, '--', buildWatchUrl(videoId))
+    args.push(...proxy.args, ...customArgs, '--', buildWatchUrl(videoId))
 
-    return args
+    return { args, extraEnv: proxy.env }
   }
 
   /**
-   * @param {{ videoId: string, title: string, executable: string, args: string[], folder: string }} job
+   * @param {{ videoId: string, title: string, executable: string, args: string[], extraEnv: Record<string, string>, folder: string }} job
    * @param {(outcome: DownloadOutcome) => void} report
    */
-  function run({ videoId, title, executable, args, folder }, report) {
+  function run({ videoId, title, executable, args, extraEnv, folder }, report) {
     let child
     try {
       child = spawn(executable, args, {
@@ -175,7 +173,7 @@ export function createDownloadService(deps) {
         // Its own process group on POSIX, so that stopping it on quit reaches
         // the ffmpeg it may have started as well.
         detached: platform !== 'win32',
-        env: { ...env, PYTHONIOENCODING: 'utf-8' },
+        env: { ...env, ...extraEnv, PYTHONIOENCODING: 'utf-8' },
       })
     } catch {
       running.delete(videoId)
@@ -244,8 +242,10 @@ export function createDownloadService(deps) {
    */
   function terminate(child) {
     if (platform === 'win32' && child.pid) {
-      // The whole tree, since yt-dlp may be running ffmpeg
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+      // The whole tree, since yt-dlp may be running ffmpeg. By its full path,
+      // rather than whatever PATH offers under that name.
+      const taskkill = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe')
+      spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
       return
     }
 
@@ -264,6 +264,8 @@ export function createDownloadService(deps) {
    * next attempt at the same video resumes rather than starting over.
    */
   function stopAll() {
+    stopping = true
+
     for (const child of running.values()) {
       if (child) {
         stopped.add(child)
@@ -286,6 +288,8 @@ export function createDownloadService(deps) {
   return { start, stopAll, isBusy, getFinished, detector }
 }
 
+const MAX_LINE_LENGTH = 64 * 1024
+
 /**
  * @param {import('node:stream').Readable | null} stream
  * @param {(line: string) => void} onLine
@@ -299,9 +303,11 @@ function readLines(stream, onLine) {
   stream.setEncoding('utf8')
 
   stream.on('data', (chunk) => {
-    buffered += chunk
-    const lines = buffered.split(/\r?\n/)
-    buffered = lines.pop()
+    // A carriage return alone ends a line too: progress output, should custom
+    // arguments turn it back on, is a stream of them
+    const lines = (buffered + chunk).split(/\r\n|\r|\n/)
+    // Bounded, in case something writes on and on without ending a line
+    buffered = lines.pop().slice(-MAX_LINE_LENGTH)
 
     for (const line of lines) {
       if (line.trim().length > 0) {

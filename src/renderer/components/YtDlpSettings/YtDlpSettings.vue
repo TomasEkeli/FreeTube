@@ -336,7 +336,14 @@ function clearFolder() {
 }
 
 /** @type {import('vue').ComputedRef<string[]>} */
-const customArgs = computed(() => JSON.parse(store.getters.getYtDlpCustomArgs))
+const customArgs = computed(() => {
+  try {
+    const parsed = JSON.parse(store.getters.getYtDlpCustomArgs)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+})
 
 const showCustomArgs = ref(true)
 

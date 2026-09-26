@@ -405,6 +405,23 @@ describe('tool installer', () => {
       })
     })
 
+    it('goes through FreeTube\'s proxy', async () => {
+      const { installer, fake } = setupUpdate({ stdout: 'yt-dlp is up to date (nightly@2026.08.30.232658)\n', exitCode: 0 })
+
+      await installer.updateYtDlp({ args: ['--proxy', 'socks5h://127.0.0.1:9050'], env: {} })
+
+      expect(fake.calls[0].args).toEqual(['--proxy', 'socks5h://127.0.0.1:9050', '-U'])
+    })
+
+    it('joins an update already running instead of starting another', async () => {
+      const { installer, fake } = setupUpdate({ stdout: 'yt-dlp is up to date (nightly@2026.08.30.232658)\n', exitCode: 0 })
+
+      const [first, second] = await Promise.all([installer.updateYtDlp(), installer.updateYtDlp()])
+
+      expect(first).toBe(second)
+      expect(fake.calls).toHaveLength(1)
+    })
+
     it('says there is nothing to update when there is no yt-dlp', async () => {
       const { installer, fake } = setupUpdate(null)
 
