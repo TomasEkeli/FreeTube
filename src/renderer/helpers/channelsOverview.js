@@ -644,3 +644,145 @@ export function deselectAll(selection, columns) {
 
   return next
 }
+
+/**
+ * Profiles in the user's own order: the primary profile first, then those the
+ * stored order names, as it names them, then any it does not name,
+ * alphabetically. An empty order is therefore plain alphabetical order, which
+ * is what every list of profiles showed before there was an order to keep.
+ * The order is a setting, and trusted for nothing: a deleted profile in it is
+ * skipped, a repeated one counts at its first place.
+ * @param {Profile[]} profileList
+ * @param {unknown} order
+ * @param {Intl.Collator} collator
+ * @returns {Profile[]} a new array
+ */
+export function orderProfiles(profileList, order, collator) {
+  const byId = new Map(profileList.map(profile => [profile._id, profile]))
+  const placed = new Set([MAIN_PROFILE_ID])
+  const ordered = byId.has(MAIN_PROFILE_ID) ? [byId.get(MAIN_PROFILE_ID)] : []
+
+  if (Array.isArray(order)) {
+    for (const id of order) {
+      if (typeof id !== 'string' || placed.has(id) || !byId.has(id)) { continue }
+
+      placed.add(id)
+      ordered.push(byId.get(id))
+    }
+  }
+
+  const rest = profileList
+    .filter(profile => !placed.has(profile._id))
+    .sort((a, b) => collator.compare((a.name ?? '').normalize('NFC'), (b.name ?? '').normalize('NFC')))
+
+  return [...ordered, ...rest]
+}
+
+/**
+ * The order as it is stored: every profile but the primary one.
+ * @param {Profile[]} profileList in order
+ * @returns {string[]}
+ */
+export function profileOrderIds(profileList) {
+  return nonPrimaryProfiles(profileList).map(profile => profile._id)
+}
+
+/**
+ * The order to store once a profile is created: every profile as it is shown
+ * now, then the new one. Written out in full, as appending to the stored order
+ * alone would put the new profile ahead of every profile it does not name yet.
+ * @param {Profile[]} orderedProfiles as the store's getProfileList has them
+ * @param {string} newProfileId
+ * @returns {string[]}
+ */
+export function appendToOrder(orderedProfiles, newProfileId) {
+  return [...profileOrderIds(orderedProfiles).filter(id => id !== newProfileId), newProfileId]
+}
+
+/**
+ * @param {string[]} orderedIds
+ * @param {string} id
+ * @param {number} toIndex its place in the list without it
+ * @returns {string[]} a new array, or `orderedIds` itself when nothing moves,
+ * so that a caller can tell there is nothing to save
+ */
+export function moveInOrder(orderedIds, id, toIndex) {
+  const from = orderedIds.indexOf(id)
+
+  if (from === -1) { return orderedIds }
+
+  const rest = orderedIds.filter(other => other !== id)
+  const to = Math.max(0, Math.min(toIndex, rest.length))
+
+  if (to === from) { return orderedIds }
+
+  return [...rest.slice(0, to), id, ...rest.slice(to)]
+}
+
+/**
+ * A colour for a new profile that no profile has yet, the primary one
+ * included, as its colour is shown in the top bar. Compared without regard to
+ * case, as the colour picker and the list of colours write hex differently.
+ * Any of the colours once every one is taken.
+ * @param {string[]} colourValues
+ * @param {Profile[]} profileList
+ * @param {() => number} [random]
+ * @returns {string}
+ */
+export function pickUnusedColour(colourValues, profileList, random = Math.random) {
+  const used = new Set(profileList.map(profile => profile.bgColor?.toLowerCase()))
+  const unused = colourValues.filter(colour => !used.has(colour.toLowerCase()))
+  const choices = unused.length > 0 ? unused : colourValues
+
+  return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))]
+}
+
+/**
+ * Where a bubble dragged along the palette would land: the index of the bubble
+ * it would go in front of, or the number of bubbles for after the last. The
+ * strip wraps, so the row comes first: the first whose bottom is below the
+ * pointer, or the last. Within it, in front of the first bubble whose middle
+ * is past the pointer, in the reading direction.
+ * @param {{ left: number, right: number, top: number, bottom: number }[]} rects the bubbles', in order
+ * @param {{ x: number, y: number }} point
+ * @param {boolean} rtl
+ * @returns {number}
+ */
+export function insertionIndex(rects, point, rtl) {
+  if (rects.length === 0) { return 0 }
+
+  const rows = []
+
+  rects.forEach((rect, index) => {
+    const row = rows[rows.length - 1]
+
+    if (row && Math.abs(row.top - rect.top) < 1) {
+      row.end = index
+      row.bottom = Math.max(row.bottom, rect.bottom)
+    } else {
+      rows.push({ start: index, end: index, top: rect.top, bottom: rect.bottom })
+    }
+  })
+
+  const row = rows.find(candidate => point.y < candidate.bottom) ?? rows[rows.length - 1]
+
+  for (let i = row.start; i <= row.end; i++) {
+    const middle = (rects[i].left + rects[i].right) / 2
+
+    if (rtl ? point.x > middle : point.x < middle) { return i }
+  }
+
+  return row.end + 1
+}
+
+/**
+ * A drop's insertion index as a place in the order without the dragged
+ * profile, which is what moveInOrder takes: in front of a later bubble is one
+ * place earlier once the dragged one is out of the way.
+ * @param {number} fromIndex
+ * @param {number} insertion
+ * @returns {number}
+ */
+export function moveTarget(fromIndex, insertion) {
+  return insertion > fromIndex ? insertion - 1 : insertion
+}

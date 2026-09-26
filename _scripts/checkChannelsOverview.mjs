@@ -11,18 +11,25 @@
  */
 
 import {
+  appendToOrder,
   assignCalloutColours,
   channelMemberships,
   countTransferred,
   deselectAll,
   duplicateCounts,
   filterChannels,
+  insertionIndex,
   isDuplicate,
   isSelected,
+  moveInOrder,
+  moveTarget,
   nonPrimaryProfiles,
   normaliseQuery,
+  orderProfiles,
+  pickUnusedColour,
   planTransfer,
   planUnsubscribe,
+  profileOrderIds,
   profilesOutsideHome,
   pruneSelection,
   restoreOpenProfiles,
@@ -329,6 +336,95 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 
   const many = assignCalloutColours([['1', '2', '3'], ['1', '2', '3']], 2)
   check('the colours start over once all are used', many.get('1') === 0 && many.get('2') === 1 && many.get('3') === 0)
+}
+
+// The user's own order of profiles
+{
+  const list = [
+    profile('p3', 'science', []),
+    profile(MAIN_PROFILE_ID, 'All Channels', []),
+    profile('p1', 'Gaming', []),
+    profile('p2', 'Music', []),
+    profile('p4', 'Art', [])
+  ]
+  const order = stored => ids(orderProfiles(list, stored, collator))
+  const main = MAIN_PROFILE_ID
+
+  check('with no order the profiles are alphabetical, the primary first', order([]) === `${main},p4,p1,p2,p3`)
+  check('the stored order is followed', order(['p3', 'p1', 'p4', 'p2']) === `${main},p3,p1,p4,p2`)
+  check('profiles the order does not name come last, alphabetically', order(['p2']) === `${main},p2,p4,p1,p3`)
+  check('a deleted profile in the order is skipped', order(['gone', 'p2']) === `${main},p2,p4,p1,p3`)
+  check('a profile named twice counts at its first place', order(['p2', 'p1', 'p2']) === `${main},p2,p1,p4,p3`)
+  check('the primary profile is first wherever the order names it', order(['p2', main]) === `${main},p2,p4,p1,p3`)
+  check('an order that is not a list is no order', order('p2') === order([]) && order(null) === order([]))
+  check('things in the order that are not ids are ignored', order([3, null, 'p2', {}]) === `${main},p2,p4,p1,p3`)
+  check('ordering leaves the list alone', list[0]._id === 'p3')
+  check('the order to store leaves out the primary profile', profileOrderIds(orderProfiles(list, [], collator)).join(',') === 'p4,p1,p2,p3')
+}
+
+// A new profile goes at the end
+{
+  const list = [profile(MAIN_PROFILE_ID, 'All Channels', []), profile('p1', 'Gaming', []), profile('p2', 'Art', [])]
+
+  check('over an empty order, after every other', appendToOrder(orderProfiles(list, [], collator), 'new').join(',') === 'p2,p1,new')
+  check('over a partial order, after every other', appendToOrder(orderProfiles(list, ['p1'], collator), 'new').join(',') === 'p1,p2,new')
+  check('a new profile already listed is listed once, last', appendToOrder([...list, profile('new', 'Zed', [])], 'new').join(',') === 'p1,p2,new')
+}
+
+// Moving a profile in the order
+{
+  const order = ['a', 'b', 'c', 'd']
+
+  check('a move to the start', moveInOrder(order, 'c', 0).join(',') === 'c,a,b,d')
+  check('a move to the end', moveInOrder(order, 'b', 3).join(',') === 'a,c,d,b')
+  check('one place later', moveInOrder(order, 'b', 2).join(',') === 'a,c,b,d')
+  check('one place earlier', moveInOrder(order, 'c', 1).join(',') === 'a,c,b,d')
+  check('a move to where it is returns the same list', moveInOrder(order, 'b', 1) === order)
+  check('an id not in the order changes nothing', moveInOrder(order, 'z', 0) === order)
+  check('moving leaves the list alone', order.join(',') === 'a,b,c,d')
+}
+
+// A colour for a new profile
+{
+  const colours = ['#AA0000', '#00BB00', '#0000CC']
+  const coloured = (...bgColors) => bgColors.map((bgColor, i) => ({ ...profile(`p${i}`, `P${i}`, []), bgColor }))
+
+  check('the one colour free is picked, whatever the chance', [0, 0.5, 0.999, 1].every(r => pickUnusedColour(colours, coloured('#AA0000', '#0000CC'), () => r) === '#00BB00'))
+  check('a colour in use in other case is in use', pickUnusedColour(colours, coloured('#aa0000', '#0000cc'), () => 0) === '#00BB00')
+  check('with every colour taken one is still picked', colours.includes(pickUnusedColour(colours, coloured(...colours), () => 0.999)))
+  check('with nothing taken the chance picks', pickUnusedColour(colours, [], () => 0.5) === '#00BB00')
+  check("the primary profile's colour is taken too", pickUnusedColour(colours, [
+    { ...profile(MAIN_PROFILE_ID, 'All Channels', []), bgColor: '#AA0000' },
+    ...coloured('#0000CC')
+  ], () => 0) === '#00BB00')
+}
+
+// Where a dragged bubble lands
+{
+  const rect = (left, top) => ({ left, right: left + 100, top, bottom: top + 80 })
+  // Three on the first row, one wrapped onto the second
+  const rects = [rect(0, 0), rect(100, 0), rect(200, 0), rect(0, 90)]
+
+  check('before the middle of the first bubble is in front of it', insertionIndex(rects, { x: 10, y: 40 }, false) === 0)
+  check('past the middle of the first is in front of the second', insertionIndex(rects, { x: 60, y: 40 }, false) === 1)
+  check('before the middle of the second is in front of it', insertionIndex(rects, { x: 140, y: 40 }, false) === 1)
+  check('past the last on a row is in front of the next row', insertionIndex(rects, { x: 290, y: 40 }, false) === 3)
+  check('the row the pointer is on counts', insertionIndex(rects, { x: 10, y: 120 }, false) === 3)
+  check('past the last bubble is the end', insertionIndex(rects, { x: 90, y: 120 }, false) === 4)
+  check('above every row is the first row', insertionIndex(rects, { x: 10, y: -20 }, false) === 0)
+  check('below every row is the last row', insertionIndex(rects, { x: 90, y: 400 }, false) === 4)
+  check('no bubbles is the start', insertionIndex([], { x: 0, y: 0 }, false) === 0)
+
+  // Right to left, the first bubble is the rightmost
+  const rtl = [rect(200, 0), rect(100, 0), rect(0, 0)]
+  check('right to left, right of the first middle is in front of it', insertionIndex(rtl, { x: 290, y: 40 }, true) === 0)
+  check('right to left, left of the first middle is in front of the second', insertionIndex(rtl, { x: 240, y: 40 }, true) === 1)
+  check('right to left, the far left is the end', insertionIndex(rtl, { x: 10, y: 40 }, true) === 3)
+
+  check('in front of a later bubble lands just before it', moveTarget(1, 3) === 2)
+  check('in front of an earlier bubble lands there', moveTarget(3, 1) === 1)
+  check('in front of itself stays put', moveTarget(2, 2) === 2)
+  check('just after itself stays put', moveTarget(2, 3) === 2)
 }
 
 if (failures > 0) {

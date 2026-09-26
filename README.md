@@ -48,7 +48,9 @@ Drag a channel to another column to move it, or hold Ctrl to copy it. Dropping i
 
 A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to take it out of that profile, or to make that profile its home and take it out of the others. Double-click a channel to go to it, and click a column's heading to make that profile the active one.
 
-Profile settings still handle a profile's name, colour, default and deletion. The channel lists there are gone.
+Make a profile with New profile at the end of the strip and type its name right there. Right-click a bubble to rename it, change its colour or remove it; removing a profile leaves its channels subscribed, and those in no other profile go back to Unassigned. Drag bubbles to put the profiles in your own order, which every list of profiles in the app follows, or move the focused one with Ctrl+Shift+Left and Right. New profiles go at the end.
+
+Profile settings still handle a profile's default. The channel lists there are gone.
 
 ### Explore
 

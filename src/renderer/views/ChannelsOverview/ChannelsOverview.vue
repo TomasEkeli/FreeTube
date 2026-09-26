@@ -1,11 +1,12 @@
 <!--
   The Channels page: where subscriptions are sorted into profiles.
 
-  Every profile is a bubble in the strip at the top, and a few of them at a
-  time are open as columns below. The primary profile is never a column, as it
-  holds every subscription. Its place, pinned leftmost, goes to the channels no
-  other profile has claimed, and that column is there to be emptied: once it
-  is, it goes away, and it only comes back when something new lands in it.
+  Every profile is a bubble in the strip at the top, where profiles are also
+  made, renamed, recoloured and put in order, and a few of them at a time are
+  open as columns below. The primary profile is never a column, as it holds
+  every subscription. Its place, pinned leftmost, goes to the channels no other
+  profile has claimed, and that column is there to be emptied: once it is, it
+  goes away, and it only comes back when something new lands in it.
 -->
 <template>
   <div class="channelsOverview">
@@ -23,22 +24,26 @@
     <template v-else>
       <FtCard class="paletteCard">
         <ChannelsOverviewPalette
-          v-if="profiles.length > 0"
           :profiles="profiles"
           :open-profile-ids="openProfileIds"
           :match-counts="matchCounts"
           :duplicate-counts="duplicateCountsByProfile"
+          :draft="draft"
+          :renaming-profile-id="renamingProfileId"
           @toggle="toggleColumn"
           @drop-channels="fileChannelsFromPalette"
+          @new-profile="startDraft"
+          @commit-draft="commitDraft"
+          @cancel-draft="cancelDraft"
+          @rename="finishRename"
+          @menu="openProfileMenu"
+          @reorder="reorder"
         />
         <p
-          v-else
+          v-if="profiles.length === 0 && draft === null"
           class="message"
         >
-          {{ t('Channels.Overview.No Profiles') }}
-          <RouterLink to="/settings/profile">
-            {{ t('Channels.Overview.Create Profiles') }}
-          </RouterLink>
+          {{ t('Channels.Overview.No Profiles Yet') }}
         </p>
       </FtCard>
       <div
@@ -161,6 +166,23 @@
       @choose="chooseFromContextMenu"
       @close="closeContextMenu"
     />
+    <ChannelsOverviewMenu
+      v-if="profileMenu !== null"
+      :label="profileMenu.name"
+      :items="profileMenuItems"
+      :anchor="profileMenu.anchor"
+      focus-first
+      @choose="chooseFromProfileMenu"
+      @close="closeProfileMenu"
+    />
+    <ChannelsOverviewColourMenu
+      v-if="colourMenu !== null"
+      :label="t('Channels.Overview.Profile Colours', { profile: colourMenu.name })"
+      :current="colourMenu.bgColor"
+      :anchor="colourMenu.anchor"
+      @choose="chooseColour"
+      @close="closeColourMenu"
+    />
     <FtPrompt
       v-if="unsubscribeChannelIds.length > 0"
       :label="t('Channels.Overview.Unsubscribe Prompt', { count: unsubscribeChannelIds.length }, unsubscribeChannelIds.length)"
@@ -182,6 +204,7 @@ import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
+import ChannelsOverviewColourMenu from '../../components/ChannelsOverviewColourMenu/ChannelsOverviewColourMenu.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
 import ChannelsOverviewMenu from '../../components/ChannelsOverviewMenu/ChannelsOverviewMenu.vue'
@@ -192,6 +215,7 @@ import store from '../../store/index'
 import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
 import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/local'
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
+import { useProfilePaletteEditing } from '../../composables/useProfilePaletteEditing'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
   assignCalloutColours,
@@ -614,6 +638,33 @@ function afterPendingChanges(change) {
 
   return run
 }
+
+/**
+ * @param {string} profileId
+ */
+function openColumn(profileId) {
+  if (!openProfileIds.value.includes(profileId)) {
+    saveOpenProfileIds(toggleOpenProfile(openProfileIds.value, profileId))
+  }
+}
+
+const {
+  draft,
+  startDraft,
+  commitDraft,
+  cancelDraft,
+  renamingProfileId,
+  finishRename,
+  profileMenu,
+  profileMenuItems,
+  openProfileMenu,
+  chooseFromProfileMenu,
+  closeProfileMenu,
+  colourMenu,
+  chooseColour,
+  closeColourMenu,
+  reorder
+} = useProfilePaletteEditing({ profileList, afterPendingChanges, openColumn })
 
 /**
  * Files dropped channels into a profile, or back into the pool with

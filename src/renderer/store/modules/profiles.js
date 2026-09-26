@@ -1,7 +1,8 @@
 import { MAIN_PROFILE_ID } from '../../../constants'
-import { DBProfileHandlers } from '../../../datastores/handlers/index'
+import { DBProfileHandlers, DBSettingHandlers } from '../../../datastores/handlers/index'
 import { calculateColorLuminance, getRandomColor } from '../../helpers/colors'
 import { deepCopy } from '../../helpers/utils'
+import { appendToOrder, orderProfiles } from '../../helpers/channelsOverview'
 
 const state = {
   profileList: [{
@@ -15,8 +16,11 @@ const state = {
 }
 
 const getters = {
-  getProfileList: (state) => {
-    return state.profileList
+  // In the user's order. A new array, not the state: the state keeps the
+  // primary profile first and the rest alphabetically, which is only how it
+  // is stored, and getSubscribedChannelIdSet relies on that first place.
+  getProfileList: (state, getters, rootState) => {
+    return orderProfiles(state.profileList, rootState.settings.profileOrder, collator)
   },
 
   getActiveProfile: (state) => {
@@ -205,10 +209,33 @@ const actions = {
     }
   },
 
-  async createProfile({ commit }, profile) {
+  async createProfile({ commit, dispatch, getters }, profile) {
     try {
       const newProfile = await DBProfileHandlers.create(profile)
+      const order = appendToOrder(getters.getProfileList, newProfile._id)
+
+      // The order before the profile, so that on its way to the end it never
+      // shows among the profiles the order does not name yet. The order is
+      // committed as soon as saveProfileOrder is dispatched, before its write.
+      dispatch('saveProfileOrder', order)
       commit('addProfileToList', newProfile)
+
+      return newProfile
+    } catch (errMessage) {
+      console.error(errMessage)
+      return null
+    }
+  },
+
+  // Shown at once, then written, and not committed again afterwards, as the
+  // generated updateProfileOrder would: a second reorder made while the first
+  // was being written would be put back by the first one's late commit.
+  // Other windows hear of it as they do of any setting.
+  async saveProfileOrder({ commit }, order) {
+    commit('setProfileOrder', order)
+
+    try {
+      await DBSettingHandlers.upsert('profileOrder', order)
     } catch (errMessage) {
       console.error(errMessage)
     }

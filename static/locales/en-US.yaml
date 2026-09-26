@@ -245,6 +245,15 @@ Channels:
     Unsubscribe Prompt: Unsubscribe from 1 channel? | Unsubscribe from {count} channels?
     Unsubscribe Prompt Detail: They will be removed from every profile.
     Unsubscribed: Unsubscribed from 1 channel | Unsubscribed from {count} channels
+    New Profile: New profile
+    New Profile Name: Name the new profile
+    No Profiles Yet: Channels are sorted into profiles, and there are none yet. Make one with New profile above.
+    Rename Profile: Rename
+    Change Profile Colour: Change colour
+    Remove Profile: Remove
+    Profile Colours: Colours for {profile}
+    Profile Moved: Moved {profile} to position {position} of {count}
+    Reorder Hint: Drag to reorder, or Ctrl+Shift+Arrow
 Explore:
   Explore: Explore
   Categories Shown: Categories Shown
