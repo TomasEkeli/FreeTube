@@ -1183,6 +1183,8 @@ Video:
     Download failed with exit code: 'Could not download "{title}": yt-dlp stopped with exit code {exitCode}'
     yt-dlp could not be started: yt-dlp could not be started. Check the yt-dlp section in Settings
     Tools missing: 'Cannot download yet, {tools} not found. See the yt-dlp section in Settings'
+    Tools missing, click to install: 'Cannot download yet, {tools} not found. Click to install, then the download starts'
+    Waiting for install: '"{title}" will download once the tools are installed'
   Player:
     TranslatedCaptionTemplate: '{language} (translated from "{originalLanguage}")'
     Audio Tracks: Audio Tracks

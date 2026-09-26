@@ -79,14 +79,44 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       return
     }
 
-    // For the toasts only; it never reaches the command line
-    const title = typeof payload.title === 'string' ? payload.title.slice(0, 300) : ''
-    const sender = event.sender
-
-    downloadService.start({ videoId: payload.videoId, title }, (outcome) => {
-      sendToFreeTube(sender, IpcChannels.YTDLP_DOWNLOAD_OUTCOME, outcome)
-    })
+    startDownload(event.sender, payload.videoId, payload.title)
   })
+
+  const coverage = installCoverage(process.platform, process.arch)
+
+  /**
+   * @param {import('electron').WebContents} sender
+   * @param {string} videoId validated
+   * @param {unknown} title
+   */
+  async function startDownload(sender, videoId, title) {
+    const request = {
+      videoId,
+      // For the toasts only; it never reaches the command line
+      title: typeof title === 'string' ? title.slice(0, 300) : '',
+    }
+
+    /**
+     * @param {import('./downloadService').DownloadOutcome | { type: 'waiting-for-install', videoId: string, title: string }} outcome
+     */
+    const report = (outcome) => {
+      // Whether the renderer can offer to install what is missing
+      const payload = outcome.type === 'tools-missing'
+        ? { ...outcome, installable: outcome.missing.every(tool => coverage[tool]) }
+        : outcome
+
+      sendToFreeTube(sender, IpcChannels.YTDLP_DOWNLOAD_OUTCOME, payload)
+    }
+
+    // A press during an install waits for it rather than being told the
+    // tools are missing, then goes ahead
+    if (installer.isInstalling()) {
+      report({ type: 'waiting-for-install', ...request })
+      await installer.install()
+    }
+
+    await downloadService.start(request, report)
+  }
 
   ipcMain.on(IpcChannels.YTDLP_REVEAL, async (event, videoId) => {
     if (!isFreeTubeUrl(event.senderFrame.url) || !isValidVideoId(videoId)) {
@@ -146,13 +176,22 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     }
   })
 
-  ipcMain.handle(IpcChannels.YTDLP_INSTALL_TOOLS, async (event) => {
+  ipcMain.handle(IpcChannels.YTDLP_INSTALL_TOOLS, async (event, payload) => {
     // The preload has required a recent click
     if (!isFreeTubeUrl(event.senderFrame.url) || !event.sender.isFocused()) {
       return
     }
 
-    return await installer.install()
+    const result = await installer.install()
+
+    // Offered from the download button: go on with the download that was
+    // asked for, once the install has succeeded
+    const download = payload?.thenDownload
+    if (result.ok && download != null && isValidVideoId(download.videoId) && await readSetting('ytDlpEnabled')) {
+      startDownload(event.sender, download.videoId, download.title)
+    }
+
+    return result
   })
 
   app.on('will-quit', () => {

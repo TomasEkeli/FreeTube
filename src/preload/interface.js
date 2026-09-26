@@ -233,12 +233,13 @@ export default {
   },
 
   /**
+   * @param {{ videoId: string, title: string }} [thenDownload] what to download once the install succeeds
    * @returns {Promise<import('../main/ytdlp/toolInstaller').InstallResult | undefined>}
    */
-  ytDlpInstallTools: () => {
+  ytDlpInstallTools: (thenDownload) => {
     // require the user to have interacted with the page recently
     if (navigator.userActivation.isActive) {
-      return ipcRenderer.invoke(IpcChannels.YTDLP_INSTALL_TOOLS)
+      return ipcRenderer.invoke(IpcChannels.YTDLP_INSTALL_TOOLS, thenDownload ? { thenDownload } : {})
     }
     return Promise.resolve(undefined)
   },

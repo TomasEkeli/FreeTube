@@ -58,15 +58,52 @@ export function setupYtDlpOutcomeToasts() {
  * Installs whatever is missing. Joins an install already running, here or in
  * main.
  *
+ * @param {{ videoId: string, title: string }} [thenDownload] for main to download once installed
  * @returns {Promise<import('../../main/ytdlp/toolInstaller').InstallResult | undefined>}
  */
-export async function installYtDlpTools() {
+export async function installYtDlpTools(thenDownload) {
   ytDlpInstallState.installing = true
   try {
-    return await window.ftElectron.ytDlpInstallTools()
+    return await window.ftElectron.ytDlpInstallTools(thenDownload)
   } finally {
     ytDlpInstallState.installing = false
     ytDlpInstallState.progress = null
+  }
+}
+
+// Long enough for any install; the toast is closed when the install ends
+const INSTALL_TOAST_MS = 60 * 60 * 1000
+
+/**
+ * The install offered by the tools missing toast: progress in a toast that
+ * follows it, then either the download that was asked for, which main starts
+ * and reports as usual, or the reason the install failed.
+ *
+ * @param {string} videoId
+ * @param {string} title
+ */
+async function installThenDownload(videoId, title) {
+  const t = i18n.global.t
+  const progressToast = new AbortController()
+
+  showToast(
+    () => ytDlpInstallState.progress
+      ? formatInstallProgress(ytDlpInstallState.progress)
+      : t('Settings.yt-dlp Settings.Install Progress.Starting'),
+    INSTALL_TOAST_MS,
+    null,
+    progressToast.signal
+  )
+
+  let result
+  try {
+    result = await installYtDlpTools({ videoId, title })
+  } finally {
+    progressToast.abort()
+  }
+
+  if (result && !result.ok) {
+    showToast(formatInstallResult(result), LONG_TOAST_MS)
   }
 }
 
@@ -164,10 +201,23 @@ function showOutcome(outcome) {
       break
 
     case 'tools-missing':
-      showToast(
-        t('Video.yt-dlp.Tools missing', { tools: formatToolList(outcome.missing) }),
-        LONG_TOAST_MS
-      )
+      if (outcome.installable) {
+        // Letting it pass, or not clicking, leaves everything as it was
+        showToast(
+          t('Video.yt-dlp.Tools missing, click to install', { tools: formatToolList(outcome.missing) }),
+          LONG_TOAST_MS,
+          () => installThenDownload(outcome.videoId, outcome.title)
+        )
+      } else {
+        showToast(
+          t('Video.yt-dlp.Tools missing', { tools: formatToolList(outcome.missing) }),
+          LONG_TOAST_MS
+        )
+      }
+      break
+
+    case 'waiting-for-install':
+      showToast(t('Video.yt-dlp.Waiting for install', { title }))
       break
   }
 }
