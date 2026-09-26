@@ -180,6 +180,11 @@ const state = {
   // its own open columns; this is where a new window, or the first after a
   // restart, starts from. A profile deleted since is dropped when read.
   channelsOverviewOpenProfiles: [],
+  // The user's order of profiles, by id, which every list of profiles
+  // follows. All Channels is always first and is never in it; a profile it
+  // does not name comes after those it does, alphabetically, and a deleted
+  // one is skipped when read.
+  profileOrder: [],
   disableSmoothScrolling: false,
   disableChannelLinks: false,
   displayVideoPlayButton: false,
