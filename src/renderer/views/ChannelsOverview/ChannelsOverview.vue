@@ -164,6 +164,7 @@
           :menu-label="column.kind === 'proposal' ? t('Channels.Overview.Suggestions.Actions', { suggestion: columnTitle(column) }) : ''"
           :badges="proposalDetails.get(column.key)?.badges"
           :evidence="proposalDetails.get(column.key)?.evidence"
+          :probing-id="channelProbingProgress.current"
           :channels="column.channels"
           :animate="animatingChange"
           :reset-key="normalisedQuery"

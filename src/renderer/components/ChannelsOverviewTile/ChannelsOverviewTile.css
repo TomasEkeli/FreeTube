@@ -13,6 +13,29 @@
   color: var(--side-nav-hover-text-color);
 }
 
+/* Being probed: the square breathes, faintly, for as long as it takes */
+.tile.probing {
+  animation: tile-probing 1.6s ease-in-out infinite;
+}
+
+@keyframes tile-probing {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile.probing {
+    animation: none;
+    background-color: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  }
+}
+
 .tile.dragging {
   opacity: 0.4;
 }

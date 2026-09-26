@@ -19,14 +19,15 @@
 
   In a proposed column, hovering says why the channel is suggested there, and
   a channel suggested out of the profile it is in now has a badge in that
-  profile's colour, naming it. A tick on the thumbnail's top corner accepts
+  profile's colour, naming it. While its recent videos are being probed, its
+  square breathes, faintly. A tick on the thumbnail's top corner accepts
   the suggestion for this channel, and a cross on its bottom corner rejects
   it, which leaves the channel where it is.
 -->
 <template>
   <div
     class="tile"
-    :class="[{ dragging, selected }, callout === null ? null : `callout callout${callout}`]"
+    :class="[{ dragging, selected, probing }, callout === null ? null : `callout callout${callout}`]"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="dragging = false"
@@ -187,6 +188,11 @@ const props = defineProps({
   evidence: {
     type: String,
     default: null
+  },
+  /** Whether its recent videos are being looked at now */
+  probing: {
+    type: Boolean,
+    default: false
   },
   /** In a proposed column, what accepting its suggestion does; null elsewhere */
   acceptLabel: {

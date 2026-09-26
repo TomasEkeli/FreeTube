@@ -51,7 +51,9 @@ const progress = reactive({
   /** Channels probed since it last started */
   done: 0,
   /** @type {'finished' | 'refused' | null} how the last run ended */
-  ended: null
+  ended: null,
+  /** @type {string | null} the channel being probed now */
+  current: null
 })
 
 /** How probing is going, for the page to read. Mutated only in here. */
@@ -240,6 +242,7 @@ async function run() {
     while (queue.length > 0) {
       const channel = queue[0]
 
+      progress.current = channel.id
       await probe(channel)
 
       // It may have been taken out of the queue while it was being probed
@@ -259,6 +262,7 @@ async function run() {
     queue.length = 0
     queued.clear()
   } finally {
+    progress.current = null
     progress.running = false
   }
 }
