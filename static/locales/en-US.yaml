@@ -250,6 +250,11 @@ Channels:
     No Profiles Yet: Channels are sorted into profiles, and there are none yet. Make one with New profile above.
     Rename Profile: Rename
     Change Profile Colour: Change colour
+    Remove Profile: Remove…
+    # Asked before a profile is removed from the Channels page
+    Remove Profile Prompt: Remove the profile {profile}?
+    Remove Profile Prompt Detail: Its channels stay subscribed to. Those in no other profile go back to Unassigned.
+    Remove Profile Confirm: Remove
     Profile Colours: Colours for {profile}
     Profile Moved: Moved {profile} to position {position} of {count}
     Reorder Hint: Drag to reorder, or Ctrl+Shift+Arrow

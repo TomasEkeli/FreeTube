@@ -8,7 +8,7 @@
   are shared with some other profile: the ones to sort out.
 
   Right-click it, or press the ContextMenu key or Shift+F10 on it, to rename
-  it or change its colour. Renaming happens in place.
+  it, change its colour or remove it. Renaming happens in place.
 
   It can be dragged along the palette to put the profile somewhere else in
   the order, or moved a place at a time with Ctrl+Shift+Left and Right.

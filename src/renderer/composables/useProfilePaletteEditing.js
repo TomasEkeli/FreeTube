@@ -1,6 +1,7 @@
 import { computed, nextTick, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { MAIN_PROFILE_ID } from '../../constants'
 import store from '../store/index'
 import { calculateColorLuminance, colors } from '../helpers/colors'
 import { moveInOrder, pickUnusedColour, profileOrderIds } from '../helpers/channelsOverview'
@@ -179,7 +180,8 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
 
   const profileMenuItems = computed(() => [
     { value: 'rename', label: t('Channels.Overview.Rename Profile') },
-    { value: 'colour', label: t('Channels.Overview.Change Profile Colour') }
+    { value: 'colour', label: t('Channels.Overview.Change Profile Colour') },
+    { value: 'remove', label: t('Channels.Overview.Remove Profile'), destructive: true }
   ])
 
   /**
@@ -198,6 +200,12 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
 
       if (profile && bubble) {
         colourMenu.value = { profileId, name: profile.name, bgColor: profile.bgColor, anchor: { rect: bubble.getBoundingClientRect() } }
+      }
+    } else if (value === 'remove') {
+      const profile = profileList.value.find(candidate => candidate._id === profileId)
+
+      if (profile) {
+        removingProfile.value = { profileId, name: profile.name }
       }
     }
   }
@@ -244,6 +252,58 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
   }
 
   /**
+   * The profile the prompt asks about removing. Null while no prompt shows.
+   * @type {import('vue').ShallowRef<{ profileId: string, name: string } | null>}
+   */
+  const removingProfile = shallowRef(null)
+
+  /**
+   * Removes the profile once the prompt says so, as Profile settings does:
+   * the active and default profile fall back to the primary one if it was
+   * either. Its channels stay subscribed to, and those in no other profile
+   * are unassigned again, which the pool shows by itself. In the page's
+   * queue, as a drop saved after the removal would bring the profile back.
+   * @param {'remove' | 'cancel' | null} value
+   */
+  async function handleRemovePrompt(value) {
+    const target = removingProfile.value
+    removingProfile.value = null
+
+    // Cancelled, the prompt gives the focus back to the bubble itself
+    if (value !== 'remove' || target === null) { return }
+
+    const { profileId, name } = target
+
+    const removed = await afterPendingChanges(async () => {
+      if (!profileList.value.some(candidate => candidate._id === profileId)) { return false }
+
+      if (store.getters.getActiveProfile?._id === profileId) {
+        store.dispatch('updateActiveProfile', MAIN_PROFILE_ID)
+      }
+
+      await store.dispatch('removeProfile', profileId)
+
+      return true
+    })
+
+    if (!removed) { return }
+
+    showToast(t('Profile.Removed {profile} from your profiles', { profile: name }))
+
+    if (store.getters.getDefaultProfile === profileId) {
+      store.dispatch('updateDefaultProfile', MAIN_PROFILE_ID)
+      showToast(t('Profile.Your default profile has been changed to your primary profile'))
+    }
+
+    // The prompt gives the focus back to the bubble, which is gone
+    await nextTick()
+
+    if (document.activeElement === null || document.activeElement === document.body) {
+      focusNewProfile()
+    }
+  }
+
+  /**
    * Puts a profile somewhere else in the order: on screen at once, then
    * saved. The order is a setting and not a profile, so it does not wait on
    * the queue of profile writes. Through saveProfileOrder rather than the
@@ -276,6 +336,8 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     colourMenu,
     chooseColour,
     closeColourMenu,
+    removingProfile,
+    handleRemovePrompt,
     reorder
   }
 }
