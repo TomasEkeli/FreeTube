@@ -1188,7 +1188,6 @@ Video:
     Resuming download: 'Resuming download of "{title}" to {path}'
     Download cancelled: 'Cancelled "{title}". Press download again to resume'
     Show in folder: 'Show in folder: {path}'
-    Download again: Download again
     Downloads:
       Downloads: Downloads
       Downloads running: 'Downloads, {count} running'
@@ -1219,6 +1218,14 @@ Video:
         Failed with exit code: 'Failed, yt-dlp stopped with exit code {exitCode}'
     Already downloading: '"{title}" is already downloading'
     Download finished: 'Downloaded "{title}". Click to show the file'
+    Download finished with quality: 'Downloaded "{title}" ({quality}). Click to show the file'
+    Right-click for other qualities: 'Download with yt-dlp. Right-click or hold for another quality, or audio only'
+    Quality:
+      Height: '{height}p'
+      Audio only: Audio only
+      Download best: Download best quality
+      Download up to: 'Download up to {height}p'
+      Download audio only: Download audio only
     Download failed: 'Could not download "{title}": {reason}'
     Download failed with exit code: 'Could not download "{title}": yt-dlp stopped with exit code {exitCode}'
     yt-dlp could not be started: yt-dlp could not be started. Check the yt-dlp section in Settings

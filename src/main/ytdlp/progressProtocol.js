@@ -15,9 +15,10 @@ const TAG = '[freetube]'
  */
 export function progressArgs() {
   return [
-    // Before downloading: the formats (e.g. "401+251", video and audio) and
-    // the final path, after merging
-    '--print', `before_dl:${TAG}dest %(format_id)s %(filename)s`,
+    // Before downloading: the formats (e.g. "401+251", video and audio), the
+    // height of the video (NA for audio only), and the final path, after
+    // merging
+    '--print', `before_dl:${TAG}dest %(format_id)s %(height)s %(filename)s`,
     // Once the file is in its final place
     '--print', `after_move:${TAG}done %(filepath)s`,
     // --print implies --quiet, which hides progress unless asked for
@@ -33,7 +34,7 @@ export function progressArgs() {
 
 /**
  * @typedef {(
- *   { kind: 'dest', formatIds: string[], path: string } |
+ *   { kind: 'dest', formatIds: string[], height: number | null, path: string } |
  *   { kind: 'progress', status: string, downloadedBytes: number | null, totalBytes: number | null, speed: number | null, eta: number | null, formatId: string, partKind: 'video' | 'audio' | 'both' | null } |
  *   { kind: 'post', status: string, postprocessor: string } |
  *   { kind: 'done', path: string }
@@ -60,11 +61,16 @@ export function parseProgressLine(line) {
 
   switch (kind) {
     case 'dest': {
-      const match = /^(\S+) (.+)$/.exec(body)
-      if (!match || match[2] === 'NA') {
+      const match = /^(\S+) (\S+) (.+)$/.exec(body)
+      if (!match || match[3] === 'NA') {
         return null
       }
-      return { kind: 'dest', formatIds: match[1] === 'NA' ? [] : match[1].split('+'), path: match[2] }
+      return {
+        kind: 'dest',
+        formatIds: match[1] === 'NA' ? [] : match[1].split('+'),
+        height: toNumber(match[2]),
+        path: match[3],
+      }
     }
 
     case 'done':

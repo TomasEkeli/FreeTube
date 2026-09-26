@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 
 import i18n from '../i18n/index'
 import { showToast } from './utils'
-import { applyOutcome, loadYtDlpDownloads } from './ytdlpDownloads'
+import { applyOutcome, loadYtDlpDownloads, qualityText } from './ytdlpDownloads'
 
 /**
  * The renderer's half of download with yt-dlp: asking main to download, and
@@ -23,10 +23,11 @@ export const TOOL_NAMES = {
 /**
  * @param {string} videoId
  * @param {string} title
+ * @param {import('../../main/ytdlp/downloadService').Quality} [quality]
  */
-export function downloadWithYtDlp(videoId, title) {
+export function downloadWithYtDlp(videoId, title, quality = 'best') {
   if (process.env.IS_ELECTRON) {
-    window.ftElectron.ytDlpDownload({ videoId, title })
+    window.ftElectron.ytDlpDownload({ videoId, title, quality })
   }
 }
 
@@ -70,7 +71,7 @@ export function setupYtDlpOutcomeToasts() {
  * Installs whatever is missing. Joins an install already running, here or in
  * main.
  *
- * @param {{ videoId: string, title: string }} [thenDownload] for main to download once installed
+ * @param {{ videoId: string, title: string, quality?: import('../../main/ytdlp/downloadService').Quality }} [thenDownload] for main to download once installed
  * @returns {Promise<import('../../main/ytdlp/toolInstaller').InstallResult | undefined>}
  */
 export async function installYtDlpTools(thenDownload) {
@@ -93,8 +94,9 @@ const INSTALL_TOAST_MS = 60 * 60 * 1000
  *
  * @param {string} videoId
  * @param {string} title
+ * @param {import('../../main/ytdlp/downloadService').Quality} quality
  */
-async function installThenDownload(videoId, title) {
+async function installThenDownload(videoId, title, quality) {
   const t = i18n.global.t
   const progressToast = new AbortController()
 
@@ -109,7 +111,7 @@ async function installThenDownload(videoId, title) {
 
   let result
   try {
-    result = await installYtDlpTools({ videoId, title })
+    result = await installYtDlpTools({ videoId, title, quality })
   } finally {
     progressToast.abort()
   }
@@ -225,13 +227,18 @@ function showOutcome(outcome) {
       showToast(t('Video.yt-dlp.Already downloading', { title }))
       break
 
-    case 'finished':
+    case 'finished': {
+      // Say what came down, so that a lower quality than hoped for is seen
+      const quality = qualityText(outcome.download)
       showToast(
-        t('Video.yt-dlp.Download finished', { title }),
+        quality
+          ? t('Video.yt-dlp.Download finished with quality', { title, quality })
+          : t('Video.yt-dlp.Download finished', { title }),
         LONG_TOAST_MS,
         () => window.ftElectron.ytDlpReveal(outcome.videoId)
       )
       break
+    }
 
     case 'failed':
       showToast(
@@ -252,7 +259,7 @@ function showOutcome(outcome) {
         showToast(
           t('Video.yt-dlp.Tools missing, click to install', { tools: formatToolList(outcome.missing) }),
           LONG_TOAST_MS,
-          () => installThenDownload(outcome.videoId, outcome.title)
+          () => installThenDownload(outcome.videoId, outcome.title, outcome.quality)
         )
       } else {
         showToast(

@@ -20,7 +20,7 @@ const VERSION_OUTPUT = {
 
 // What yt-dlp writes, given FreeTube's progress arguments, for a video
 // downloaded as separate video and audio and merged
-const DEST_LINE = `[freetube]dest 401+251 ${DEST}`
+const DEST_LINE = `[freetube]dest 401+251 1080 ${DEST}`
 const VIDEO_PROGRESS = [
   '[freetube]progress downloading 1024 1000000 NA 50000 20 401 av01.0.12M.08 none',
   '[freetube]progress finished 1000000 1000000 NA NA NA 401 av01.0.12M.08 none',
@@ -68,12 +68,15 @@ function setup({ respond = () => SUCCESS, executables = ON_PATH, broken = [], se
   const outcomes = []
   const stored = { ...SETTING_DEFAULTS, ytDlpEnabled: true, ...settings }
   let time = 0
+  /** @type {string[]} */
+  const removed = []
 
   const service = createDownloadService({
     spawn: fake.spawn,
     readSetting: async id => stored[id],
     isExecutableFile: async filePath => executables.includes(filePath),
     listDirectory: async dir => (typeof directories === 'function' ? directories(dir) : directories[dir] ?? []),
+    removeFile: async (filePath) => { removed.push(filePath) },
     managedDir: MANAGED_DIR,
     defaultDownloadFolder: () => DOWNLOADS,
     platform: 'linux',
@@ -89,7 +92,7 @@ function setup({ respond = () => SUCCESS, executables = ON_PATH, broken = [], se
   const progress = () => outcomes.filter(o => o.type === 'progress').map(o => o.download)
   const ended = () => outcomes.some(o => TERMINAL.includes(o.type))
 
-  return { service, fake, outcomes, report, downloads, ours, progress, ended, advance: (ms) => { time += ms } }
+  return { service, fake, outcomes, report, downloads, ours, progress, ended, removed, advance: (ms) => { time += ms } }
 }
 
 describe('download service', () => {
@@ -118,7 +121,7 @@ describe('download service', () => {
       await until(ended)
 
       const { args } = downloads()[0]
-      expect(args).toContain('before_dl:[freetube]dest %(format_id)s %(filename)s')
+      expect(args).toContain('before_dl:[freetube]dest %(format_id)s %(height)s %(filename)s')
       expect(args).toContain('after_move:[freetube]done %(filepath)s')
       expect(args).toContain('--progress')
       expect(args).toContain('--newline')
@@ -237,7 +240,7 @@ describe('download service', () => {
       await until(ended)
 
       expect(ours().map(o => o.type)).toEqual(['started', 'finished'])
-      expect(ours()[0].download).toMatchObject({ destination: DEST, folder: DOWNLOADS, resuming: false, parts: 2 })
+      expect(ours()[0].download).toMatchObject({ destination: DEST, folder: DOWNLOADS, resuming: false, parts: 2, height: 1080, audioOnly: false, quality: 'best' })
       expect(ours()[1]).toMatchObject({ type: 'finished', videoId: VIDEO_ID, title: 'A video', path: DEST })
       expect(ours()[1].download).toMatchObject({ status: 'finished', destination: DEST })
       expect(service.getFinished(VIDEO_ID)).toEqual({ path: DEST, folder: DOWNLOADS })
@@ -307,7 +310,7 @@ describe('download service', () => {
 
       await service.start(REQUEST, report)
 
-      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['yt-dlp'] }])
+      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['yt-dlp'], quality: 'best' }])
       expect(downloads()).toHaveLength(0)
       expect(service.list().downloads).toEqual([])
     })
@@ -317,7 +320,7 @@ describe('download service', () => {
 
       await service.start(REQUEST, report)
 
-      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['ffmpeg', 'deno'] }])
+      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['ffmpeg', 'deno'], quality: 'best' }])
       expect(downloads()).toHaveLength(0)
     })
 
@@ -464,6 +467,30 @@ describe('download service', () => {
       expect(ours()[0]).toMatchObject({ type: 'started', download: { resuming: true } })
     })
 
+    it('does not count partial files of formats yt-dlp has not chosen this time', async () => {
+      const { service, report, ours, ended } = setup({
+        respond: () => ({ ...SUCCESS, stdout: SUCCESS.stdout.replace('dest 401+251 1080', 'dest 18 360') }),
+        directories: { [DOWNLOADS]: ['A video [dQw4w9WgXcQ].f400.mp4.part'] },
+      })
+
+      await service.start(REQUEST, report)
+      await until(ended)
+
+      expect(ours()[0].download.resuming).toBe(false)
+    })
+
+    it('counts the final file\'s own .part for a single format', async () => {
+      const { service, report, ours, ended } = setup({
+        respond: () => ({ ...SUCCESS, stdout: SUCCESS.stdout.replace('dest 401+251 1080', 'dest 18 360') }),
+        directories: { [DOWNLOADS]: ['A video [dQw4w9WgXcQ].webm.part'] },
+      })
+
+      await service.start(REQUEST, report)
+      await until(ended)
+
+      expect(ours()[0].download.resuming).toBe(true)
+    })
+
     it('counts a part already finished last time too', async () => {
       const { service, report, ours, ended } = setup({
         directories: { [DOWNLOADS]: ['A video [dQw4w9WgXcQ].f401.mp4'] },
@@ -516,7 +543,7 @@ describe('download service', () => {
       const { service, report, progress } = setup({
         respond: () => ({
           stdout: [
-            `[freetube]dest 401+251 ${DOWNLOADS}/Channel/A video [dQw4w9WgXcQ].webm`,
+            `[freetube]dest 401+251 1080 ${DOWNLOADS}/Channel/A video [dQw4w9WgXcQ].webm`,
             '[freetube]progress downloading 1977751871 5000000000 NA 8000000 380 401 av01 none',
             '',
           ].join('\n'),
@@ -528,6 +555,108 @@ describe('download service', () => {
       await until(() => progress().some(p => p.part === 1))
 
       expect(progress().at(-1).resuming).toBe(true)
+    })
+  })
+
+  describe('leftovers', () => {
+    it('removes partial files of other formats once the download has finished, and nothing else', async () => {
+      const { service, report, ended, removed } = setup({
+        directories: {
+          [DOWNLOADS]: [
+            'A video [dQw4w9WgXcQ].webm',
+            'A video [dQw4w9WgXcQ].f400.mp4.part',
+            'A video [dQw4w9WgXcQ].f400.mp4.part-Frag3',
+            'A video [dQw4w9WgXcQ].f140.m4a',
+            'A video [dQw4w9WgXcQ].webm.ytdl',
+            'A video [dQw4w9WgXcQ] [720p].mp4',
+            'A video [dQw4w9WgXcQ].en.vtt',
+            'Another video [aaaaaaaaaaa].f400.mp4.part',
+          ],
+        },
+      })
+
+      await service.start(REQUEST, report)
+      await until(ended)
+      await until(() => removed.length === 4)
+
+      expect(removed.sort()).toEqual([
+        `${DOWNLOADS}/A video [dQw4w9WgXcQ].f140.m4a`,
+        `${DOWNLOADS}/A video [dQw4w9WgXcQ].f400.mp4.part`,
+        `${DOWNLOADS}/A video [dQw4w9WgXcQ].f400.mp4.part-Frag3`,
+        `${DOWNLOADS}/A video [dQw4w9WgXcQ].webm.ytdl`,
+      ])
+    })
+
+    it('removes nothing after a failure or a cancel, when the partial files are there to resume from', async () => {
+      const { service, report, ended, removed } = setup({
+        respond: () => ({ stdout: `${DEST_LINE}\n`, stderr: 'ERROR: boom\n', exitCode: 1 }),
+        directories: { [DOWNLOADS]: ['A video [dQw4w9WgXcQ].f401.mp4.part'] },
+      })
+
+      await service.start(REQUEST, report)
+      await until(ended)
+      await new Promise(resolve => setTimeout(resolve, 20))
+
+      expect(removed).toEqual([])
+    })
+  })
+
+  describe('quality', () => {
+    it('adds nothing for the best, leaving yt-dlp its own choice', async () => {
+      const { service, report, downloads, ended } = setup()
+
+      await service.start(REQUEST, report)
+      await until(ended)
+
+      expect(downloads()[0].args).not.toContain('-S')
+      expect(downloads()[0].args).not.toContain('-o')
+    })
+
+    it('asks for the best up to a height, under a name of its own', async () => {
+      const { service, report, downloads, ended } = setup()
+
+      await service.start({ ...REQUEST, quality: '720' }, report)
+      await until(ended)
+
+      const { args } = downloads()[0]
+      expect(args[args.indexOf('-S') + 1]).toBe('res:720')
+      expect(args[args.indexOf('-o') + 1]).toBe('%(title)s [%(id)s] [720p].%(ext)s')
+      expect(args.indexOf('-o')).toBeLessThan(args.indexOf('--'))
+    })
+
+    it('asks for the audio alone, extracted, under a name of its own', async () => {
+      const { service, report, downloads, progress, ended } = setup({
+        respond: () => ({ stdout: [`[freetube]dest 251 NA ${DOWNLOADS}/A video [dQw4w9WgXcQ] [audio].webm`, `[freetube]done ${DOWNLOADS}/A video [dQw4w9WgXcQ] [audio].opus`, ''].join('\n'), exitCode: 0 }),
+      })
+
+      await service.start({ ...REQUEST, quality: 'audio' }, report)
+      await until(ended)
+
+      const { args } = downloads()[0]
+      expect(args.slice(args.indexOf('-f'), args.indexOf('-f') + 3)).toEqual(['-f', 'ba/b', '-x'])
+      expect(args[args.indexOf('-o') + 1]).toBe('%(title)s [%(id)s] [audio].%(ext)s')
+      expect(progress().at(-1)).toMatchObject({ quality: 'audio', audioOnly: true, height: null })
+    })
+
+    it('puts the custom arguments after the quality ones, so that a user\'s own format wins', async () => {
+      const { service, report, downloads, ended } = setup({ settings: { ytDlpCustomArgs: JSON.stringify(['-f', '18']) } })
+
+      await service.start({ ...REQUEST, quality: '1080' }, report)
+      await until(ended)
+
+      const { args } = downloads()[0]
+      expect(args.lastIndexOf('-f')).toBeGreaterThan(args.indexOf('-S'))
+    })
+
+    it('reports the height yt-dlp chose, which may be less than asked for', async () => {
+      const { service, report, ours, ended } = setup({
+        respond: () => ({ ...SUCCESS, stdout: SUCCESS.stdout.replace('dest 401+251 1080', 'dest 18 360') }),
+      })
+
+      await service.start(REQUEST, report)
+      await until(ended)
+
+      expect(ours().at(-1).download).toMatchObject({ quality: 'best', height: 360 })
     })
   })
 

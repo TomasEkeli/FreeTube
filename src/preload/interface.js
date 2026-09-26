@@ -180,7 +180,7 @@ export default {
   },
 
   /**
-   * @param {{ videoId: string, title: string }} request
+   * @param {{ videoId: string, title: string, quality?: import('../main/ytdlp/downloadService').Quality }} request
    */
   ytDlpDownload: (request) => {
     // require the user to have interacted with the page recently
@@ -258,7 +258,7 @@ export default {
   },
 
   /**
-   * @param {{ videoId: string, title: string }} [thenDownload] what to download once the install succeeds
+   * @param {{ videoId: string, title: string, quality?: import('../main/ytdlp/downloadService').Quality }} [thenDownload] what to download once the install succeeds
    * @returns {Promise<import('../main/ytdlp/toolInstaller').InstallResult | undefined>}
    */
   ytDlpInstallTools: (thenDownload) => {

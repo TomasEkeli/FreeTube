@@ -3,7 +3,7 @@
     v-if="visible"
     class="ytDlpDownloadButton"
   >
-    <!-- Finished: the way to the file, with downloading again a right click or long press away -->
+    <!-- Finished: the way to the file, with another download, in any quality, a right click or long press away -->
     <FtIconButton
       v-if="state === 'finished'"
       :title="finishedTitle"
@@ -14,10 +14,13 @@
       @click="handleFinishedClick"
     />
     <template v-else>
+      <!-- The best on a click; another quality, or the audio alone, on a right click or long press -->
       <FtIconButton
         :title="buttonTitle"
         :icon="['fas', 'download']"
         theme="secondary"
+        :dropdown-options="state === 'running' ? [] : qualityOptions()"
+        open-on-right-or-long-click
         @click="handleClick"
       />
       <FtProgressRing
@@ -44,6 +47,8 @@ import {
   detailsText,
   isRunning,
   progressFraction,
+  qualityOptions,
+  qualityText,
   revealYtDlpDownload,
   statusText,
   whereText,
@@ -105,42 +110,51 @@ const fraction = computed(() => (download.value ? progressFraction(download.valu
 
 const buttonTitle = computed(() => {
   if (state.value !== 'running') {
-    return t('Video.yt-dlp.Download with yt-dlp')
+    return t('Video.yt-dlp.Right-click for other qualities')
   }
 
-  // Stage, progress and where it is going, one per line
-  return [statusText(download.value), detailsText(download.value), whereText(download.value)]
+  // Stage, quality, progress and where it is going, one per line
+  return [statusText(download.value), qualityText(download.value), detailsText(download.value), whereText(download.value)]
     .filter(line => line !== '')
     .join('\n')
 })
 
 const finishedPath = computed(() => ytDlpDownloads.finished[props.videoId] ?? download.value?.folder ?? '')
 
-const finishedTitle = computed(() => t('Video.yt-dlp.Show in folder', { path: finishedPath.value }))
+const finishedTitle = computed(() => {
+  const quality = download.value?.status === 'finished' ? qualityText(download.value) : ''
+  return [t('Video.yt-dlp.Show in folder', { path: finishedPath.value }), quality, t('Video.yt-dlp.Right-click for other qualities')]
+    .filter(line => line !== '')
+    .join('\n')
+})
 
 const finishedOptions = computed(() => [
   { label: t('Video.yt-dlp.Downloads.Show in folder'), value: 'reveal' },
-  { label: t('Video.yt-dlp.Download again'), value: 'download' },
+  { type: 'divider' },
+  ...qualityOptions(),
 ])
 
-function handleClick() {
+/**
+ * @param {import('../../../main/ytdlp/downloadService').Quality | undefined} quality from the dropdown, or nothing for a plain click
+ */
+function handleClick(quality) {
   if (state.value === 'running') {
     // Rather than being told it is already downloading: see how it is doing
     ytDlpDownloads.panelOpen = true
     return
   }
 
-  downloadWithYtDlp(props.videoId, props.title)
+  downloadWithYtDlp(props.videoId, props.title, quality ?? 'best')
 }
 
 /**
- * @param {'reveal' | 'download' | undefined} choice from the dropdown, or nothing for a plain click
+ * @param {'reveal' | import('../../../main/ytdlp/downloadService').Quality | undefined} choice from the dropdown, or nothing for a plain click
  */
 function handleFinishedClick(choice) {
-  if (choice === 'download') {
-    downloadWithYtDlp(props.videoId, props.title)
-  } else {
+  if (choice === undefined || choice === 'reveal') {
     revealYtDlpDownload(props.videoId)
+  } else {
+    downloadWithYtDlp(props.videoId, props.title, choice)
   }
 }
 </script>

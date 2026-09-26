@@ -32,9 +32,51 @@ export function buildWatchUrl(videoId) {
 }
 
 /**
+ * What the viewer can ask for: yt-dlp's best, the best up to a height, or the
+ * audio alone.
+ *
+ * @typedef {'best' | '2160' | '1440' | '1080' | '720' | '480' | '360' | 'audio'} Quality
+ */
+
+/** @type {Quality[]} */
+export const QUALITIES = ['best', '2160', '1440', '1080', '720', '480', '360', 'audio']
+
+/**
+ * @param {unknown} quality
+ * @returns {quality is Quality}
+ */
+export function isValidQuality(quality) {
+  return QUALITIES.includes(/** @type {Quality} */ (quality))
+}
+
+/**
+ * The arguments for a quality. Anything but the best gets a file name of its
+ * own, so that it sits beside the best rather than being taken for it: yt-dlp
+ * would otherwise say a file of that name has already been downloaded.
+ *
+ * @param {Quality} quality
+ */
+function qualityArgs(quality) {
+  if (quality === 'audio') {
+    // The best audio, or the audio out of the best single file when that is
+    // all there is, kept in its own format rather than converted
+    return ['-f', 'ba/b', '-x', '-o', '%(title)s [%(id)s] [audio].%(ext)s']
+  }
+
+  if (quality !== 'best') {
+    // The largest up to that height, or the smallest above it when there is
+    // nothing that small
+    return ['-S', `res:${quality}`, '-o', `%(title)s [%(id)s] [${quality}p].%(ext)s`]
+  }
+
+  return []
+}
+
+/**
  * @typedef {object} DownloadRequest
  * @property {string} videoId
  * @property {string} title shown in toasts and the downloads panel only, never passed to yt-dlp
+ * @property {Quality} [quality] best when not given
  */
 
 /**
@@ -48,6 +90,9 @@ export function buildWatchUrl(videoId) {
  * @typedef {object} DownloadSnapshot
  * @property {string} videoId
  * @property {string} title
+ * @property {Quality} quality what was asked for
+ * @property {number | null} height what yt-dlp chose: the video's height, null for audio only or not known yet
+ * @property {boolean} audioOnly
  * @property {DownloadStatus} status
  * @property {string} folder where yt-dlp was told to put it
  * @property {string | null} destination the file, once yt-dlp has said
@@ -73,7 +118,7 @@ export function buildWatchUrl(videoId) {
  *   { type: 'failed', videoId: string, title: string, reason: string | null, exitCode: number | null, download?: DownloadSnapshot } |
  *   { type: 'cancelled', videoId: string, title: string, download: DownloadSnapshot } |
  *   { type: 'not-found', videoId: string, title: string } |
- *   { type: 'tools-missing', videoId: string, title: string, missing: import('./toolDetection').Tool[] }
+ *   { type: 'tools-missing', videoId: string, title: string, missing: import('./toolDetection').Tool[], quality: Quality }
  * )} DownloadOutcome
  */
 
@@ -97,6 +142,7 @@ const RESUMED_BYTES = 64 * 1024
  * @param {(id: keyof typeof import('./settings').SETTING_DEFAULTS) => Promise<any>} deps.readSetting
  * @param {(filePath: string) => Promise<boolean>} deps.isExecutableFile
  * @param {(dir: string) => Promise<string[]>} [deps.listDirectory] for telling a resumed download from a fresh one
+ * @param {(filePath: string) => Promise<void>} [deps.removeFile] for the partial files left over once a download has finished
  * @param {string} deps.managedDir the folder FreeTube installs the tools into
  * @param {() => string} deps.defaultDownloadFolder the system Downloads folder
  * @param {string} deps.platform
@@ -114,6 +160,7 @@ export function createDownloadService(deps) {
     platform,
     env,
     listDirectory = async () => [],
+    removeFile = async () => {},
     now = Date.now,
     startedFallbackMs = STARTED_FALLBACK_MS,
   } = deps
@@ -158,7 +205,7 @@ export function createDownloadService(deps) {
    * @param {DownloadRequest} request
    * @param {(outcome: DownloadOutcome) => void} report
    */
-  async function start({ videoId, title }, report) {
+  async function start({ videoId, title, quality = 'best' }, report) {
     if (running.has(videoId)) {
       report({ type: 'already-running', videoId, title })
       return
@@ -171,6 +218,9 @@ export function createDownloadService(deps) {
     const download = {
       videoId,
       title,
+      quality,
+      height: null,
+      audioOnly: quality === 'audio',
       status: 'preparing',
       folder: '',
       destination: null,
@@ -195,7 +245,7 @@ export function createDownloadService(deps) {
       report({ type: 'progress', videoId, title, download: { ...download } })
 
       tools = await detector.detect()
-      command = await buildCommand({ videoId, folder: download.folder, tools })
+      command = await buildCommand({ videoId, quality, folder: download.folder, tools })
     } catch (error) {
       running.delete(videoId)
       end(download, 'failed', { reason: String(error?.message ?? error) })
@@ -210,7 +260,7 @@ export function createDownloadService(deps) {
     if (missing.length > 0) {
       running.delete(videoId)
       downloads.delete(videoId)
-      report({ type: 'tools-missing', videoId, title, missing })
+      report({ type: 'tools-missing', videoId, title, missing, quality })
       return
     }
 
@@ -241,14 +291,15 @@ export function createDownloadService(deps) {
    * yt-dlp's own defaults, plus only what FreeTube needs, then the user's own
    * arguments, then the end-of-options marker and the URL.
    *
-   * @param {{ videoId: string, folder: string, tools: import('./toolDetection').ToolStatuses }} options
+   * @param {{ videoId: string, quality: Quality, folder: string, tools: import('./toolDetection').ToolStatuses }} options
    * @returns {Promise<{ args: string[], extraEnv: Record<string, string> }>}
    */
-  async function buildCommand({ videoId, folder, tools }) {
+  async function buildCommand({ videoId, quality, folder, tools }) {
     const args = [
       '--paths', `home:${folder}`,
       // Where it will go, how it is getting on, and where it went
       ...progressArgs(),
+      ...qualityArgs(quality),
     ]
 
     // yt-dlp finds these itself on PATH, but not in FreeTube's tools folder.
@@ -360,8 +411,10 @@ export function createDownloadService(deps) {
           download.status = 'downloading'
           download.destination = parsed.path
           download.parts = parsed.formatIds.length > 0 ? parsed.formatIds.length : null
+          download.height = parsed.height
+          download.audioOnly = parsed.height === null && (download.quality === 'audio' || parsed.formatIds.length === 1)
 
-          const resuming = hasPartialFiles(parsed.path, download.folder, before)
+          const resuming = hasPartialFiles(parsed.path, parsed.formatIds, download.folder, before)
           if (resuming !== null) {
             resumeChecked = true
             download.resuming = resuming
@@ -460,6 +513,10 @@ export function createDownloadService(deps) {
         end(download, 'finished')
         finished.set(videoId, { path: filePath, folder: download.folder })
         report({ type: 'finished', videoId, title, path: filePath, download: snapshot() })
+
+        if (filePath) {
+          removeLeftovers(filePath)
+        }
       } else {
         end(download, 'failed', { reason: lastErrorLine, exitCode: code })
         report({ type: 'failed', videoId, title, reason: lastErrorLine, exitCode: code, download: snapshot() })
@@ -468,32 +525,82 @@ export function createDownloadService(deps) {
   }
 
   /**
-   * Whether earlier partial files for this destination were there before
-   * yt-dlp started: the final file's own `.part`, or the per-format files
-   * yt-dlp merges from, finished or not. Null when there is no telling: no
-   * listing, or a destination outside the folder listed (a custom output
-   * template with folders of its own).
+   * Whether earlier partial files of this very download were there before
+   * yt-dlp started: per-format files for the formats it has now chosen,
+   * finished or not, or, for a single format, the final file's own `.part`.
+   * Partial files of other formats do not count: yt-dlp starts afresh on
+   * those, as when YouTube offers less than it did last time. Null when there
+   * is no telling: no listing, or a destination outside the folder listed (a
+   * custom output template with folders of its own).
    *
    * @param {string} destination
+   * @param {string[]} formatIds
    * @param {string} folder
    * @param {string[] | null} before
    * @returns {boolean | null}
    */
-  function hasPartialFiles(destination, folder, before) {
+  function hasPartialFiles(destination, formatIds, folder, before) {
     if (before === null || pathModule.resolve(pathModule.dirname(destination)) !== pathModule.resolve(folder)) {
       return null
     }
 
-    const base = pathModule.basename(destination)
-    const stem = base.slice(0, base.length - pathModule.extname(base).length)
+    const { base, stem, ext } = nameParts(destination)
 
     return before.some((name) => {
       if (name === base || !name.startsWith(`${stem}.`)) {
         return false
       }
+
       const tail = name.slice(stem.length)
-      return tail.endsWith('.part') || /^\.f[\w-]+\.\w+$/.test(tail)
+      const perFormat = /^\.f([\w-]+)\.\w+(?:\.part)?$/.exec(tail)
+
+      if (perFormat) {
+        return formatIds.includes(perFormat[1])
+      }
+
+      return tail === `${ext}.part` && formatIds.length <= 1
     })
+  }
+
+  /**
+   * Once a download has finished, removes what earlier attempts left beside
+   * it: partial or per-format files of formats yt-dlp did not use this time.
+   * Only files named after this very file, in its folder.
+   *
+   * @param {string} finalPath
+   */
+  async function removeLeftovers(finalPath) {
+    const dir = pathModule.dirname(finalPath)
+    const { base, stem } = nameParts(finalPath)
+
+    let names
+    try {
+      names = await listDirectory(dir)
+    } catch {
+      return
+    }
+
+    for (const name of names) {
+      if (name === base || !name.startsWith(`${stem}.`)) {
+        continue
+      }
+
+      const tail = name.slice(stem.length)
+      if (/^(?:\.f[\w-]+)?\.\w+\.(?:part(?:-Frag\d+)?|ytdl)$/.test(tail) || /^\.f[\w-]+\.\w+$/.test(tail)) {
+        try {
+          await removeFile(pathModule.join(dir, name))
+        } catch {}
+      }
+    }
+  }
+
+  /**
+   * @param {string} filePath
+   */
+  function nameParts(filePath) {
+    const base = pathModule.basename(filePath)
+    const ext = pathModule.extname(base)
+    return { base, ext, stem: base.slice(0, base.length - ext.length) }
   }
 
   /**

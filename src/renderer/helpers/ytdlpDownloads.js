@@ -268,6 +268,42 @@ export function detailsText(download) {
 }
 
 /**
+ * What was downloaded, as far as yt-dlp has said: its height, or audio only.
+ * Empty until then.
+ *
+ * @param {Download | undefined} download
+ */
+export function qualityText(download) {
+  if (!download) {
+    return ''
+  }
+
+  if (download.audioOnly) {
+    return i18n.global.t('Video.yt-dlp.Quality.Audio only')
+  }
+
+  return download.height ? i18n.global.t('Video.yt-dlp.Quality.Height', { height: download.height }) : ''
+}
+
+/**
+ * The qualities the viewer can ask for, for a dropdown.
+ *
+ * @returns {{ label: string, value: import('../../main/ytdlp/downloadService').Quality }[]}
+ */
+export function qualityOptions() {
+  const t = i18n.global.t
+
+  return [
+    { label: t('Video.yt-dlp.Quality.Download best'), value: 'best' },
+    ...['2160', '1440', '1080', '720', '480', '360'].map(height => ({
+      label: t('Video.yt-dlp.Quality.Download up to', { height }),
+      value: /** @type {import('../../main/ytdlp/downloadService').Quality} */ (height),
+    })),
+    { label: t('Video.yt-dlp.Quality.Download audio only'), value: 'audio' },
+  ]
+}
+
+/**
  * @param {number} bytes
  */
 export function formatBytes(bytes) {

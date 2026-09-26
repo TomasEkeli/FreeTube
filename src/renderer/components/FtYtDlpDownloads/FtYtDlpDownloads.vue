@@ -59,6 +59,12 @@
             {{ download.title || download.videoId }}
           </p>
           <p
+            v-if="qualityText(download)"
+            class="rowQuality"
+          >
+            {{ qualityText(download) }}
+          </p>
+          <p
             class="rowStatus"
             role="status"
           >
@@ -127,6 +133,7 @@ import {
   dismissYtDlpDownload,
   isRunning,
   progressFraction,
+  qualityText,
   revealYtDlpDownload,
   statusText,
   whereText,

@@ -7,7 +7,7 @@ import path from 'node:path'
 import { IpcChannels } from '../../constants'
 import { settings } from '../../datastores/handlers/base'
 import { isFreeTubeUrl } from '../utils'
-import { createDownloadService, isValidVideoId } from './downloadService'
+import { createDownloadService, isValidQuality, isValidVideoId } from './downloadService'
 import { ytDlpProxy } from './proxy'
 import { createSettingsReader } from './settings'
 import { createToolDetector } from './toolDetection'
@@ -83,7 +83,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       return
     }
 
-    startDownload(event.sender, payload.videoId, payload.title).catch((error) => {
+    startDownload(event.sender, payload.videoId, payload.title, payload.quality).catch((error) => {
       console.error('yt-dlp download could not start', error)
     })
   })
@@ -94,12 +94,15 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
    * @param {import('electron').WebContents} sender
    * @param {string} videoId validated
    * @param {unknown} title
+   * @param {unknown} quality
    */
-  async function startDownload(sender, videoId, title) {
+  async function startDownload(sender, videoId, title, quality) {
     const request = {
       videoId,
       // For the toasts only; it never reaches the command line
       title: typeof title === 'string' ? title.slice(0, 300) : '',
+      // One of a fixed few, each mapped to arguments in main; anything else is the best
+      quality: isValidQuality(quality) ? quality : 'best',
     }
 
     /**
@@ -250,7 +253,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     // asked for, once the install has succeeded
     const download = payload?.thenDownload
     if (result.ok && download != null && isValidVideoId(download.videoId) && await readSetting('ytDlpEnabled')) {
-      startDownload(event.sender, download.videoId, download.title).catch((error) => {
+      startDownload(event.sender, download.videoId, download.title, download.quality).catch((error) => {
         console.error('yt-dlp download could not start', error)
       })
     }
