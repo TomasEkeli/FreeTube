@@ -16,12 +16,13 @@
   <div
     ref="palette"
     class="palette"
+    :class="{ reordering: draggingProfileId !== null }"
     role="group"
     :aria-label="t('Channels.Overview.Profiles')"
     @dragover="onProfileDragOver"
     @dragleave="onProfileDragLeave"
     @drop="onProfileDrop"
-    @dragend="endProfileDrag"
+    @dragend="onProfileDragEnd"
   >
     <ChannelsOverviewPaletteBubble
       v-for="(profile, index) in profiles"
@@ -240,10 +241,32 @@ function onProfileDrop(event) {
   if (!isOwnProfileDrag(event)) { return }
 
   event.preventDefault()
+  finishProfileDrag(lastInsertion ?? dropInsertion(event))
+}
 
+/**
+ * Chromium sometimes ends a drag it has accepted without the drop: released
+ * over something inside a button, it fires a dragleave instead, and still
+ * says the drag moved. Only the palette accepts a profile drag, so a drag
+ * that moved and was never dropped was dropped here, where the bar last was.
+ * One given up with Escape, or let go anywhere else, did not move.
+ * @param {DragEvent} event
+ */
+function onProfileDragEnd(event) {
+  if (draggingProfileId.value !== null && lastInsertion !== null && event.dataTransfer?.dropEffect === 'move') {
+    finishProfileDrag(lastInsertion)
+  } else {
+    endProfileDrag()
+  }
+}
+
+/**
+ * @param {number} insertion
+ */
+function finishProfileDrag(insertion) {
   const profileId = draggingProfileId.value
   const from = draggedIndex()
-  const to = moveTarget(from, lastInsertion ?? dropInsertion(event))
+  const to = moveTarget(from, insertion)
 
   endProfileDrag()
 

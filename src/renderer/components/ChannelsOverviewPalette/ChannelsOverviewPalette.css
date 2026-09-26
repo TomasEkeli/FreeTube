@@ -47,3 +47,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* While a bubble is dragged along the palette, the drop lands on the palette
+   itself. Chromium turns a drop on something inside a button into a
+   dragleave, and a text field would take the drop as text. */
+.reordering .newProfile,
+.reordering > .nameField {
+  pointer-events: none;
+}
