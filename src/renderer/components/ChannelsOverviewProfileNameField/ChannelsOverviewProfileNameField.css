@@ -1,0 +1,39 @@
+/* The size of a palette bubble, so that nothing moves when it turns into this */
+.nameField {
+  inline-size: 96px;
+  padding-block: 6px 22px;
+  padding-inline: 6px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--profile-colour) 22%, transparent);
+}
+
+.bubble {
+  inline-size: 44px;
+  block-size: 44px;
+  margin-block: 0 4px;
+  margin-inline: auto;
+  border-radius: 50%;
+}
+
+.initial {
+  font-size: 22px;
+  line-height: 1em;
+  padding-block: 11px;
+  text-align: center;
+  user-select: none;
+}
+
+.nameInput {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding-block: 1px;
+  padding-inline: 2px;
+  border: 1px solid var(--profile-colour);
+  border-radius: 4px;
+  background-color: var(--secondary-card-bg-color);
+  color: var(--primary-text-color);
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+}
