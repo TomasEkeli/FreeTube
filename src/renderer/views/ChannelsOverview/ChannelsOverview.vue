@@ -1,11 +1,12 @@
 <!--
   The Channels page: where subscriptions are sorted into profiles.
 
-  Every profile is a bubble in the strip at the top, and a few of them at a
-  time are open as columns below. The primary profile is never a column, as it
-  holds every subscription. Its place, pinned leftmost, goes to the channels no
-  other profile has claimed, and that column is there to be emptied: once it
-  is, it goes away, and it only comes back when something new lands in it.
+  Every profile is a bubble in the strip at the top, where profiles are also
+  made, renamed, recoloured and put in order, and a few of them at a time are
+  open as columns below. The primary profile is never a column, as it holds
+  every subscription. Its place, pinned leftmost, goes to the channels no other
+  profile has claimed, and that column is there to be emptied: once it is, it
+  goes away, and it only comes back when something new lands in it.
 -->
 <template>
   <div class="channelsOverview">
@@ -23,22 +24,22 @@
     <template v-else>
       <FtCard class="paletteCard">
         <ChannelsOverviewPalette
-          v-if="profiles.length > 0"
           :profiles="profiles"
           :open-profile-ids="openProfileIds"
           :match-counts="matchCounts"
           :duplicate-counts="duplicateCountsByProfile"
+          :draft="draft"
           @toggle="toggleColumn"
           @drop-channels="fileChannelsFromPalette"
+          @new-profile="startDraft"
+          @commit-draft="commitDraft"
+          @cancel-draft="cancelDraft"
         />
         <p
-          v-else
+          v-if="profiles.length === 0 && draft === null"
           class="message"
         >
-          {{ t('Channels.Overview.No Profiles') }}
-          <RouterLink to="/settings/profile">
-            {{ t('Channels.Overview.Create Profiles') }}
-          </RouterLink>
+          {{ t('Channels.Overview.No Profiles Yet') }}
         </p>
       </FtCard>
       <div
@@ -192,6 +193,7 @@ import store from '../../store/index'
 import { invidiousGetChannelInfo } from '../../helpers/api/invidious'
 import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/local'
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
+import { useProfilePaletteEditing } from '../../composables/useProfilePaletteEditing'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
   assignCalloutColours,
@@ -614,6 +616,22 @@ function afterPendingChanges(change) {
 
   return run
 }
+
+/**
+ * @param {string} profileId
+ */
+function openColumn(profileId) {
+  if (!openProfileIds.value.includes(profileId)) {
+    saveOpenProfileIds(toggleOpenProfile(openProfileIds.value, profileId))
+  }
+}
+
+const {
+  draft,
+  startDraft,
+  commitDraft,
+  cancelDraft
+} = useProfilePaletteEditing({ profileList, afterPendingChanges, openColumn })
 
 /**
  * Files dropped channels into a profile, or back into the pool with

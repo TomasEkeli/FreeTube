@@ -4,3 +4,46 @@
   justify-content: center;
   gap: 4px;
 }
+
+/* The size of a palette bubble, with a dashed ring where the colour goes and
+   a plus where the initial goes */
+.newProfile {
+  inline-size: 96px;
+  padding-block: 6px 22px;
+  padding-inline: 6px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--tertiary-text-color);
+  font: inherit;
+  cursor: pointer;
+}
+
+.newProfile:hover,
+.newProfile:focus-visible {
+  background-color: var(--side-nav-hover-color);
+  color: var(--side-nav-hover-text-color);
+}
+
+.newProfileBubble {
+  display: block;
+  inline-size: 44px;
+  block-size: 44px;
+  margin-block: 0 4px;
+  margin-inline: auto;
+  box-sizing: border-box;
+  border: 2px dashed currentcolor;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 40px;
+  text-align: center;
+}
+
+.newProfileName {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
