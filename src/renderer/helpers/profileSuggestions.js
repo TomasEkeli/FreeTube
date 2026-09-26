@@ -4,8 +4,8 @@
  *
  * Two things are remembered as the app goes, at no cost in requests: the
  * YouTube category of every video watched, on its history entry, and the tags
- * of every subscribed channel whose page passes through, on its subscription
- * cache record. This module turns those into suggestions.
+ * of every subscribed channel whose page passes through, on its record in
+ * `channels.db`. This module turns those into suggestions.
  *
  * Like `channelsOverview`, it touches no store, no i18n and no router, so the
  * rules can be checked from node, in `_scripts/checkProfileSuggestions.mjs`.

@@ -729,6 +729,17 @@ const customActions = {
         }
       })
 
+      window.ftElectron.handleSyncChannels((event, data) => {
+        switch (event) {
+          case SyncEvents.CHANNELS.UPDATE_TAGS:
+            commit('updateChannelTagsByChannel', data)
+            break
+
+          default:
+            console.error('channels: invalid sync event received')
+        }
+      })
+
       window.ftElectron.handleSyncSubscriptionCache((event, data) => {
         switch (event) {
           case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_VIDEOS_BY_CHANNEL:
@@ -757,10 +768,6 @@ const customActions = {
 
           case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_COMMUNITY_POSTS_BY_CHANNEL:
             commit('updatePostsCacheByChannel', data)
-            break
-
-          case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_CHANNEL_TAGS_BY_CHANNEL:
-            commit('updateChannelTagsByChannel', data)
             break
 
           case SyncEvents.GENERAL.DELETE_MULTIPLE:

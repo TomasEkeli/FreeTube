@@ -6,20 +6,12 @@ import {
   carryOverKnownVideoDetails,
   mergeChannelPageVideoDetails
 } from '../../../subscriptionVideoDetails'
-import { channelTagsChanged } from '../../helpers/profileSuggestions'
 
 const state = {
   videoCache: {},
   liveCache: {},
   shortsCache: {},
   postsCache: {},
-
-  /**
-   * What each subscribed channel's page said about it, by channel id: see
-   * `ChannelTags` in helpers/profileSuggestions. Picked up from channel pages
-   * fetched for other reasons, so it fills in as the app is used.
-   */
-  channelTagsCache: {},
 
   subscriptionCacheReady: false,
 }
@@ -34,12 +26,10 @@ const getters = {
   getLiveCache: (state) => state.liveCache,
 
   getPostsCache: (state) => state.postsCache,
-
-  getChannelTagsCache: (state) => state.channelTagsCache,
 }
 
 const actions = {
-  async grabAllSubscriptions({ commit, dispatch, rootGetters, state }) {
+  async grabAllSubscriptions({ commit, dispatch, rootGetters }) {
     try {
       const payload = await DBSubscriptionCacheHandlers.find()
 
@@ -47,7 +37,6 @@ const actions = {
       const liveStreams = {}
       const shorts = {}
       const communityPosts = {}
-      const channelTags = {}
 
       const toBeRemovedChannelIds = []
       const subscribedChannelIdSet = rootGetters.getSubscribedChannelIdSet
@@ -79,25 +68,15 @@ const actions = {
           communityPosts[channelId] = { posts: dataEntry.communityPosts, timestamp: dataEntry.communityPostsTimestamp }
           hasData = true
         }
-        if (dataEntry.channelTags != null && Array.isArray(dataEntry.channelTags.tags)) {
-          channelTags[channelId] = dataEntry.channelTags
-          hasData = true
-        }
 
         if (!hasData) { toBeRemovedChannelIds.push(channelId) }
       }
 
-      // A channel page seen while this was loading may have made a record for
-      // its tags since, which is data after all
-      const emptyChannelIds = toBeRemovedChannelIds.filter(channelId => {
-        return subscribedChannelIdSet.has(channelId) ? state.channelTagsCache[channelId] == null : true
-      })
-
-      if (emptyChannelIds.length > 0) {
+      if (toBeRemovedChannelIds.length > 0) {
         // Delete channels with no data
-        dispatch('clearSubscriptionsCacheForManyChannels', emptyChannelIds)
+        dispatch('clearSubscriptionsCacheForManyChannels', toBeRemovedChannelIds)
       }
-      commit('setCaches', { videos, liveStreams, shorts, communityPosts, channelTags })
+      commit('setCaches', { videos, liveStreams, shorts, communityPosts })
       commit('setSubscriptionCacheReady', true)
     } catch (errMessage) {
       console.error(errMessage)
@@ -184,35 +163,6 @@ const actions = {
     try {
       await DBSubscriptionCacheHandlers.updateCommunityPostsByChannelId(channelId, posts, timestamp)
       commit('updatePostsCacheByChannel', { channelId, entries: posts, timestamp })
-    } catch (errMessage) {
-      console.error(errMessage)
-    }
-  },
-
-  /**
-   * Keeps a channel's tags, as seen on a channel page the app fetched anyway.
-   * Only for subscribed channels, and only when they differ from what is kept
-   * already: a refresh passes through every channel page, and writing each
-   * one's unchanged tags back would be a write per channel per refresh.
-   * @param {any} context
-   * @param {{ channelId: string, tags: string[], musicArtist: boolean | null }} payload
-   * `musicArtist` null when the page could not say, which keeps what is known
-   */
-  async updateChannelTags({ commit, state, rootGetters }, { channelId, tags, musicArtist }) {
-    if (!rootGetters.getSubscribedChannelIdSet.has(channelId)) { return }
-
-    const stored = state.channelTagsCache[channelId]
-    const next = { tags, musicArtist: musicArtist ?? Boolean(stored?.musicArtist) }
-
-    if (!channelTagsChanged(stored, next)) { return }
-
-    const channelTags = { ...next, seenAt: Date.now() }
-
-    try {
-      // Shown at once, so that a second page fetched meanwhile compares with
-      // this and does not write the same again
-      commit('updateChannelTagsByChannel', { channelId, channelTags })
-      await DBSubscriptionCacheHandlers.updateChannelTagsByChannelId(channelId, channelTags)
     } catch (errMessage) {
       console.error(errMessage)
     }
@@ -306,16 +256,11 @@ const mutations = {
     state.postsCache[channelId] = newObject
   },
 
-  updateChannelTagsByChannel(state, { channelId, channelTags }) {
-    state.channelTagsCache[channelId] = channelTags
-  },
-
   clearCaches(state) {
     state.videoCache = {}
     state.shortsCache = {}
     state.liveCache = {}
     state.postsCache = {}
-    state.channelTagsCache = {}
   },
 
   clearCachesForManyChannels(state, channelIds) {
@@ -324,17 +269,14 @@ const mutations = {
       state.liveCache[channelId] = null
       state.shortsCache[channelId] = null
       state.postsCache[channelId] = null
-      delete state.channelTagsCache[channelId]
     })
   },
 
-  setCaches(state, { videos, liveStreams, shorts, communityPosts, channelTags }) {
+  setCaches(state, { videos, liveStreams, shorts, communityPosts }) {
     state.videoCache = videos
     state.liveCache = liveStreams
     state.shortsCache = shorts
     state.postsCache = communityPosts
-    // Any seen while the cache was loading are newer than what was on disk
-    state.channelTagsCache = { ...channelTags, ...state.channelTagsCache }
   },
 
   setSubscriptionCacheReady(state, payload) {

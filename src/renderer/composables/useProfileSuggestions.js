@@ -18,7 +18,7 @@ const shown = ref(false)
 const dismissed = shallowRef(new Set())
 
 /** The mutations that change what is remembered of channels' tags */
-const TAG_MUTATIONS = new Set(['updateChannelTagsByChannel', 'setCaches', 'clearCaches', 'clearCachesForManyChannels'])
+const TAG_MUTATIONS = new Set(['updateChannelTagsByChannel', 'setChannelTags'])
 
 /**
  * How long newly remembered tags wait before the suggestions are worked out
@@ -68,7 +68,7 @@ export function useProfileSuggestions({ profileList, collator }) {
     // eslint-disable-next-line no-unused-expressions
     tagsVersion.value
 
-    return { ...toRaw(store.getters.getChannelTagsCache) }
+    return { ...toRaw(store.getters.getChannelTags) }
   })
 
   /** @type {import('vue').ComputedRef<Record<string, string>>} */

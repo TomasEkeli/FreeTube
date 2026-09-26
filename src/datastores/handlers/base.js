@@ -441,25 +441,31 @@ class SubscriptionCache {
     )
   }
 
-  /**
-   * The channel's tags alone, leaving every feed on the record as it was. A
-   * channel can have tags before it has anything cached, so the record is
-   * made if there is none.
-   */
-  static updateChannelTagsByChannelId(channelId, channelTags) {
-    return db.subscriptionCache.updateAsync(
-      { _id: channelId },
-      { $set: { channelTags } },
-      { upsert: true }
-    )
-  }
-
   static deleteMultipleChannels(channelIds) {
     return db.subscriptionCache.removeAsync({ _id: { $in: channelIds } }, { multi: true })
   }
 
   static deleteAll() {
     return db.subscriptionCache.removeAsync({}, { multi: true })
+  }
+}
+
+/**
+ * One record per channel, by channel id, holding what the app has learned
+ * about it along the way. Each kind of knowledge is a field of its own, set
+ * alone, so that one never overwrites another.
+ */
+class Channels {
+  static find() {
+    return db.channels.findAsync({})
+  }
+
+  static updateTags(channelId, channelTags) {
+    return db.channels.updateAsync(
+      { _id: channelId },
+      { $set: { channelTags } },
+      { upsert: true }
+    )
   }
 }
 
@@ -471,6 +477,7 @@ function loadDatastores() {
     db.playlists.loadDatabaseAsync(),
     db.searchHistory.loadDatabaseAsync(),
     db.subscriptionCache.loadDatabaseAsync(),
+    db.channels.loadDatabaseAsync(),
   ])
 }
 
@@ -482,6 +489,7 @@ function compactAllDatastores() {
     db.playlists.compactDatafileAsync(),
     db.searchHistory.compactDatafileAsync(),
     db.subscriptionCache.compactDatafileAsync(),
+    db.channels.compactDatafileAsync(),
   ])
 }
 
@@ -492,6 +500,7 @@ export {
   Playlists as playlists,
   SearchHistory as searchHistory,
   SubscriptionCache as subscriptionCache,
+  Channels as channels,
 
   loadDatastores,
   compactAllDatastores,

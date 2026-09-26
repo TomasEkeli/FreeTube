@@ -40,3 +40,6 @@ export const playlists = createDatastore('playlists')
 export const history = createDatastore('history')
 export const searchHistory = createDatastore('search-history')
 export const subscriptionCache = createDatastore('subscription-cache')
+// What the app has learned about each channel, by channel id: not a cache,
+// and not tied to being subscribed, so nothing clears it
+export const channels = createDatastore('channels')
