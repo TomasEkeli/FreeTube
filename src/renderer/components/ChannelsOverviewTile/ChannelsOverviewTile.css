@@ -25,7 +25,7 @@
   }
 
   50% {
-    background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
+    background-color: color-mix(in srgb, var(--primary-color) 26%, transparent);
   }
 }
 
