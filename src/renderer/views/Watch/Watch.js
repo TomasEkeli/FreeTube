@@ -222,6 +222,12 @@ export default defineComponent({
        */
       errorRetryTimestamp: 0,
       videoGenreIsMusic: false,
+      /**
+       * The video's YouTube category, as the backend names it, kept on its
+       * history entry so the Channels page can tell what a channel makes.
+       * Empty when the backend gave none.
+       */
+      videoCategory: '',
       /** @type {Date|null} */
       streamingDataExpiryDate: null,
       currentPlaybackRate: null,
@@ -502,6 +508,7 @@ export default defineComponent({
       this.errorIsRetryable = false
       this.errorRetryTimestamp = 0
       this.videoGenreIsMusic = false
+      this.videoCategory = ''
       this.streamingDataExpiryDate = null
       this.updateTitle()
     },
@@ -670,6 +677,7 @@ export default defineComponent({
           }
 
           this.videoGenreIsMusic = result.basic_info.category === 'Music'
+          this.videoCategory = typeof result.basic_info.category === 'string' ? result.basic_info.category.trim() : ''
 
           this.updateSubscriptionDetails({
             channelThumbnailUrl: this.channelThumbnail.length === 0 ? null : this.channelThumbnail,
@@ -1169,6 +1177,7 @@ export default defineComponent({
           }
 
           this.videoGenreIsMusic = result.genre === 'Music'
+          this.videoCategory = typeof result.genre === 'string' ? result.genre.trim() : ''
 
           this.channelId = result.authorId
           this.channelName = result.author
@@ -1438,6 +1447,10 @@ export default defineComponent({
         timeWatched: Date.now(),
         isLive: false,
         type: 'video',
+      }
+
+      if (this.videoCategory !== '') {
+        videoData.category = this.videoCategory
       }
 
       this.updateHistory(videoData)

@@ -54,7 +54,8 @@
     "check-watch-response-resilience": "node _scripts/checkWatchResponseResilience.mjs",
     "check-subscription-video-details": "node _scripts/checkSubscriptionVideoDetails.mjs",
     "check-subscription-recovery-groups": "node _scripts/checkSubscriptionRecoveryGroups.mjs",
-    "check-channels-overview": "node _scripts/checkChannelsOverview.mjs"
+    "check-channels-overview": "node _scripts/checkChannelsOverview.mjs",
+    "check-profile-suggestions": "node _scripts/checkProfileSuggestions.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
