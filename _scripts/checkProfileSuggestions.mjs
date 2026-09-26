@@ -11,11 +11,25 @@
  */
 
 import {
+  addKeep,
+  channelCategory,
+  channelFit,
   channelTagsChanged,
+  FIT_THRESHOLD,
+  hasCharacter,
+  isKept,
+  knownChannel,
+  MIN_KNOWN,
+  MIN_TAG_GROUP,
+  MOVE_MARGIN,
   normaliseChannelTags,
+  profileCharacter,
+  proposeProfiles,
   TAG_LIMIT,
   watchedCategories,
 } from '../src/renderer/helpers/profileSuggestions.js'
+import { channelMemberships } from '../src/renderer/helpers/channelsOverview.js'
+import { MAIN_PROFILE_ID } from '../src/constants.js'
 
 let failures = 0
 
@@ -27,6 +41,8 @@ function check(name, condition) {
     failures++
   }
 }
+
+const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
@@ -113,6 +129,351 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   check('an entry with no category is ignored', watched.get('b').size === 1 && watched.get('b').get('Comedy').count === 1)
   check('an entry with no channel is ignored', watched.size === 2)
   check('no history gives nothing', watchedCategories([]).size === 0)
+}
+
+// A channel's category
+{
+  const watched = (...entries) => new Map(entries.map(([name, count, lastWatched]) => [name, { count, lastWatched }]))
+
+  check('a Topic channel is Music', channelCategory({ id: 't', name: 'Someone - Topic' })?.name === 'Music')
+  check('a Topic channel\'s evidence says so', channelCategory({ id: 't', name: 'Someone - Topic' })?.evidence.type === 'artist')
+  check('a name merely containing Topic is not', channelCategory({ id: 't', name: 'Topic Talks' }) === null)
+  check('nor one ending in Topic without the dash', channelCategory({ id: 't', name: 'Hot Topic' }) === null)
+  check('the artist flag is Music', channelCategory({ id: 'a', name: 'Band' }, { tags: [], musicArtist: true })?.name === 'Music')
+  check('the artist flag beats what was watched', channelCategory({ id: 'a', name: 'Band' }, { tags: [], musicArtist: true }, watched(['Comedy', 5, 1]))?.name === 'Music')
+  check('the most watched category wins', channelCategory({ id: 'c', name: 'C' }, null, watched(['Comedy', 1, 900], ['Gaming', 3, 100]))?.name === 'Gaming')
+  check('a tie goes to the most recently watched', channelCategory({ id: 'c', name: 'C' }, null, watched(['Comedy', 2, 100], ['Gaming', 2, 900]))?.name === 'Gaming')
+  check('the evidence counts the watched videos', JSON.stringify(channelCategory({ id: 'c', name: 'C' }, null, watched(['Gaming', 3, 1]))?.evidence) === JSON.stringify({ type: 'watched', category: 'Gaming', count: 3 }))
+  check('nothing known gives no category', channelCategory({ id: 'c', name: 'C' }, null, undefined) === null)
+}
+
+// Profile character and fit
+{
+  const member = (id, category, tags = []) => ({
+    channel: { id, name: id },
+    category: category === null ? null : { name: category, evidence: { type: 'watched', category, count: 1 } },
+    tags
+  })
+
+  const two = profileCharacter([member('a', 'Music'), member('b', 'Music')])
+  check(`below ${MIN_KNOWN} known members there is no character`, !hasCharacter(two))
+  check('nothing fits a profile without character', channelFit(two, member('x', 'Music'), 'p', false) === null)
+
+  const music = profileCharacter([member('a', 'Music'), member('b', 'Music'), member('c', 'Music'), member('d', 'Gaming')])
+  check('enough known members is a character', hasCharacter(music))
+  check('the category share is the fit', channelFit(music, member('x', 'Music'), 'p', false).fit === 0.75)
+  check('the evidence names the category share', channelFit(music, member('x', 'Music'), 'p', false).evidence.type === 'categoryShare')
+  check('a member is left out of its own profile', channelFit(music, member('a', 'Music'), 'p', true).fit === 2 / 3)
+  check('left out, a member of four can still be judged by three', channelFit(music, member('d', 'Gaming'), 'p', true).fit === 0)
+  const three = profileCharacter([member('a', 'Music'), member('b', 'Music'), member('c', 'Music')])
+  check('left out, three known is too few', channelFit(three, member('a', 'Music'), 'p', true) === null)
+
+  const tagged = profileCharacter([
+    member('a', null, ['lofi', 'study']),
+    member('b', null, ['lofi', 'chill']),
+    member('c', null, ['lofi', 'jazz']),
+    member('d', null, ['chill', 'solo'])
+  ])
+  check('the tag share is the fit', channelFit(tagged, member('x', null, ['lofi']), 'p', false).fit === 0.75)
+  check('the largest tag share counts', channelFit(tagged, member('x', null, ['chill', 'lofi']), 'p', false).evidence.tag === 'lofi')
+  check('a tag carried by one member does not count', channelFit(tagged, member('x', null, ['solo']), 'p', false).fit === 0)
+  check('nor does one carried by none', channelFit(tagged, member('x', null, ['metal']), 'p', false).evidence === null)
+  check('the tag evidence counts members', (() => {
+    const { evidence } = channelFit(tagged, member('x', null, ['lofi']), 'p', false)
+    return evidence.count === 3 && evidence.total === 4 && evidence.profileId === 'p'
+  })())
+  check('tags are left out for a member too', channelFit(tagged, member('a', null, ['lofi', 'study']), 'p', true).fit === 2 / 3)
+
+  // Stop-list tags never reach the counts: knownChannel drops them
+  const stopped = knownChannel({ id: 's', name: 'S' }, { tags: ['youtube', 'video', 'lofi'], musicArtist: false })
+  check('stop-list tags are dropped before counting', JSON.stringify(stopped.tags) === JSON.stringify(['lofi']))
+  const allStopped = profileCharacter(['a', 'b', 'c'].map(id => knownChannel({ id, name: id }, { tags: ['youtube', 'official'], musicArtist: false })))
+  check('members with only stop-list tags are not tagged members', allStopped.tagged === 0 && !hasCharacter(allStopped))
+
+  const both = profileCharacter([
+    member('a', 'Music', ['lofi']),
+    member('b', 'Music', ['lofi']),
+    member('c', 'Gaming', ['lofi']),
+    member('d', 'Gaming', ['lofi'])
+  ])
+  const fit = channelFit(both, member('x', 'Music', ['lofi']), 'p', false)
+  check('the fit is the larger signal', fit.fit === 1)
+  check('and its evidence is the one that decided', fit.evidence.type === 'tagShare')
+  const catWins = channelFit(both, member('x', 'Music', ['other']), 'p', false)
+  check('the category decides when it is larger', catWins.fit === 0.5 && catWins.evidence.type === 'categoryShare')
+}
+
+// Proposals
+{
+  const ch = (id, name = `Channel ${id}`) => ({ id, name, thumbnail: '' })
+  const profile = (_id, name, channels) => ({ _id, name, bgColor: '#000000', textColor: '#FFFFFF', subscriptions: channels })
+  const primary = (...channels) => profile(MAIN_PROFILE_ID, 'All Channels', channels)
+  const watchedAs = (pairs) => watchedCategories(pairs.flatMap(([authorId, category, times = 1]) => {
+    return Array.from({ length: times }, (_, i) => ({ authorId, category, timeWatched: i + 1 }))
+  }))
+  const tagsFor = (entries) => Object.fromEntries(entries.map(([id, tags, musicArtist = false]) => [id, { tags, musicArtist, seenAt: 1 }]))
+  const keysOf = result => result.proposals.map(found => found.key).join(',')
+  const idsIn = (result, key) => result.proposals.find(found => found.key === key)?.channels.map(suggested => suggested.channel.id).join(',')
+  const remainderIds = result => result.remainder.map(channel => channel.id).join(',')
+
+  // Category groups for the pool
+  {
+    const channels = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ch(id))
+    const profileList = [
+      primary(...channels, ch('t', 'Band - Topic')),
+      profile('p1', ' music ', [channels[5]])
+    ]
+    const watched = watchedAs([['a', 'Comedy'], ['b', 'Comedy'], ['c', 'Gaming'], ['d', 'Music'], ['f', 'Gaming']])
+    const result = proposeProfiles({ profileList, watched, collator })
+
+    check('pool channels are grouped by category', idsIn(result, 'category:Comedy') === 'a,b' && idsIn(result, 'category:Gaming') === 'c')
+    check('a channel in a profile is not grouped', !result.proposals.some(found => found.channels.some(suggested => suggested.channel.id === 'f')))
+    check('a category named as a profile goes to it, across case and spaces', idsIn(result, 'profile:p1') === 't,d')
+    check('a Topic channel goes with Music', idsIn(result, 'profile:p1').includes('t'))
+    check('profile proposals first, then categories by size', keysOf(result) === 'profile:p1,category:Comedy,category:Gaming')
+    check('the remainder is what no proposal took', remainderIds(result) === 'e')
+    check('every pool channel comes from the pool', result.proposals.every(found => found.channels.every(suggested => suggested.sourceProfileId === null)))
+    check('a profile proposal names its profile', result.proposals[0].kind === 'profile' && result.proposals[0].profileId === 'p1')
+
+    const dismissed = proposeProfiles({ profileList, watched, collator, dismissed: new Set(['category:Comedy']) })
+    check('a dismissed group is gone', !keysOf(dismissed).includes('Comedy'))
+    check('and its channels are back in the pool', remainderIds(dismissed) === 'a,b,e')
+  }
+
+  {
+    const composed = ch('a')
+    const profileList = [primary(composed, ch('b')), profile('p1', 'Caf\u00e9', [ch('b')])]
+    const watched = watchedAs([['a', 'Cafe\u0301']])
+    const result = proposeProfiles({ profileList, watched, collator })
+    check('a category matches a profile whatever its Unicode composition', idsIn(result, 'profile:p1') === 'a')
+  }
+
+  {
+    const profileList = [{ ...primary(ch('a')), name: 'Music' }]
+    const result = proposeProfiles({ profileList, watched: watchedAs([['a', 'Music']]), collator })
+    check('the primary profile is never matched by name', keysOf(result) === 'category:Music')
+  }
+
+  {
+    const channels = ['a', 'b', 'c', 'd', 'e'].map(id => ch(id))
+    const profileList = [primary(...channels)]
+    const watched = watchedAs([['a', 'Sports'], ['b', 'Comedy'], ['c', 'Comedy'], ['d', 'Autos'], ['e', 'Travel']])
+    const result = proposeProfiles({ profileList, watched, collator })
+    check('same-size groups are in name order', keysOf(result) === 'category:Comedy,category:Autos,category:Sports,category:Travel')
+  }
+
+  // Tags
+  {
+    const channels = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm'].map(id => ch(id))
+    const profileList = [primary(...channels), profile('p1', 'Gaming', []), profile('p2', 'Science', [])]
+    const watched = watchedAs([['a', 'Music'], ['k', 'Science']])
+    const channelTags = tagsFor([
+      ['b', ['retro', 'gaming']], // names a profile, by its second tag
+      ['c', ['music', 'gaming']], // music names only a category group, and profiles come first
+      ['d', ['piano', 'music']], // joins the Music category group
+      ['e', ['lofi', 'chill', 'youtube']],
+      ['f', ['lofi', 'chill', 'youtube']],
+      ['g', ['chill', 'lofi', 'youtube']],
+      ['h', ['chill', 'ambient', 'youtube']],
+      ['i', ['ambient', 'youtube']],
+      ['j', ['youtube', 'video', 'ambient']],
+      ['l', [], true] // an artist channel with no tags
+    ])
+    const result = proposeProfiles({ profileList, watched, channelTags, collator })
+
+    check('a tag naming a profile suggests it for that profile', idsIn(result, 'profile:p1') === 'b,c')
+    check('even for a profile with no character', result.proposals[0].key === 'profile:p1')
+    check('the evidence is the naming tag', result.proposals[0].channels[0].evidence.type === 'tagged' && result.proposals[0].channels[0].evidence.tag === 'gaming')
+    check('a watched category naming a profile joins that proposal too', idsIn(result, 'profile:p2') === 'k')
+    check('the artist flag gives Music', idsIn(result, 'category:Music').includes('l'))
+    check('a tag naming a category group joins it', idsIn(result, 'category:Music') === 'a,d,l')
+    check('the tag shared most is grouped first, a tie by name', idsIn(result, 'tag:chill') === 'e,f,g,h')
+    check('a channel is in one group only', idsIn(result, 'tag:lofi') === undefined)
+    check(`a group needs ${MIN_TAG_GROUP} channels`, idsIn(result, 'tag:ambient') === undefined)
+    check('stop-list tags never group', idsIn(result, 'tag:youtube') === undefined)
+    check('what is left stays in the pool', remainderIds(result) === 'i,j,m')
+    check('order: profiles, categories, tags', keysOf(result) === 'profile:p1,profile:p2,category:Music,tag:chill')
+    check('a tag group\'s evidence leads with its tag', JSON.stringify(result.proposals[3].channels[0].evidence.tags) === JSON.stringify(['chill', 'lofi']))
+
+    const existing = proposeProfiles({
+      profileList,
+      watched: watchedAs([['a', 'Music'], ['m', 'Gaming']]),
+      channelTags,
+      collator
+    })
+    check('a tag naming a profile joins its existing proposal', idsIn(existing, 'profile:p1') === 'b,c,m')
+
+    const dismissed = proposeProfiles({ profileList, watched, channelTags, collator, dismissed: new Set(['tag:chill']) })
+    check('a dismissed tag group\'s channels stay in the pool', remainderIds(dismissed) === 'e,f,g,h,i,j,m')
+    check('and its tag is not used again', !keysOf(dismissed).includes('tag:'))
+
+    const dismissedProfile = proposeProfiles({ profileList, watched, channelTags, collator, dismissed: new Set(['profile:p1']) })
+    check('a dismissed profile proposal\'s channels go to the pool, not elsewhere', remainderIds(dismissedProfile) === 'b,c,i,j,m')
+  }
+
+  {
+    // Two tags tied on count, the collator deciding
+    const channels = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ch(id))
+    const channelTags = tagsFor([
+      ['a', ['zeta']], ['b', ['zeta']], ['c', ['zeta']],
+      ['d', ['alpha']], ['e', ['alpha']], ['f', ['alpha']]
+    ])
+    const result = proposeProfiles({ profileList: [primary(...channels)], channelTags, collator })
+    check('tag groups of one size are in name order', keysOf(result) === 'tag:alpha,tag:zeta')
+  }
+
+  // Fit against profile characters
+  {
+    const members = (prefix, n) => Array.from({ length: n }, (_, i) => ch(`${prefix}${i}`))
+    const games = members('g', 4)
+    const science = members('s', 4)
+    const pool = [ch('x'), ch('y'), ch('z'), ch('w')]
+    const both = ch('dup')
+    const profileList = [
+      primary(...games, ...science, ...pool, both),
+      profile('p1', 'Games', [...games, both]),
+      profile('p2', 'Learning', [...science, both])
+    ]
+    const watched = watchedAs([
+      ...games.map(c => [c.id, 'Gaming']),
+      ...science.slice(0, 2).map(c => [c.id, 'Education']),
+      ...science.slice(2).map(c => [c.id, 'Science & Technology']),
+      ['x', 'Gaming'],
+      ['y', 'Education'],
+      ['z', 'Comedy'],
+      ['dup', 'Gaming', 5]
+    ])
+    const result = proposeProfiles({ profileList, watched, collator })
+
+    check('a pool channel fitting a profile is suggested for it', idsIn(result, 'profile:p1') === 'x')
+    check('with the share as its evidence', result.proposals[0].channels[0].evidence.type === 'categoryShare' && result.proposals[0].channels[0].evidence.share === 1)
+    check(`a fit of exactly ${FIT_THRESHOLD} is enough`, idsIn(result, 'profile:p2') === 'y')
+    check('below the threshold a channel moves on to the later steps', idsIn(result, 'category:Comedy') === 'z')
+    check('a channel in two profiles never appears', !result.proposals.some(found => found.channels.some(suggested => suggested.channel.id === 'dup')))
+    check('nor in the remainder', remainderIds(result) === 'w')
+    check('and does not count as a member', (() => {
+      // Were it counted, Learning would have a Gaming member and a share for x
+      const learning = profileCharacter(science.map(c => knownChannel(c, undefined, watched.get(c.id))))
+      return learning.categorised === 4
+    })())
+    check('coverage counts channels known', result.coverage.known === 12 && result.coverage.total === 13)
+    check('coverage counts profiles with a character', result.coverage.profiles === 2 && result.coverage.profileCount === 2)
+
+    const tie = proposeProfiles({
+      profileList: [
+        primary(...games, ...science, ch('x')),
+        profile('p1', 'Games', games),
+        profile('p2', 'More games', science)
+      ],
+      watched: watchedAs([...games.map(c => [c.id, 'Gaming']), ...science.map(c => [c.id, 'Gaming']), ['x', 'Gaming']]),
+      collator
+    })
+    check('a tie goes to the earlier profile', idsIn(tie, 'profile:p1') === 'x' && idsIn(tie, 'profile:p2') === undefined)
+
+    const few = proposeProfiles({
+      profileList: [primary(games[0], games[1], ch('x')), profile('p1', 'Games', [games[0], games[1]])],
+      watched: watchedAs([[games[0].id, 'Gaming'], [games[1].id, 'Gaming'], ['x', 'Gaming']]),
+      collator
+    })
+    check('a profile with too few known members attracts nothing by fit', idsIn(few, 'profile:p1') === undefined && idsIn(few, 'category:Gaming') === 'x')
+    check('and has no character in the coverage', few.coverage.profiles === 0)
+  }
+
+  // Suggested moves
+  {
+    const members = (prefix, n) => Array.from({ length: n }, (_, i) => ch(`${prefix}${i}`))
+    const games = members('g', 4)
+    const music = members('m', 4)
+    const stray = ch('stray')
+    const profileList = [
+      primary(...games, ...music, stray),
+      profile('p1', 'Games', [...games, stray]),
+      profile('p2', 'Tunes', music)
+    ]
+    const watched = watchedAs([
+      ...games.map(c => [c.id, 'Gaming']),
+      ...music.map(c => [c.id, 'Music']),
+      ['stray', 'Music', 3]
+    ])
+    const result = proposeProfiles({ profileList, watched, collator })
+
+    check('a channel fitting another profile clearly better is a suggested move', idsIn(result, 'profile:p2') === 'stray')
+    check('its source is the profile it is in', result.proposals[0].channels[0].sourceProfileId === 'p1')
+    check('it stays out of the remainder', remainderIds(result) === '')
+    check('channels that fit where they are stay', result.proposals.length === 1)
+
+    const memberships = channelMemberships(profileList)
+    const keeps = addKeep({}, memberships, 'stray', 'p1')
+    check('a keep applies while the channel is where it was kept', isKept(keeps, memberships, 'stray'))
+    check('a keep for its current profile suppresses the move', proposeProfiles({ profileList, watched, keeps, collator }).proposals.length === 0)
+
+    const stale = { stray: 'p2' }
+    check('a stale keep does not apply', !isKept(stale, memberships, 'stray'))
+    check('and does not suppress the move', idsIn(proposeProfiles({ profileList, watched, keeps: stale, collator }), 'profile:p2') === 'stray')
+    check('adding a keep drops the stale ones', JSON.stringify(addKeep({ other: 'p2', m0: 'p2' }, memberships, 'stray', 'p1')) === JSON.stringify({ m0: 'p2', stray: 'p1' }))
+
+    const dismissed = proposeProfiles({ profileList, watched, collator, dismissed: new Set(['profile:p2']) })
+    check('a dismissed profile proposal drops its moves', dismissed.proposals.length === 0 && remainderIds(dismissed) === '')
+
+    // The margin: three of the other four in Games are watched as Music too
+    const margin = (tunes) => proposeProfiles({
+      profileList: [
+        primary(...games, ...music, stray),
+        profile('p1', 'Games', [...games, stray]),
+        profile('p2', 'Tunes', music)
+      ],
+      watched: watchedAs([
+        [games[0].id, 'Gaming'],
+        ...games.slice(1).map(c => [c.id, 'Music']),
+        ...music.map((c, i) => [c.id, tunes[i]]),
+        ['stray', 'Music']
+      ]),
+      collator
+    })
+    check(`a move with exactly the margin of ${MOVE_MARGIN} is suggested`, idsIn(margin(['Music', 'Music', 'Music', 'Music']), 'profile:p2')?.split(',').includes('stray'))
+    check('a move with less than the margin is not', margin(['Music', 'Music', 'Music', 'Comedy']).proposals.length === 0)
+
+    // Its own profile unknown: never moved out of it
+    const unknownHome = proposeProfiles({
+      profileList: [
+        primary(...games, ...music, stray),
+        profile('p1', 'Games', [...games, stray]),
+        profile('p2', 'Tunes', music)
+      ],
+      watched: watchedAs([...music.map(c => [c.id, 'Music']), ['stray', 'Music']]),
+      collator
+    })
+    check('no move out of a profile with no character', unknownHome.proposals.length === 0)
+
+    // Its own profile known, but only by what the channel has none of
+    const otherSignal = proposeProfiles({
+      profileList: [
+        primary(...games, ...music, stray),
+        profile('p1', 'Games', [...games, stray]),
+        profile('p2', 'Tunes', music)
+      ],
+      watched: watchedAs([...music.map(c => [c.id, 'Music'])]),
+      channelTags: tagsFor([...games.map(c => [c.id, ['speedrun', 'retro']]), ...music.map(c => [c.id, ['jazz']]), ['stray', ['jazz']]]),
+      collator
+    })
+    check('a move needs the channel judged against its own profile too', idsIn(otherSignal, 'profile:p2') === 'stray')
+
+    const threshold = proposeProfiles({
+      profileList: [
+        primary(...games, ...music, stray),
+        profile('p1', 'Games', [...games, stray]),
+        profile('p2', 'Tunes', music)
+      ],
+      watched: watchedAs([
+        ...games.map(c => [c.id, 'Gaming']),
+        ...music.slice(0, 1).map(c => [c.id, 'Music']),
+        ...music.slice(1).map(c => [c.id, 'Comedy']),
+        ['stray', 'Music']
+      ]),
+      collator
+    })
+    check('a move needs the threshold', threshold.proposals.length === 0)
+  }
 }
 
 if (failures > 0) {
