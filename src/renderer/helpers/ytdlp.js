@@ -24,10 +24,11 @@ export const TOOL_NAMES = {
  * @param {string} videoId
  * @param {string} title
  * @param {import('../../main/ytdlp/downloadService').Quality} [quality]
+ * @param {boolean} [fresh] chosen from the quality menu: start over, replacing a file of the same name
  */
-export function downloadWithYtDlp(videoId, title, quality = 'best') {
+export function downloadWithYtDlp(videoId, title, quality = 'best', fresh = false) {
   if (process.env.IS_ELECTRON) {
-    window.ftElectron.ytDlpDownload({ videoId, title, quality })
+    window.ftElectron.ytDlpDownload({ videoId, title, quality, fresh })
   }
 }
 
@@ -71,7 +72,7 @@ export function setupYtDlpOutcomeToasts() {
  * Installs whatever is missing. Joins an install already running, here or in
  * main.
  *
- * @param {{ videoId: string, title: string, quality?: import('../../main/ytdlp/downloadService').Quality }} [thenDownload] for main to download once installed
+ * @param {{ videoId: string, title: string, quality?: import('../../main/ytdlp/downloadService').Quality, fresh?: boolean }} [thenDownload] for main to download once installed
  * @returns {Promise<import('../../main/ytdlp/toolInstaller').InstallResult | undefined>}
  */
 export async function installYtDlpTools(thenDownload) {
@@ -95,8 +96,9 @@ const INSTALL_TOAST_MS = 60 * 60 * 1000
  * @param {string} videoId
  * @param {string} title
  * @param {import('../../main/ytdlp/downloadService').Quality} quality
+ * @param {boolean} fresh
  */
-async function installThenDownload(videoId, title, quality) {
+async function installThenDownload(videoId, title, quality, fresh) {
   const t = i18n.global.t
   const progressToast = new AbortController()
 
@@ -111,7 +113,7 @@ async function installThenDownload(videoId, title, quality) {
 
   let result
   try {
-    result = await installYtDlpTools({ videoId, title, quality })
+    result = await installYtDlpTools({ videoId, title, quality, fresh })
   } finally {
     progressToast.abort()
   }
@@ -259,7 +261,7 @@ function showOutcome(outcome) {
         showToast(
           t('Video.yt-dlp.Tools missing, click to install', { tools: formatToolList(outcome.missing) }),
           LONG_TOAST_MS,
-          () => installThenDownload(outcome.videoId, outcome.title, outcome.quality)
+          () => installThenDownload(outcome.videoId, outcome.title, outcome.quality, outcome.fresh)
         )
       } else {
         showToast(

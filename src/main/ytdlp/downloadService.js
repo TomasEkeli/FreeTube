@@ -96,6 +96,7 @@ function audioDestination(downloadPath, acodec) {
  * @property {string} videoId
  * @property {string} title shown in toasts and the downloads panel only, never passed to yt-dlp
  * @property {Quality} [quality] best when not given
+ * @property {boolean} [fresh] start over rather than take an existing file or carry on from partial ones: chosen from the quality menu, so asked for on purpose
  */
 
 /**
@@ -137,7 +138,7 @@ function audioDestination(downloadPath, acodec) {
  *   { type: 'failed', videoId: string, title: string, reason: string | null, exitCode: number | null, download?: DownloadSnapshot } |
  *   { type: 'cancelled', videoId: string, title: string, download: DownloadSnapshot } |
  *   { type: 'not-found', videoId: string, title: string } |
- *   { type: 'tools-missing', videoId: string, title: string, missing: import('./toolDetection').Tool[], quality: Quality }
+ *   { type: 'tools-missing', videoId: string, title: string, missing: import('./toolDetection').Tool[], quality: Quality, fresh: boolean }
  * )} DownloadOutcome
  */
 
@@ -224,7 +225,7 @@ export function createDownloadService(deps) {
    * @param {DownloadRequest} request
    * @param {(outcome: DownloadOutcome) => void} report
    */
-  async function start({ videoId, title, quality = 'best' }, report) {
+  async function start({ videoId, title, quality = 'best', fresh = false }, report) {
     if (running.has(videoId)) {
       report({ type: 'already-running', videoId, title })
       return
@@ -264,7 +265,7 @@ export function createDownloadService(deps) {
       report({ type: 'progress', videoId, title, download: { ...download } })
 
       tools = await detector.detect()
-      command = await buildCommand({ videoId, quality, folder: download.folder, tools })
+      command = await buildCommand({ videoId, quality, fresh, folder: download.folder, tools })
     } catch (error) {
       running.delete(videoId)
       end(download, 'failed', { reason: String(error?.message ?? error) })
@@ -279,7 +280,7 @@ export function createDownloadService(deps) {
     if (missing.length > 0) {
       running.delete(videoId)
       downloads.delete(videoId)
-      report({ type: 'tools-missing', videoId, title, missing, quality })
+      report({ type: 'tools-missing', videoId, title, missing, quality, fresh })
       return
     }
 
@@ -303,23 +304,30 @@ export function createDownloadService(deps) {
       before = await listDirectory(download.folder)
     } catch {}
 
-    run(download, tools['yt-dlp'].path, command, before, report)
+    // Starting over carries on from nothing, whatever the folder holds
+    run(download, tools['yt-dlp'].path, command, fresh ? [] : before, report)
   }
 
   /**
    * yt-dlp's own defaults, plus only what FreeTube needs, then the user's own
    * arguments, then the end-of-options marker and the URL.
    *
-   * @param {{ videoId: string, quality: Quality, folder: string, tools: import('./toolDetection').ToolStatuses }} options
+   * @param {{ videoId: string, quality: Quality, fresh: boolean, folder: string, tools: import('./toolDetection').ToolStatuses }} options
    * @returns {Promise<{ args: string[], extraEnv: Record<string, string> }>}
    */
-  async function buildCommand({ videoId, quality, folder, tools }) {
+  async function buildCommand({ videoId, quality, fresh, folder, tools }) {
     const args = [
       '--paths', `home:${folder}`,
       // Where it will go, how it is getting on, and where it went
       ...progressArgs(),
       ...qualityArgs(quality),
     ]
+
+    // Asked for on purpose: a file of that name from an earlier attempt, at a
+    // lower quality than YouTube offers now, is replaced rather than kept
+    if (fresh) {
+      args.push('--force-overwrites')
+    }
 
     // yt-dlp finds these itself on PATH, but not in FreeTube's tools folder.
     // The folder rather than the file for ffmpeg, so that ffprobe is found too.

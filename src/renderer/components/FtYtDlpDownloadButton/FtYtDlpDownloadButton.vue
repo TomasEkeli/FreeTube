@@ -144,7 +144,13 @@ function handleClick(quality) {
     return
   }
 
-  downloadWithYtDlp(props.videoId, props.title, quality ?? 'best')
+  // A plain click takes yt-dlp's usual course; a quality chosen from the menu
+  // is asked for on purpose, and replaces a file of the same name
+  if (quality === undefined) {
+    downloadWithYtDlp(props.videoId, props.title)
+  } else {
+    downloadWithYtDlp(props.videoId, props.title, quality, true)
+  }
 }
 
 /**
@@ -154,7 +160,7 @@ function handleFinishedClick(choice) {
   if (choice === undefined || choice === 'reveal') {
     revealYtDlpDownload(props.videoId)
   } else {
-    downloadWithYtDlp(props.videoId, props.title, choice)
+    downloadWithYtDlp(props.videoId, props.title, choice, true)
   }
 }
 </script>

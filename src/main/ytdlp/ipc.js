@@ -83,7 +83,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       return
     }
 
-    startDownload(event.sender, payload.videoId, payload.title, payload.quality).catch((error) => {
+    startDownload(event.sender, payload.videoId, payload.title, payload.quality, payload.fresh === true).catch((error) => {
       console.error('yt-dlp download could not start', error)
     })
   })
@@ -95,14 +95,16 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
    * @param {string} videoId validated
    * @param {unknown} title
    * @param {unknown} quality
+   * @param {boolean} [fresh]
    */
-  async function startDownload(sender, videoId, title, quality) {
+  async function startDownload(sender, videoId, title, quality, fresh = false) {
     const request = {
       videoId,
       // For the toasts only; it never reaches the command line
       title: typeof title === 'string' ? title.slice(0, 300) : '',
       // One of a fixed few, each mapped to arguments in main; anything else is the best
       quality: isValidQuality(quality) ? quality : 'best',
+      fresh,
     }
 
     /**
@@ -253,7 +255,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     // asked for, once the install has succeeded
     const download = payload?.thenDownload
     if (result.ok && download != null && isValidVideoId(download.videoId) && await readSetting('ytDlpEnabled')) {
-      startDownload(event.sender, download.videoId, download.title, download.quality).catch((error) => {
+      startDownload(event.sender, download.videoId, download.title, download.quality, download.fresh === true).catch((error) => {
         console.error('yt-dlp download could not start', error)
       })
     }

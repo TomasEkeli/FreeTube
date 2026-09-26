@@ -310,7 +310,7 @@ describe('download service', () => {
 
       await service.start(REQUEST, report)
 
-      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['yt-dlp'], quality: 'best' }])
+      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['yt-dlp'], quality: 'best', fresh: false }])
       expect(downloads()).toHaveLength(0)
       expect(service.list().downloads).toEqual([])
     })
@@ -320,7 +320,7 @@ describe('download service', () => {
 
       await service.start(REQUEST, report)
 
-      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['ffmpeg', 'deno'], quality: 'best' }])
+      expect(ours()).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['ffmpeg', 'deno'], quality: 'best', fresh: false }])
       expect(downloads()).toHaveLength(0)
     })
 
@@ -648,6 +648,27 @@ describe('download service', () => {
 
       const { args } = downloads()[0]
       expect(args.lastIndexOf('-f')).toBeGreaterThan(args.indexOf('-S'))
+    })
+
+    it('starts over when asked to, replacing a file of the same name and resuming nothing', async () => {
+      const { service, report, downloads, ours, ended } = setup({
+        directories: { [DOWNLOADS]: ['A video [dQw4w9WgXcQ].f401.mp4.part'] },
+      })
+
+      await service.start({ ...REQUEST, quality: 'best', fresh: true }, report)
+      await until(ended)
+
+      expect(downloads()[0].args).toContain('--force-overwrites')
+      expect(ours()[0].download.resuming).toBe(false)
+    })
+
+    it('keeps yt-dlp\'s usual course otherwise', async () => {
+      const { service, report, downloads, ended } = setup()
+
+      await service.start(REQUEST, report)
+      await until(ended)
+
+      expect(downloads()[0].args).not.toContain('--force-overwrites')
     })
 
     it('reports the height yt-dlp chose, which may be less than asked for', async () => {
