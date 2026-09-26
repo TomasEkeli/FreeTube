@@ -59,6 +59,8 @@ const IpcChannels = {
   YTDLP_DOWNLOAD_OUTCOME: 'ytdlp-download-outcome',
   YTDLP_REVEAL: 'ytdlp-reveal',
   YTDLP_CHOOSE_FOLDER: 'ytdlp-choose-folder',
+  YTDLP_CHOOSE_EXECUTABLE: 'ytdlp-choose-executable',
+  YTDLP_DETECT_TOOLS: 'ytdlp-detect-tools',
 }
 
 const DBActions = {

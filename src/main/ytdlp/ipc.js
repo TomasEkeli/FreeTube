@@ -2,12 +2,14 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import { constants as fsConstants } from 'node:fs'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 
 import { IpcChannels } from '../../constants'
 import { settings } from '../../datastores/handlers/base'
 import { isFreeTubeUrl } from '../utils'
 import { createDownloadService, isValidVideoId } from './downloadService'
 import { createSettingsReader } from './settings'
+import { createToolDetector } from './toolDetection'
 
 export { isRendererWritableYtDlpSetting } from './settings'
 
@@ -22,10 +24,25 @@ export { isRendererWritableYtDlpSetting } from './settings'
 export function registerYtDlpHandlers({ chooseDefaultFolder }) {
   const readSetting = createSettingsReader(id => settings._findOne(id))
 
+  // Under the user data directory: no administrator rights needed, and gone
+  // with the profile
+  const managedDir = path.join(app.getPath('userData'), 'bin')
+
+  const detector = createToolDetector({
+    spawn,
+    isExecutableFile,
+    readSetting,
+    managedDir,
+    platform: process.platform,
+    env: process.env,
+  })
+
   const downloadService = createDownloadService({
     spawn,
     readSetting,
     isExecutableFile,
+    managedDir,
+    detector,
     defaultDownloadFolder: () => app.getPath('downloads'),
     platform: process.platform,
     env: process.env,
@@ -85,6 +102,29 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       defaultPathName: 'downloads',
       properties: ['openDirectory', 'createDirectory'],
     })
+  })
+
+  ipcMain.handle(IpcChannels.YTDLP_CHOOSE_EXECUTABLE, async (event) => {
+    if (!isFreeTubeUrl(event.senderFrame.url)) {
+      return
+    }
+
+    const chosen = await chooseDefaultFolder(event.sender, await readSetting('ytDlpExecutablePath'), {
+      settingId: 'ytDlpExecutablePath',
+      defaultPathName: 'home',
+      properties: ['openFile'],
+    })
+
+    detector.invalidate()
+    return chosen
+  })
+
+  ipcMain.handle(IpcChannels.YTDLP_DETECT_TOOLS, async (event) => {
+    if (!isFreeTubeUrl(event.senderFrame.url)) {
+      return
+    }
+
+    return { tools: await detector.detect({ fresh: true }) }
   })
 
   app.on('will-quit', () => {

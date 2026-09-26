@@ -214,6 +214,21 @@ export default {
   },
 
   /**
+   * Main saves the choice to the setting itself, the renderer may not
+   * @returns {Promise<string | undefined>}
+   */
+  ytDlpChooseExecutable: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_CHOOSE_EXECUTABLE)
+  },
+
+  /**
+   * @returns {Promise<{ tools: import('../main/ytdlp/toolDetection').ToolStatuses }>}
+   */
+  ytDlpDetectTools: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_DETECT_TOOLS)
+  },
+
+  /**
    * @param {number} factor
    */
   setZoomFactor: (factor) => {

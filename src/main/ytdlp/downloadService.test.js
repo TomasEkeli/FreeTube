@@ -7,14 +7,40 @@ import { createFakeSpawn, until } from './testing/fakeProcess'
 const VIDEO_ID = 'dQw4w9WgXcQ'
 const REQUEST = { videoId: VIDEO_ID, title: 'A video' }
 
+const MANAGED_DIR = '/data/FreeTube/bin'
+const ON_PATH = ['/usr/bin/yt-dlp', '/usr/bin/ffmpeg', '/usr/bin/deno']
+
+const VERSION_OUTPUT = {
+  'yt-dlp': '2026.09.16.232951\n',
+  ffmpeg: 'ffmpeg version N-121067-20260925 Copyright (c) 2000-2026 the FFmpeg developers\n',
+  deno: 'deno 2.5.1 (stable, release, x86_64-unknown-linux-gnu)\n',
+}
+
+/**
+ * @param {string[]} args
+ */
+function isVersionProbe(args) {
+  return args.length === 1 && (args[0] === '--version' || args[0] === '-version')
+}
+
 /**
  * @param {object} options
- * @param {(command: string, args: string[]) => import('./testing/fakeProcess').Script} [options.respond]
+ * @param {(command: string, args: string[]) => import('./testing/fakeProcess').Script} [options.respond] for the download itself
  * @param {string[]} [options.executables] files that exist and can be run
+ * @param {string[]} [options.broken] files that exist but do not answer their version probe
  * @param {Partial<typeof SETTING_DEFAULTS>} [options.settings]
  */
-function setup({ respond = () => ({}), executables = ['/usr/bin/yt-dlp'], settings = {} } = {}) {
-  const fake = createFakeSpawn(respond)
+function setup({ respond = () => ({}), executables = ON_PATH, broken = [], settings = {} } = {}) {
+  const fake = createFakeSpawn((command, args) => {
+    if (isVersionProbe(args)) {
+      if (broken.includes(command)) {
+        return { exitCode: 1 }
+      }
+      const tool = command.split('/').at(-1)
+      return { stdout: VERSION_OUTPUT[tool], exitCode: 0 }
+    }
+    return respond(command, args)
+  })
   const outcomes = []
   const stored = { ...SETTING_DEFAULTS, ytDlpEnabled: true, ...settings }
 
@@ -22,13 +48,14 @@ function setup({ respond = () => ({}), executables = ['/usr/bin/yt-dlp'], settin
     spawn: fake.spawn,
     readSetting: async id => stored[id],
     isExecutableFile: async filePath => executables.includes(filePath),
+    managedDir: MANAGED_DIR,
     defaultDownloadFolder: () => '/home/viewer/Downloads',
     platform: 'linux',
     env: { PATH: '/usr/local/bin:/usr/bin' },
   })
 
   const report = outcome => outcomes.push(outcome)
-  const downloads = () => fake.calls.filter(call => call.command !== 'taskkill')
+  const downloads = () => fake.calls.filter(call => call.command !== 'taskkill' && !isVersionProbe(call.args))
 
   return { service, fake, outcomes, report, downloads }
 }
@@ -218,12 +245,21 @@ describe('download service', () => {
       expect(outcomes).toEqual([{ type: 'not-found', videoId: VIDEO_ID, title: 'A video' }])
     })
 
-    it('reports not found, and spawns nothing, when there is no yt-dlp on PATH', async () => {
-      const { service, report, outcomes, downloads } = setup({ executables: [] })
+    it('reports tools missing, naming it, and spawns nothing, when there is no yt-dlp anywhere', async () => {
+      const { service, report, outcomes, downloads } = setup({ executables: ['/usr/bin/ffmpeg', '/usr/bin/deno'] })
 
       await service.start(REQUEST, report)
 
-      expect(outcomes).toEqual([{ type: 'not-found', videoId: VIDEO_ID, title: 'A video' }])
+      expect(outcomes).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['yt-dlp'] }])
+      expect(downloads()).toHaveLength(0)
+    })
+
+    it('reports tools missing when ffmpeg or Deno is absent, naming them, and spawns nothing', async () => {
+      const { service, report, outcomes, downloads } = setup({ executables: ['/usr/bin/yt-dlp'] })
+
+      await service.start(REQUEST, report)
+
+      expect(outcomes).toEqual([{ type: 'tools-missing', videoId: VIDEO_ID, title: 'A video', missing: ['ffmpeg', 'deno'] }])
       expect(downloads()).toHaveLength(0)
     })
 
@@ -270,6 +306,44 @@ describe('download service', () => {
 
       expect(downloads()).toHaveLength(2)
       expect(service.isBusy()).toBe(false)
+    })
+  })
+
+  describe('which yt-dlp is run', () => {
+    const picked = '/opt/custom/yt-dlp'
+    const managed = `${MANAGED_DIR}/yt-dlp`
+
+    /**
+     * @param {Parameters<typeof setup>[0]} options
+     */
+    async function spawnedYtDlp(options) {
+      const { service, report, outcomes, downloads } = setup(options)
+      await service.start(REQUEST, report)
+      await until(() => outcomes.some(o => o.type !== 'started'))
+      return downloads()[0]?.command
+    }
+
+    it('runs the picked executable ahead of the managed one and PATH', async () => {
+      expect(await spawnedYtDlp({
+        executables: [picked, managed, ...ON_PATH],
+        settings: { ytDlpExecutablePath: picked },
+      })).toBe(picked)
+    })
+
+    it('runs the managed one ahead of PATH when nothing is picked', async () => {
+      expect(await spawnedYtDlp({ executables: [managed, ...ON_PATH] })).toBe(managed)
+    })
+
+    it('runs the one on PATH, by its full path, when there is nothing else', async () => {
+      expect(await spawnedYtDlp({ executables: ON_PATH })).toBe('/usr/bin/yt-dlp')
+    })
+
+    it('passes over a candidate that does not answer its version probe', async () => {
+      expect(await spawnedYtDlp({
+        executables: [picked, managed, ...ON_PATH],
+        broken: [picked, managed],
+        settings: { ytDlpExecutablePath: picked },
+      })).toBe('/usr/bin/yt-dlp')
     })
   })
 

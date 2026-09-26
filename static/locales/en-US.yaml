@@ -695,6 +695,21 @@ Settings:
     Choose Folder: Choose Folder
     Use Downloads Folder: Use Downloads Folder
     Custom Arguments: Custom yt-dlp Arguments
+    Tools: Tools
+    Looking: Looking…
+    Not found: Not found
+    Source Picked: 'chosen: {path}'
+    Source Managed: installed by FreeTube
+    Source Path: 'on PATH: {path}'
+    yt-dlp Missing Warning: Without yt-dlp there is nothing to download with.
+    ffmpeg Missing Warning: Without ffmpeg, yt-dlp cannot merge separate video and audio, and falls back to a
+      single low quality file, or to separate unmerged files.
+    Deno Missing Warning: Without Deno, yt-dlp cannot run the JavaScript YouTube requires, and YouTube downloads
+      may fail or be limited.
+    yt-dlp Executable: yt-dlp Executable
+    Found Automatically: Found automatically
+    Choose File: Choose File
+    Find Automatically: Find Automatically
   Privacy Settings:
     Privacy Settings: Privacy
     Remember History: Remember Watch History
@@ -1152,6 +1167,7 @@ Video:
     Download failed: 'Could not download "{title}": {reason}'
     Download failed with exit code: 'Could not download "{title}": yt-dlp stopped with exit code {exitCode}'
     yt-dlp could not be started: yt-dlp could not be started. Check the yt-dlp section in Settings
+    Tools missing: 'Cannot download yet, {tools} not found. See the yt-dlp section in Settings'
   Player:
     TranslatedCaptionTemplate: '{language} (translated from "{originalLanguage}")'
     Audio Tracks: Audio Tracks

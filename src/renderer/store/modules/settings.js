@@ -399,6 +399,9 @@ const state = {
   // Empty for the system Downloads folder. Only main's folder picker may set
   // it; the renderer may only clear it.
   ytDlpDownloadFolder: '',
+  // Empty to look in FreeTube's own tools folder and then on PATH. Only main's
+  // file picker may set it; the renderer may only clear it.
+  ytDlpExecutablePath: '',
   // A JSON array of strings, like the external player's
   ytDlpCustomArgs: '[]',
 
@@ -547,6 +550,7 @@ export const NON_TRANSFERABLE_SETTINGS = new Set([
   // YtDlpSettings
   'ytDlpEnabled',
   'ytDlpDownloadFolder',
+  'ytDlpExecutablePath',
   'ytDlpCustomArgs',
 
   /* Depends on process.env.SUPPORTS_LOCAL_API */

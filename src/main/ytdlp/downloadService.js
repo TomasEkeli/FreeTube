@@ -1,6 +1,6 @@
 import { buildProxyUrl } from '../utils'
-import { findOnPath } from './findOnPath'
 import { parseCustomArgs } from './settings'
+import { createToolDetector, TOOLS } from './toolDetection'
 
 /**
  * The download service: hands a video to yt-dlp and reports what became of it.
@@ -39,7 +39,8 @@ export function buildWatchUrl(videoId) {
  *   { type: 'already-running', videoId: string, title: string } |
  *   { type: 'finished', videoId: string, title: string, path: string | null } |
  *   { type: 'failed', videoId: string, title: string, reason: string | null, exitCode: number | null } |
- *   { type: 'not-found', videoId: string, title: string }
+ *   { type: 'not-found', videoId: string, title: string } |
+ *   { type: 'tools-missing', videoId: string, title: string, missing: import('./toolDetection').Tool[] }
  * )} DownloadOutcome
  */
 
@@ -48,12 +49,15 @@ export function buildWatchUrl(videoId) {
  * @param {typeof import('node:child_process').spawn} deps.spawn
  * @param {(id: keyof typeof import('./settings').SETTING_DEFAULTS) => Promise<any>} deps.readSetting
  * @param {(filePath: string) => Promise<boolean>} deps.isExecutableFile
+ * @param {string} deps.managedDir the folder FreeTube installs the tools into
  * @param {() => string} deps.defaultDownloadFolder the system Downloads folder
  * @param {string} deps.platform
  * @param {Record<string, string | undefined>} deps.env
+ * @param {ReturnType<typeof createToolDetector>} [deps.detector] shared with the installer; made from the rest when not given
  */
 export function createDownloadService(deps) {
-  const { spawn, readSetting, isExecutableFile, defaultDownloadFolder, platform, env } = deps
+  const { spawn, readSetting, defaultDownloadFolder, platform, env } = deps
+  const detector = deps.detector ?? createToolDetector(deps)
 
   /**
    * Keyed by video id. Holds `null` between accepting a request and having a
@@ -84,11 +88,11 @@ export function createDownloadService(deps) {
 
     running.set(videoId, null)
 
-    let executable
+    let tools
     let args
     let folder
     try {
-      executable = await findOnPath('yt-dlp', { platform, env, isExecutableFile })
+      tools = await detector.detect()
       folder = (await readSetting('ytDlpDownloadFolder')) || defaultDownloadFolder()
       args = await buildArgs({ videoId, folder })
     } catch (error) {
@@ -97,11 +101,17 @@ export function createDownloadService(deps) {
       return
     }
 
-    if (executable === null) {
+    // Without yt-dlp there is nothing to run, and without ffmpeg or Deno a
+    // YouTube download comes out at low quality or not at all. Either way
+    // the remedy is an install, not a retry, so nothing is spawned.
+    const missing = TOOLS.filter(tool => !tools[tool].found)
+    if (missing.length > 0) {
       running.delete(videoId)
-      report({ type: 'not-found', videoId, title })
+      report({ type: 'tools-missing', videoId, title, missing })
       return
     }
+
+    const executable = tools['yt-dlp'].path
 
     run({ videoId, title, executable, args, folder }, report)
   }
@@ -263,7 +273,7 @@ export function createDownloadService(deps) {
     return finished.get(videoId)
   }
 
-  return { start, stopAll, isBusy, getFinished }
+  return { start, stopAll, isBusy, getFinished, detector }
 }
 
 /**

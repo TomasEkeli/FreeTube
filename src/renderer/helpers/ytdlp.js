@@ -10,6 +10,13 @@ import { showToast } from './utils'
 // before it goes
 const LONG_TOAST_MS = 10_000
 
+// Product names, the same in every language
+export const TOOL_NAMES = {
+  'yt-dlp': 'yt-dlp',
+  ffmpeg: 'ffmpeg',
+  deno: 'Deno',
+}
+
 /**
  * @param {string} videoId
  * @param {string} title
@@ -67,5 +74,25 @@ function showOutcome(outcome) {
     case 'not-found':
       showToast(t('Video.yt-dlp.yt-dlp could not be started'), LONG_TOAST_MS)
       break
+
+    case 'tools-missing':
+      showToast(
+        t('Video.yt-dlp.Tools missing', { tools: formatToolList(outcome.missing) }),
+        LONG_TOAST_MS
+      )
+      break
+  }
+}
+
+/**
+ * @param {import('../../main/ytdlp/toolDetection').Tool[]} tools
+ */
+function formatToolList(tools) {
+  const names = tools.map(tool => TOOL_NAMES[tool])
+
+  try {
+    return new Intl.ListFormat(i18n.global.locale.value, { type: 'conjunction' }).format(names)
+  } catch {
+    return names.join(', ')
   }
 }
