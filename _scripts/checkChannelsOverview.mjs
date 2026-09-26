@@ -18,12 +18,15 @@ import {
   deselectAll,
   duplicateCounts,
   filterChannels,
+  insertionIndex,
   isDuplicate,
   isSelected,
   moveInOrder,
+  moveTarget,
   nonPrimaryProfiles,
   normaliseQuery,
   orderProfiles,
+  pickUnusedColour,
   planTransfer,
   planUnsubscribe,
   profileOrderIds,
@@ -379,6 +382,49 @@ const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
   check('a move to where it is returns the same list', moveInOrder(order, 'b', 1) === order)
   check('an id not in the order changes nothing', moveInOrder(order, 'z', 0) === order)
   check('moving leaves the list alone', order.join(',') === 'a,b,c,d')
+}
+
+// A colour for a new profile
+{
+  const colours = ['#AA0000', '#00BB00', '#0000CC']
+  const coloured = (...bgColors) => bgColors.map((bgColor, i) => ({ ...profile(`p${i}`, `P${i}`, []), bgColor }))
+
+  check('the one colour free is picked, whatever the chance', [0, 0.5, 0.999, 1].every(r => pickUnusedColour(colours, coloured('#AA0000', '#0000CC'), () => r) === '#00BB00'))
+  check('a colour in use in other case is in use', pickUnusedColour(colours, coloured('#aa0000', '#0000cc'), () => 0) === '#00BB00')
+  check('with every colour taken one is still picked', colours.includes(pickUnusedColour(colours, coloured(...colours), () => 0.999)))
+  check('with nothing taken the chance picks', pickUnusedColour(colours, [], () => 0.5) === '#00BB00')
+  check("the primary profile's colour is taken too", pickUnusedColour(colours, [
+    { ...profile(MAIN_PROFILE_ID, 'All Channels', []), bgColor: '#AA0000' },
+    ...coloured('#0000CC')
+  ], () => 0) === '#00BB00')
+}
+
+// Where a dragged bubble lands
+{
+  const rect = (left, top) => ({ left, right: left + 100, top, bottom: top + 80 })
+  // Three on the first row, one wrapped onto the second
+  const rects = [rect(0, 0), rect(100, 0), rect(200, 0), rect(0, 90)]
+
+  check('before the middle of the first bubble is in front of it', insertionIndex(rects, { x: 10, y: 40 }, false) === 0)
+  check('past the middle of the first is in front of the second', insertionIndex(rects, { x: 60, y: 40 }, false) === 1)
+  check('before the middle of the second is in front of it', insertionIndex(rects, { x: 140, y: 40 }, false) === 1)
+  check('past the last on a row is in front of the next row', insertionIndex(rects, { x: 290, y: 40 }, false) === 3)
+  check('the row the pointer is on counts', insertionIndex(rects, { x: 10, y: 120 }, false) === 3)
+  check('past the last bubble is the end', insertionIndex(rects, { x: 90, y: 120 }, false) === 4)
+  check('above every row is the first row', insertionIndex(rects, { x: 10, y: -20 }, false) === 0)
+  check('below every row is the last row', insertionIndex(rects, { x: 90, y: 400 }, false) === 4)
+  check('no bubbles is the start', insertionIndex([], { x: 0, y: 0 }, false) === 0)
+
+  // Right to left, the first bubble is the rightmost
+  const rtl = [rect(200, 0), rect(100, 0), rect(0, 0)]
+  check('right to left, right of the first middle is in front of it', insertionIndex(rtl, { x: 290, y: 40 }, true) === 0)
+  check('right to left, left of the first middle is in front of the second', insertionIndex(rtl, { x: 240, y: 40 }, true) === 1)
+  check('right to left, the far left is the end', insertionIndex(rtl, { x: 10, y: 40 }, true) === 3)
+
+  check('in front of a later bubble lands just before it', moveTarget(1, 3) === 2)
+  check('in front of an earlier bubble lands there', moveTarget(3, 1) === 1)
+  check('in front of itself stays put', moveTarget(2, 2) === 2)
+  check('just after itself stays put', moveTarget(2, 3) === 2)
 }
 
 if (failures > 0) {
