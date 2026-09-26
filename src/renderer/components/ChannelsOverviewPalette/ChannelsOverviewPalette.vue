@@ -32,7 +32,7 @@
       :channel-count="new Set(profile.subscriptions.map(channel => channel.id)).size"
       :duplicate-count="duplicateCounts.get(profile._id) ?? 0"
       :editing="profile._id === renamingProfileId"
-      :dragging="profile._id === draggingProfileId"
+      :dragging="profile._id === fadedProfileId"
       :insert-before="markerIndex === index"
       :insert-after="markerIndex === profiles.length && index === profiles.length - 1"
       @toggle="emit('toggle', profile._id)"
@@ -135,6 +135,14 @@ const PROFILE_DRAG_TYPE = 'application/x-freetube-profile'
  */
 const draggingProfileId = ref(null)
 
+/**
+ * The bubble shown faded as it is dragged. A frame after the drag starts,
+ * once the browser has taken its picture of the bubble for the cursor, which
+ * would otherwise be faded too.
+ * @type {import('vue').Ref<string | null>}
+ */
+const fadedProfileId = ref(null)
+
 /** Where the dragged bubble would land, as an insertion index, or null where it would not move */
 const markerIndex = ref(null)
 
@@ -153,6 +161,12 @@ function startProfileDrag(event, profileId) {
   event.dataTransfer.effectAllowed = 'move'
   event.dataTransfer.setData(PROFILE_DRAG_TYPE, profileId)
   draggingProfileId.value = profileId
+
+  requestAnimationFrame(() => {
+    if (draggingProfileId.value === profileId) {
+      fadedProfileId.value = profileId
+    }
+  })
 }
 
 /**
@@ -222,6 +236,7 @@ function onProfileDrop(event) {
 
 function endProfileDrag() {
   draggingProfileId.value = null
+  fadedProfileId.value = null
   markerIndex.value = null
 }
 

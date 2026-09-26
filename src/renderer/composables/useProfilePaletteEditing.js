@@ -10,12 +10,24 @@ import { deepCopy, showToast } from '../helpers/utils'
 
 const COLOUR_VALUES = colors.map(colour => colour.value)
 
+function focusNewProfile() {
+  document.querySelector('.palette .newProfile')?.focus()
+}
+
 /**
- * Puts the focus on a profile's bubble in the palette, if it has one.
+ * Puts the focus on a profile's bubble in the palette, or on New profile
+ * when it has none, as a profile deleted in another window no longer does:
+ * the focus would otherwise fall to the page itself.
  * @param {string} profileId
  */
 export function focusBubble(profileId) {
-  document.querySelector(`.palette [data-profile-id="${CSS.escape(profileId)}"] [role="button"]`)?.focus()
+  const bubble = document.querySelector(`.palette [data-profile-id="${CSS.escape(profileId)}"] [role="button"]`)
+
+  if (bubble) {
+    bubble.focus()
+  } else {
+    focusNewProfile()
+  }
 }
 
 /**
@@ -40,7 +52,12 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
   const draft = ref(null)
 
   function startDraft() {
-    if (draft.value !== null) { return }
+    // Never a second one: back to the first. Its field is the palette's own
+    // child, where a rename's is inside its bubble.
+    if (draft.value !== null) {
+      document.querySelector('.palette > .nameField input:enabled')?.focus()
+      return
+    }
 
     draft.value = { bgColor: pickUnusedColour(COLOUR_VALUES, profileList.value), saving: false }
   }
@@ -72,7 +89,15 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     // given up
     draft.value = null
 
-    if (!created) { return }
+    if (!created) {
+      // The field the focus was in has gone with it
+      if (hadFocus) {
+        await nextTick()
+        focusNewProfile()
+      }
+
+      return
+    }
 
     showToast(t('Profile.Profile has been created'))
     openColumn(created._id)
@@ -114,14 +139,24 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
    * @param {string} profileId
    * @param {string | null} name null when it was given up
    */
-  function finishRename(profileId, name) {
+  async function finishRename(profileId, name) {
     renamingProfileId.value = null
 
     const profile = profileList.value.find(candidate => candidate._id === profileId)
 
     if (name === null || !profile || name === profile.name) { return }
 
-    saveProfile(profileId, { name })
+    await saveProfile(profileId, { name })
+
+    // A profile the order does not name sorts by its name, so a new one can
+    // move its bubble, and a moved element loses the focus the bubble took
+    // back when the field closed. Only then: focus anywhere else was put
+    // there since, and stays.
+    await nextTick()
+
+    if (document.activeElement === null || document.activeElement === document.body) {
+      focusBubble(profileId)
+    }
   }
 
   /**
@@ -211,7 +246,8 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
   /**
    * Puts a profile somewhere else in the order: on screen at once, then
    * saved. The order is a setting and not a profile, so it does not wait on
-   * the queue of profile writes.
+   * the queue of profile writes. Through saveProfileOrder rather than the
+   * generated updater, whose late commit would undo a quick second move.
    * @param {string} profileId
    * @param {number} toIndex its place in the order without it
    */
@@ -221,8 +257,7 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
 
     if (next === current) { return }
 
-    store.commit('setProfileOrder', next)
-    store.dispatch('updateProfileOrder', next)
+    store.dispatch('saveProfileOrder', next)
   }
 
   return {

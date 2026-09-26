@@ -36,7 +36,7 @@
       :disabled="disabled"
       @keydown.enter.prevent="finish(true)"
       @keydown.escape.prevent="finish(false)"
-      @blur="finish(true)"
+      @blur="onBlur"
     >
   </div>
 </template>
@@ -102,6 +102,16 @@ function finish(keep) {
   } else {
     emit('cancel', hadFocus)
   }
+}
+
+/**
+ * Not when the whole window loses the focus, to another application: the
+ * field gets it back with the window, still being typed in.
+ */
+function onBlur() {
+  if (!document.hasFocus()) { return }
+
+  finish(true)
 }
 
 onMounted(() => {
