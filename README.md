@@ -1,6 +1,6 @@
 # A personal fork of FreeTube
 
-This is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, one subscriptions feed in place of four tabs, and a page for sorting channels into profiles by drag and drop. It is not the official FreeTube repository, and the FreeTube team does not support or endorse it.
+This is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, one subscriptions feed in place of four tabs, a page for sorting channels into profiles by drag and drop, and a download button that hands the video to yt-dlp. It is not the official FreeTube repository, and the FreeTube team does not support or endorse it.
 
 If you want FreeTube, you almost certainly want the official project: [FreeTubeApp/FreeTube](https://github.com/FreeTubeApp/FreeTube), with downloads at [freetubeapp.io](https://freetubeapp.io/#download). All credit for the application belongs to its contributors.
 
@@ -71,6 +71,14 @@ Hovering a video card shows a checkmark beside the playlist buttons, which marks
 ### Comments
 
 On the local API, comments load themselves as you scroll to them, keep paging, and open each thread to its first few replies with the rest behind a button. Loading follows what is visible, so a page of twenty threads does not fire twenty requests at once. Invidious keeps click-to-load. This is essentially a limited endless-scroll for comments. It remains impossible to comment, as there is no login functionality, but it is easier to read the comments now.
+
+### Downloads
+
+Upstream took its download button out in January 2026. It had been half broken for a long time, and SABR broke it the rest of the way. The button is back here, but it hands the video to [yt-dlp](https://github.com/yt-dlp/yt-dlp), which does the real work: picking formats, merging video and audio, and getting past YouTube's challenges. It is off until switched on in the yt-dlp section of the settings, and exists only in the desktop builds.
+
+yt-dlp needs ffmpeg to merge video and audio, and Deno to run the JavaScript YouTube requires. The settings section shows whether each is found, which version and where from. If any is missing, one button installs it into a folder of FreeTube's own: fetched from each project's releases, checked against their published checksums, and needing neither administrator rights nor anything else installed first. Pressing download with something missing offers the same install and then goes on with the download. Update yt-dlp is there too, since a stale yt-dlp is the usual reason YouTube downloads start failing.
+
+A click downloads the best quality yt-dlp can get, into the Downloads folder or one you pick. Right-click or hold the button for anything from 2160p down to 360p, or the audio alone. A downloads indicator in the top bar shows each download's stage, progress, time left and where the file is going, and can cancel it. A cancelled download, or one cut short by quitting, resumes where it stopped the next time you press download. Once a video has downloaded, its button turns into Show in folder. Downloads go through FreeTube's proxy, and custom yt-dlp arguments in the settings apply to all of them.
 
 ### Build and tooling
 
