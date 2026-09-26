@@ -52,7 +52,12 @@ const IpcChannels = {
   WRITE_TO_DEFAULT_FOLDER: 'write-to-default-folder',
 
   OPEN_IN_EXTERNAL_PLAYER: 'open-in-external-player',
-  OPEN_IN_EXTERNAL_PLAYER_RESULT: 'open-in-external-player-result'
+  OPEN_IN_EXTERNAL_PLAYER_RESULT: 'open-in-external-player-result',
+
+  // The fork's download with yt-dlp, see src/main/ytdlp/
+  YTDLP_DOWNLOAD: 'ytdlp-download',
+  YTDLP_DOWNLOAD_OUTCOME: 'ytdlp-download-outcome',
+  YTDLP_REVEAL: 'ytdlp-reveal',
 }
 
 const DBActions = {

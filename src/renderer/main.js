@@ -4,6 +4,7 @@ import router from './router/index'
 import store from './store/index'
 import App from './App.vue'
 import { showExternalPlayerUnsupportedActionToast, showToast } from './helpers/utils'
+import { setupYtDlpOutcomeToasts } from './helpers/ytdlp'
 import { library } from './fontawesome-minimal'
 // import the styles
 import '@fortawesome/fontawesome-svg-core/styles.css'
@@ -306,4 +307,6 @@ if (process.env.IS_ELECTRON) {
       showToast(i18n.global.t('Video.External Player.OpeningTemplate', { videoOrPlaylist, externalPlayer }))
     }
   )
+
+  setupYtDlpOutcomeToasts()
 }

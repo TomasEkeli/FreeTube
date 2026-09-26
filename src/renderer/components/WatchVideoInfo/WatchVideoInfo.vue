@@ -115,6 +115,13 @@
             theme="secondary"
             @click="handleExternalPlayer"
           />
+          <FtYtDlpDownloadButton
+            v-if="USING_ELECTRON"
+            :video-id="id"
+            :title="title"
+            :is-live="isLive"
+            :is-upcoming="isUpcoming"
+          />
           <FtIconButton
             v-if="!isUpcoming"
             :title="t('Change Format.Change Media Formats')"
@@ -145,6 +152,7 @@ import FtIconButton from '../FtIconButton/FtIconButton.vue'
 import FtShareButton from '../FtShareButton/FtShareButton.vue'
 import FtSponsorBlockMarkOnlyButton from '../FtSponsorBlockMarkOnlyButton/FtSponsorBlockMarkOnlyButton.vue'
 import FtSubscribeButton from '../FtSubscribeButton/FtSubscribeButton.vue'
+import FtYtDlpDownloadButton from '../FtYtDlpDownloadButton/FtYtDlpDownloadButton.vue'
 
 import store from '../../store'
 

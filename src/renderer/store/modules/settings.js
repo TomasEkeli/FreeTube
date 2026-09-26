@@ -393,6 +393,9 @@ const state = {
   generalAutoLoadMorePaginatedItemsEnabled: false,
   commentAutoLoadEnabled: true,
   hideToTrayOnMinimize: false,
+  // Download with yt-dlp, Electron only. The button on the watch page shows
+  // only while this is on.
+  ytDlpEnabled: false,
 
   // The settings below have side effects
   currentLocale: 'system',
@@ -536,6 +539,8 @@ export const NON_TRANSFERABLE_SETTINGS = new Set([
   'hideToTrayOnMinimize',
   'screenshotAskPath',
   'screenshotFolderPath',
+  // YtDlpSettings
+  'ytDlpEnabled',
 
   /* Depends on process.env.SUPPORTS_LOCAL_API */
   'backendFallback',

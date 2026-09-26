@@ -180,6 +180,32 @@ export default {
   },
 
   /**
+   * @param {{ videoId: string, title: string }} request
+   */
+  ytDlpDownload: (request) => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      ipcRenderer.send(IpcChannels.YTDLP_DOWNLOAD, request)
+    }
+  },
+
+  /**
+   * @param {(outcome: import('../main/ytdlp/downloadService').DownloadOutcome) => void} handler
+   */
+  handleYtDlpDownloadOutcome: (handler) => {
+    ipcRenderer.on(IpcChannels.YTDLP_DOWNLOAD_OUTCOME, (_, outcome) => {
+      handler(outcome)
+    })
+  },
+
+  /**
+   * @param {string} videoId
+   */
+  ytDlpReveal: (videoId) => {
+    ipcRenderer.send(IpcChannels.YTDLP_REVEAL, videoId)
+  },
+
+  /**
    * @param {number} factor
    */
   setZoomFactor: (factor) => {
