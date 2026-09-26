@@ -20,13 +20,13 @@
   In a proposed column, hovering says why the channel is suggested there, and
   a channel suggested out of the profile it is in now has a badge in that
   profile's colour, naming it. A tick in the top corner accepts the
-  suggestion for this channel, and a cross in the bottom one rejects it,
-  which leaves the channel where it is.
+  suggestion for this channel, and a cross on the thumbnail's bottom corner
+  rejects it, which leaves the channel where it is.
 -->
 <template>
   <div
     class="tile"
-    :class="[{ dragging, selected, suggested: acceptLabel !== null }, callout === null ? null : `callout callout${callout}`]"
+    :class="[{ dragging, selected }, callout === null ? null : `callout callout${callout}`]"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="dragging = false"

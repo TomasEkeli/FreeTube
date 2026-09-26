@@ -129,18 +129,23 @@
 
 .acceptMark,
 .rejectMark {
-  inset-inline-end: 4px;
   padding: 0;
   border: 0;
   cursor: pointer;
 }
 
 .acceptMark {
+  inset-inline-end: 4px;
   color: var(--primary-color);
 }
 
+/*
+ * On the thumbnail's bottom corner, as a badge on it: the thumbnail is 84px,
+ * centred, 12px from the top, and the button a little over its edge
+ */
 .rejectMark {
-  inset-block: auto 4px;
+  inset-block-start: 70px;
+  inset-inline-start: calc(50% + 18px);
   color: var(--tertiary-text-color);
 }
 
@@ -153,11 +158,6 @@
 .rejectMark:hover,
 .rejectMark:focus-visible {
   color: var(--primary-text-color);
-}
-
-/* Room at the bottom for the cross, clear of the name and the badge */
-.tile.suggested .selectArea {
-  padding-block-end: 38px;
 }
 
 .channelLink {
