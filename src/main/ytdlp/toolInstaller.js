@@ -152,6 +152,10 @@ export function findChecksum(text, fileName) {
 // How often a download reports its progress
 const PROGRESS_EVERY_BYTES = 512 * 1024
 
+// A request that goes this long without a byte is given up on: fetch itself
+// would wait forever on a proxy or network that swallows connections
+const STALL_MS = 30_000
+
 /**
  * @param {object} deps
  * @param {typeof globalThis.fetch} deps.fetch
@@ -161,8 +165,9 @@ const PROGRESS_EVERY_BYTES = 512 * 1024
  * @param {string} deps.platform
  * @param {string} deps.arch
  * @param {(progress: InstallProgress) => void} [deps.onProgress]
+ * @param {number} [deps.stallMs]
  */
-export function createToolInstaller({ fetch, fs, detector, managedDir, platform, arch, onProgress = () => {} }) {
+export function createToolInstaller({ fetch, fs, detector, managedDir, platform, arch, onProgress = () => {}, stallMs = STALL_MS }) {
   const pathModule = platform === 'win32' ? path.win32 : path.posix
 
   /** @type {Promise<InstallResult> | null} */
@@ -292,14 +297,44 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
   }
 
   /**
+   * Fetches with a watchdog that gives up once nothing has arrived for a
+   * while. `alive` is to be called whenever something does arrive.
+   *
+   * @template T
+   * @param {string} url
+   * @param {(response: Response, alive: () => void) => Promise<T>} consume
+   * @returns {Promise<T>}
+   */
+  async function request(url, consume) {
+    const controller = new AbortController()
+    let timer
+
+    const alive = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        controller.abort(new Error(`No response from ${new URL(url).host} for ${Math.round(stallMs / 1000)} seconds`))
+      }, stallMs)
+    }
+
+    alive()
+    try {
+      const response = await fetch(url, { signal: controller.signal })
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status} fetching ${url}`)
+      }
+      return await consume(response, alive)
+    } catch (error) {
+      throw controller.signal.aborted ? controller.signal.reason : error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /**
    * @param {string} url
    */
-  async function fetchText(url) {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} fetching ${url}`)
-    }
-    return await response.text()
+  function fetchText(url) {
+    return request(url, response => response.text())
   }
 
   /**
@@ -310,36 +345,34 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
    * @param {import('./toolDetection').Tool} tool
    * @returns {Promise<string>} the SHA-256 of what was written
    */
-  async function downloadTo(url, filePath, tool) {
-    const response = await fetch(url)
-    if (!response.ok || !response.body) {
-      throw new Error(`HTTP ${response.status} fetching ${url}`)
-    }
+  function downloadTo(url, filePath, tool) {
+    return request(url, async (response, alive) => {
+      const lengthHeader = Number(response.headers.get('content-length'))
+      const total = Number.isFinite(lengthHeader) && lengthHeader > 0 ? lengthHeader : null
 
-    const lengthHeader = Number(response.headers.get('content-length'))
-    const total = Number.isFinite(lengthHeader) && lengthHeader > 0 ? lengthHeader : null
+      const hash = createHash('sha256')
+      const file = await fs.openWrite(filePath)
+      let received = 0
+      let reported = 0
 
-    const hash = createHash('sha256')
-    const file = await fs.openWrite(filePath)
-    let received = 0
-    let reported = 0
+      try {
+        for await (const chunk of response.body) {
+          alive()
+          hash.update(chunk)
+          await file.write(chunk)
+          received += chunk.length
 
-    try {
-      for await (const chunk of response.body) {
-        hash.update(chunk)
-        await file.write(chunk)
-        received += chunk.length
-
-        if (received - reported >= PROGRESS_EVERY_BYTES) {
-          reported = received
-          onProgress({ tool, stage: 'downloading', received, total })
+          if (received - reported >= PROGRESS_EVERY_BYTES) {
+            reported = received
+            onProgress({ tool, stage: 'downloading', received, total })
+          }
         }
+      } finally {
+        await file.close()
       }
-    } finally {
-      await file.close()
-    }
 
-    return hash.digest('hex')
+      return hash.digest('hex')
+    })
   }
 
   return { install, isInstalling }

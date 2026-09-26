@@ -88,15 +88,17 @@ function createFakeDetector(fs, platform, elsewhere) {
  * @param {string} [options.arch]
  * @param {Record<string, string | Uint8Array>} [options.responses]
  * @param {string[]} [options.elsewhere]
+ * @param {string[]} [options.hang] URLs that never answer
  */
 function setup({
   platform = 'linux',
   arch = 'x64',
   responses = { [`${NIGHTLY}/SHA2-256SUMS`]: SUMS, [`${NIGHTLY}/yt-dlp_linux`]: YT_DLP_LINUX, [`${NIGHTLY}/yt-dlp.exe`]: YT_DLP_EXE },
   elsewhere = ['ffmpeg', 'deno'],
+  hang = [],
 } = {}) {
   const fs = createMemoryFileSystem()
-  const fetch = createFakeFetch(responses)
+  const fetch = createFakeFetch(responses, hang)
   const detector = createFakeDetector(fs, platform, elsewhere)
   const progress = []
 
@@ -108,6 +110,7 @@ function setup({
     platform,
     arch,
     onProgress: p => progress.push(p),
+    stallMs: 50,
   })
 
   return { installer, fs, fetch, detector, progress }
@@ -216,6 +219,16 @@ describe('tool installer', () => {
 
       expect(result).toMatchObject({ ok: false, error: 'failed', tool: 'yt-dlp' })
       expect(result.reason).toMatch(/404/)
+      expect(fs.files.size).toBe(0)
+    })
+
+    it('gives up on a request that never answers, rather than waiting forever', async () => {
+      const { installer, fs } = setup({ hang: [`${NIGHTLY}/SHA2-256SUMS`] })
+
+      const result = await installer.install()
+
+      expect(result).toMatchObject({ ok: false, error: 'failed', tool: 'yt-dlp' })
+      expect(result.reason).toMatch(/no response from github\.com/i)
       expect(fs.files.size).toBe(0)
     })
 

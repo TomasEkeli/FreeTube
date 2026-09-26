@@ -83,18 +83,27 @@ function concat(chunks) {
 
 /**
  * A fake `fetch` serving fixed bodies by URL, recording what was asked for.
+ * A URL in `hang` never answers, until the request is aborted.
  *
  * @param {Record<string, string | Uint8Array>} responses
+ * @param {string[]} [hang]
  */
-export function createFakeFetch(responses) {
+export function createFakeFetch(responses, hang = []) {
   /** @type {string[]} */
   const requested = []
 
   /**
    * @param {string} url
+   * @param {{ signal?: AbortSignal }} [init]
    */
-  async function fetch(url) {
+  async function fetch(url, init = {}) {
     requested.push(url)
+
+    if (hang.includes(url)) {
+      return await new Promise((resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(init.signal.reason))
+      })
+    }
 
     if (!(url in responses)) {
       return new Response('not found', { status: 404 })
