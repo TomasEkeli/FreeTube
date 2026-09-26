@@ -174,6 +174,14 @@
       @choose="chooseFromProfileMenu"
       @close="closeProfileMenu"
     />
+    <ChannelsOverviewColourMenu
+      v-if="colourMenu !== null"
+      :label="t('Channels.Overview.Profile Colours', { profile: colourMenu.name })"
+      :current="colourMenu.bgColor"
+      :anchor="colourMenu.anchor"
+      @choose="chooseColour"
+      @close="closeColourMenu"
+    />
     <FtPrompt
       v-if="unsubscribeChannelIds.length > 0"
       :label="t('Channels.Overview.Unsubscribe Prompt', { count: unsubscribeChannelIds.length }, unsubscribeChannelIds.length)"
@@ -195,6 +203,7 @@ import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
+import ChannelsOverviewColourMenu from '../../components/ChannelsOverviewColourMenu/ChannelsOverviewColourMenu.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
 import ChannelsOverviewMenu from '../../components/ChannelsOverviewMenu/ChannelsOverviewMenu.vue'
@@ -649,7 +658,10 @@ const {
   profileMenuItems,
   openProfileMenu,
   chooseFromProfileMenu,
-  closeProfileMenu
+  closeProfileMenu,
+  colourMenu,
+  chooseColour,
+  closeColourMenu
 } = useProfilePaletteEditing({ profileList, afterPendingChanges, openColumn })
 
 /**

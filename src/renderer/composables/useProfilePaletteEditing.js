@@ -143,7 +143,8 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
   }
 
   const profileMenuItems = computed(() => [
-    { value: 'rename', label: t('Channels.Overview.Rename Profile') }
+    { value: 'rename', label: t('Channels.Overview.Rename Profile') },
+    { value: 'colour', label: t('Channels.Overview.Change Profile Colour') }
   ])
 
   /**
@@ -156,6 +157,13 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
 
     if (value === 'rename') {
       renamingProfileId.value = profileId
+    } else if (value === 'colour') {
+      const profile = profileList.value.find(candidate => candidate._id === profileId)
+      const bubble = document.querySelector(`.palette [data-profile-id="${CSS.escape(profileId)}"]`)
+
+      if (profile && bubble) {
+        colourMenu.value = { profileId, name: profile.name, bgColor: profile.bgColor, anchor: { rect: bubble.getBoundingClientRect() } }
+      }
     }
   }
 
@@ -165,6 +173,35 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
   function closeProfileMenu(returnFocus) {
     const profileId = profileMenu.value?.profileId
     profileMenu.value = null
+
+    if (returnFocus && profileId) {
+      focusBubble(profileId)
+    }
+  }
+
+  /**
+   * The colour grid over a bubble. Null while it is closed.
+   * @type {import('vue').ShallowRef<{ profileId: string, name: string, bgColor: string, anchor: object } | null>}
+   */
+  const colourMenu = shallowRef(null)
+
+  /**
+   * @param {string} bgColor
+   */
+  function chooseColour(bgColor) {
+    const profileId = colourMenu.value?.profileId
+
+    if (profileId) {
+      saveProfile(profileId, { bgColor, textColor: calculateColorLuminance(bgColor) })
+    }
+  }
+
+  /**
+   * @param {boolean} returnFocus
+   */
+  function closeColourMenu(returnFocus) {
+    const profileId = colourMenu.value?.profileId
+    colourMenu.value = null
 
     if (returnFocus && profileId) {
       focusBubble(profileId)
@@ -183,6 +220,9 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     profileMenuItems,
     openProfileMenu,
     chooseFromProfileMenu,
-    closeProfileMenu
+    closeProfileMenu,
+    colourMenu,
+    chooseColour,
+    closeColourMenu
   }
 }
