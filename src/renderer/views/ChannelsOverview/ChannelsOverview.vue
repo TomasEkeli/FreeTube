@@ -1190,12 +1190,15 @@ function proposalMenuItems(proposal) {
 
 /**
  * A suggestion acted on goes, and its menu button with it, which leaves the
- * focus nowhere; it goes to the search, as it does after a move.
+ * focus nowhere; it goes to the search, as it does after a move. The column
+ * fades out before it goes, with the focus still in it, so that counts too.
  */
 async function keepFocusOnPage() {
   await nextTick()
 
-  if (!document.activeElement || document.activeElement === document.body) {
+  const focused = document.activeElement
+
+  if (!focused || focused === document.body || focused.closest('.column-leave-active') !== null) {
     toolbar.value?.querySelector('input')?.focus()
   }
 }

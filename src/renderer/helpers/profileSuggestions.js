@@ -37,15 +37,30 @@ import {
 
 /** @import { Channel, Profile } from './channelsOverview.js' */
 
+/*
+ * The constants below were tuned by hand against Tomas's own subscriptions,
+ * and the spec records what was tried. Profiles there are broad, so no one tag
+ * is carried by more than a third or so of a profile's members, and the
+ * thresholds are set for that.
+ */
+
 /**
  * How many of a profile's members must be known, by category or by tags,
  * before the profile is judged by that signal: fewer, and a couple of
- * channels would decide what the whole profile is.
+ * channels would decide what the whole profile is. A profile just made from
+ * a group of three is all one tag, and would pull in everything carrying it.
  */
-export const MIN_KNOWN = 3
+export const MIN_KNOWN = 5
 
-/** The fit a channel needs to a profile for it to be suggested there */
-export const FIT_THRESHOLD = 0.5
+/** The fit an Unassigned channel needs to a profile for it to be suggested there */
+export const FIT_THRESHOLD = 0.35
+
+/**
+ * The fit a channel already in a profile needs to another before a move is
+ * suggested. Higher than for the pool: moving what is already filed is the
+ * bigger claim, and a shared tag alone rarely makes it.
+ */
+export const MOVE_THRESHOLD = 0.5
 
 /**
  * How much better a channel must fit another profile than its own before a
@@ -70,7 +85,25 @@ export const STOP_TAGS = new Set([
   'channel',
   'youtuber',
   'new',
-  'official'
+  'official',
+  // Keywords YouTube gives unquoted arrive a word at a time, and these words
+  // are in everything
+  'the',
+  'and',
+  'of',
+  'to',
+  'how',
+  'how to',
+  // What a video is, not what it is about
+  'short',
+  'shorts',
+  'live',
+  'vlog',
+  'podcast',
+  'tutorial',
+  'tutorials',
+  'review',
+  'reviews'
 ])
 
 /** The category Topic and artist channels are given, as YouTube names it */
@@ -655,7 +688,7 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
 
       const best = bestFit(entry, ownId)
 
-      if (best !== null && best.fit.fit >= FIT_THRESHOLD && own.fit <= best.fit.fit - MOVE_MARGIN + 1e-9) {
+      if (best !== null && best.fit.fit >= MOVE_THRESHOLD && own.fit <= best.fit.fit - MOVE_MARGIN + 1e-9) {
         profileProposal(best.profile).channels.push({ channel, sourceProfileId: ownId, evidence: best.fit.evidence })
       }
     }
