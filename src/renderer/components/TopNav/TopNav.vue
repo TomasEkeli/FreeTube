@@ -76,11 +76,7 @@
         <div
           class="logoIcon"
         />
-        <div
-          class="logoText"
-        >
-          <FtForkStamp class="forkStamp" />
-        </div>
+        <span class="logoText">{{ PRODUCT_NAME }}</span>
       </RouterLink>
     </div>
     <div
@@ -254,7 +250,6 @@ import FtInput from '../FtInput/FtInput.vue'
 import FtProfileSelector from '../FtProfileSelector/FtProfileSelector.vue'
 import FtIconButton from '../FtIconButton/FtIconButton.vue'
 import FtYtDlpDownloads from '../FtYtDlpDownloads/FtYtDlpDownloads.vue'
-import FtForkStamp from '../FtForkStamp/FtForkStamp.vue'
 
 import store from '../../store/index'
 
@@ -263,6 +258,11 @@ import { debounce, localizeAndAddKeyboardShortcutToActionTitle, openInternalPath
 import { translateWindowTitle } from '../../helpers/strings'
 import { clearLocalSearchSuggestionsSession, getLocalClip, getLocalSearchSuggestions } from '../../helpers/api/local'
 import { getClipInvidious, getInvidiousSearchSuggestions } from '../../helpers/api/invidious'
+import packageDetails from '../../../../package.json'
+
+// The wordmark beside the header icon: the app's name as text, which needs no
+// artwork per theme, and a name is not translated
+const PRODUCT_NAME = packageDetails.productName
 
 const { t } = useI18n()
 const router = useRouter()

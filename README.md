@@ -1,16 +1,28 @@
-# A personal fork of FreeTube
+# Fjernsyn, a personal fork of FreeTube
 
-This is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, one subscriptions feed in place of four tabs, a page for sorting channels into profiles by drag and drop, and a download button that hands the video to yt-dlp. It is not the official FreeTube repository, and the FreeTube team does not support or endorse it.
+Fjernsyn is my personal fork of [FreeTube](https://github.com/FreeTubeApp/FreeTube). It has the changes I want in my own build: fixes around SABR (server-side adaptive bitrate) playback, comments that load as you scroll, one subscriptions feed in place of four tabs, a page for sorting channels into profiles by drag and drop, and a download button that hands the video to yt-dlp. It is not the official FreeTube, and the FreeTube team does not support or endorse it.
+
+Fjernsyn is Norwegian (and Danish) for television, literally "far-sight", tele-vision translated word for word. It has a name of its own so that nobody mistakes it for FreeTube.
 
 If you want FreeTube, you almost certainly want the official project: [FreeTubeApp/FreeTube](https://github.com/FreeTubeApp/FreeTube), with downloads at [freetubeapp.io](https://freetubeapp.io/#download). All credit for the application belongs to its contributors.
 
-If you want the fixes and modifications in this version, you are welcome to them. FreeTube is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE), which this fork honours, and which gives anyone the right to use, study, change and share it. Builds for Windows, macOS and Linux are produced on every push to `main`: pick the newest [build workflow run](https://github.com/TomasEkeli/FreeTube/actions/workflows/build.yml) and download the artifact for your platform (downloading artifacts needs a GitHub account).
+If you want the fixes and modifications in this version, you are welcome to them. FreeTube is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE), which this fork honours, and which gives anyone the right to use, study, change and share it. Builds for Windows, macOS and Linux are produced on every push to `main`: pick the newest [build workflow run](https://github.com/TomasEkeli/Fjernsyn/actions/workflows/build.yml) and download the artifact for your platform (downloading artifacts needs a GitHub account).
 
 Since this is my personal fork no effort is spent on translations. I merge the official project's, but the strings this fork adds exist only in English, so picking another language leaves those in English and the rest translated.
 
 `main` is upstream plus my fixes, and upstream is merged into it as it moves. This repository takes no issues, and I am not looking for help with it; if you want FreeTube to change, [the official project](https://github.com/FreeTubeApp/FreeTube/issues) is where to go. The same goes for contributing: the official project and [its contributing guidelines](https://github.com/FreeTubeApp/FreeTube/blob/development/CONTRIBUTING.md) are where you do that.
 
 ## Differences from upstream
+
+### Name and data
+
+Fjernsyn keeps its data in a folder of its own, has its own `fjernsyn://` links, and installs beside an official FreeTube, so the two can run on one machine without touching each other's data.
+
+On its first launch it copies what it finds in a FreeTube data folder: subscriptions, profiles, history, playlists, settings, and the yt-dlp, ffmpeg and Deno it installed. It copies and never moves, so the FreeTube folder is left as it was, and an official FreeTube keeps working with it. From then on the two keep their data apart. Exports are named `fjernsyn-*.db` and have the same format as FreeTube's, so each app imports the other's.
+
+It also opens `freetube://` links, which the browser redirect extensions send, until you switch that off in the general settings.
+
+Windows sees a build of this fork from before the rename as a different app. Fjernsyn installs beside it, and the old one has to be uninstalled by hand.
 
 ### Playback
 
@@ -82,7 +94,7 @@ A click downloads the best quality available. Right-click or hold for a lower on
 
 ### Build and tooling
 
-Builds for Windows, macOS and Linux run on every push to `main`, and the artefacts are named after the build as well as the version. The update check is off by default, since it polls upstream's releases and will eventually offer a build with none of this in it. A devcontainer is included for working on the code.
+Builds for Windows, macOS and Linux run on every push to `main`, and the artefacts are named after the build as well as the version. A devcontainer is included for working on the code.
 
 Everything else about FreeTube, what it is, its features, screenshots, download links and community, lives in [the official README](https://github.com/FreeTubeApp/FreeTube#readme) and at [freetubeapp.io](https://freetubeapp.io/).
 

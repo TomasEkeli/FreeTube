@@ -79,7 +79,8 @@ class Settings {
           'proxyPort',
           'backendFallback',
           'backendPreference',
-          'hideToTrayOnMinimize'
+          'hideToTrayOnMinimize',
+          'handleFreeTubeLinks',
         ]
       }
     })

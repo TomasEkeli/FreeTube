@@ -255,12 +255,12 @@ Channels:
     Profile Moved: Moved {profile} to position {position} of {count}
     Reorder Hint: Drag to reorder, or Ctrl+Shift+Arrow
     # Proposed columns: where the page suggests channels could go, worked out
-    # from what FreeTube has already seen of them. Nothing changes until one
+    # from what Fjernsyn has already seen of them. Nothing changes until one
     # is acted on.
     Suggestions:
       Suggest Profiles: Suggest profiles
       Hide Suggestions: Hide suggestions
-      Coverage: FreeTube knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Watch videos in a channel to get suggestions for it.
+      Coverage: Fjernsyn knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Watch videos in a channel to get suggestions for it.
       # Headings of the proposed columns: for an existing profile, for a new
       # profile from a YouTube category, and for one from a shared tag
       Profile Heading: '{profile} suggestions'
@@ -290,20 +290,20 @@ Channels:
       Evidence Tags: 'Tagged: {tags}'
       Evidence Placed: Put here by you
       Evidence Sampled: '{category}: {count} of {total} recent videos'
-      # Looking at a few recent videos of each channel FreeTube knows too
+      # Looking at a few recent videos of each channel Fjernsyn knows too
       # little about, on request, slowly, to suggest where it belongs
       Probe: Probe
       Probe All: Probe 1 channel | Probe {count} channels
-      Probe Hint: Look at a few recent videos of the 1 channel here FreeTube knows too little about, slowly, to suggest where it belongs | Look at a few recent videos of each of the {count} channels here FreeTube knows too little about, slowly, to suggest where they belong
+      Probe Hint: Look at a few recent videos of the 1 channel here Fjernsyn knows too little about, slowly, to suggest where it belongs | Look at a few recent videos of each of the {count} channels here Fjernsyn knows too little about, slowly, to suggest where they belong
       Probing: Stop probing ({count} left)
       Probing Hint: Stops probing these channels after the request in flight. What was found is kept, and Probe carries on from here.
       Probe Finished: Probed 1 channel | Probed {count} channels
-      Probe Refused: YouTube asked FreeTube to slow down, so it stopped probing channels. What was found is kept, and Probe carries on from where it stopped.
+      Probe Refused: YouTube asked Fjernsyn to slow down, so it stopped probing channels. What was found is kept, and Probe carries on from where it stopped.
       # Shown where the suggestions would be, when there are none
       None Title: No suggestions right now
-      None How: FreeTube suggests where channels belong from what it has already seen of them, and never asks YouTube anything to find out. It reads the tags on each channel's page as your subscriptions refresh, and remembers the category of every video you watch. It then compares each channel with the ones already in your profiles, and gathers the rest into groups by category, or by a tag several of them share.
+      None How: Fjernsyn suggests where channels belong from what it has already seen of them, and never asks YouTube anything to find out. It reads the tags on each channel's page as your subscriptions refresh, and remembers the category of every video you watch. It then compares each channel with the ones already in your profiles, and gathers the rest into groups by category, or by a tag several of them share.
       None Why: 'There is nothing to suggest yet. Either every channel it knows enough about is where it fits, or it does not know enough: it knows something about {known} of {total} channels, and can recognise {profiles} of {profileCount} profiles. A profile is recognised once enough of its channels are known.'
-      None Seed: Many channels have no tags at all. For those, Probe on a column looks at a few recent videos of each of its channels FreeTube knows too little about, slowly, and watching a video or two from a channel does the same. Refreshing your subscriptions picks up the tags of the rest.
+      None Seed: Many channels have no tags at all. For those, Probe on a column looks at a few recent videos of each of its channels Fjernsyn knows too little about, slowly, and watching a video or two from a channel does the same. Refreshing your subscriptions picks up the tags of the rest.
       None Rejected: Suggestions you rejected stay rejected until you move the channel yourself, and those you hid come back after a restart.
 Explore:
   Explore: Explore
@@ -449,7 +449,8 @@ Settings:
     Fallback to Non-Preferred Backend on Failure: Fallback to Non-Preferred Backend
       on Failure
     Enable Search Suggestions: Enable Search Suggestions
-    Open Deep Links In New Window: Open URLs Passed to FreeTube in a New Window
+    Open Deep Links In New Window: Open URLs Passed to Fjernsyn in a New Window
+    Handle FreeTube Links: Open freetube:// Links
     Minimize to system tray: Minimize to system tray
     Auto Load Next Page:
       Label: Auto Load Next Page
@@ -498,7 +499,7 @@ Settings:
     Disable Smooth Scrolling: Disable Smooth Scrolling
     UI Scale: UI Scale
     Hide Side Bar Labels: Hide Side Bar Labels
-    Hide FreeTube Header Logo: Hide FreeTube Header Logo
+    Hide FreeTube Header Logo: Hide Fjernsyn Header Logo
     Base Theme:
       Base Theme: Base Theme
       Black: Black
@@ -699,7 +700,7 @@ Settings:
     Looking: Looking…
     Not found: Not found
     Source Picked: 'chosen: {path}'
-    Source Managed: installed by FreeTube
+    Source Managed: installed by Fjernsyn
     Source Path: 'on PATH: {path}'
     yt-dlp Missing Warning: Without yt-dlp there is nothing to download with.
     ffmpeg Missing Warning: Without ffmpeg, yt-dlp cannot merge separate video and audio, and falls back to a
@@ -711,7 +712,7 @@ Settings:
     Choose File: Choose File
     Find Automatically: Find Automatically
     Install Missing Tools: 'Install {tools}'
-    'Install It Yourself': 'FreeTube cannot install {tool} on this system. Install it yourself, see'
+    'Install It Yourself': 'Fjernsyn cannot install {tool} on this system. Install it yourself, see'
     Install Progress:
       Starting: Starting the install…
       Downloading: 'Downloading {tool}…'
@@ -728,9 +729,9 @@ Settings:
       Package Manager: This yt-dlp was installed by pip or a package manager, and has to be updated the way it was installed
       Failed: 'Could not update yt-dlp: {reason}'
     Install Result:
-      Installed: '{tools} installed into FreeTube''s tools folder'
+      Installed: '{tools} installed into Fjernsyn''s tools folder'
       Nothing to install: Nothing was missing
-      Unsupported: 'FreeTube cannot install {tools} on this system'
+      Unsupported: 'Fjernsyn cannot install {tools} on this system'
       Failed: 'Could not install {tool}: {reason}'
       Failed without tool: 'Could not install: {reason}'
   Privacy Settings:
@@ -877,7 +878,7 @@ Settings:
     Manage Subscriptions: Manage Subscriptions
   Proxy Settings:
     Proxy Settings: Proxy
-    Proxy Warning: FreeTube doesn't have a built-in proxy but can connect to an external proxy, such as one running on your machine like Tor or an external proxy such-as a SOCKS5 proxy provided by some VPNs. If enabled, make sure your proxy/Tor is configured properly, or FreeTube won't be able to fetch any data.
+    Proxy Warning: Fjernsyn doesn't have a built-in proxy but can connect to an external proxy, such as one running on your machine like Tor or an external proxy such-as a SOCKS5 proxy provided by some VPNs. If enabled, make sure your proxy/Tor is configured properly, or Fjernsyn won't be able to fetch any data.
     Enable Tor / Proxy: Enable Tor / Proxy
     Proxy Protocol: Proxy Protocol
     Proxy Host: Proxy Host
@@ -954,12 +955,11 @@ About:
   FreeTube is made possible by {creditsPageLink}: FreeTube is made possible by {creditsPageLink}
   these people and projects: these people and projects
   Donate: Donate
-  Fork stamp: fork
   Forked from {upstreamLink}: Forked from {upstreamLink}
   Downloads: Downloads
   Build runs on GitHub Actions: Build runs on GitHub Actions
   The FreeTube project: The FreeTube project
-  Fork disclaimer: This is a personal fork of FreeTube. The FreeTube team has no part in it and is not responsible for it, so please do not take problems with this fork to them. The credit for FreeTube itself is all theirs.
+  Fork disclaimer: Fjernsyn is a personal fork of FreeTube. The FreeTube team has no part in it and is not responsible for it, so please do not take problems with Fjernsyn to them. The credit for FreeTube itself is all theirs.
 
 Profile:
   Profile Settings: Profile
@@ -1027,7 +1027,7 @@ Channel:
     results
   This channel does not exist: This channel does not exist
   This channel does not allow searching: This channel does not allow searching
-  This channel is age-restricted and currently cannot be viewed in FreeTube.: This channel is age-restricted and currently cannot be viewed in FreeTube.
+  This channel is age-restricted and currently cannot be viewed in FreeTube.: This channel is age-restricted and currently cannot be viewed in Fjernsyn.
   Channel Tabs: Channel Tabs
   View All: View All
   Videos:
@@ -1080,14 +1080,14 @@ Channel:
     View Full Post: View Full Post
     Reveal Answers: Reveal Answers
     Hide Answers: Hide Answers
-    Video hidden by FreeTube: Video hidden by FreeTube
+    Video hidden by FreeTube: Video hidden by Fjernsyn
 Video:
   IP block: 'YouTube has blocked your IP address from watching videos. Please try switching to a different VPN or proxy.'
   Unexplained playback refusal: YouTube refused playback without giving a reason. If you use a VPN or proxy, try another server or disable it.
-  MembersOnly: Members-only videos cannot be watched with FreeTube as they require Google login and paid membership to the uploader's channel.
-  AgeRestricted: Age-restricted videos cannot be watched with FreeTube as they require Google login and using an age-verified YouTube account.
-  DRMProtected: DRM protected videos cannot be played in FreeTube, as they require proprietary, closed source components. If you want to watch this video please watch it on the official YouTube website in a DRM enabled web browser.
-  Private: Private videos cannot be watched in FreeTube as they require Google login and ownership of the video.
+  MembersOnly: Members-only videos cannot be watched with Fjernsyn as they require Google login and paid membership to the uploader's channel.
+  AgeRestricted: Age-restricted videos cannot be watched with Fjernsyn as they require Google login and using an age-verified YouTube account.
+  DRMProtected: DRM protected videos cannot be played in Fjernsyn, as they require proprietary, closed source components. If you want to watch this video please watch it on the official YouTube website in a DRM enabled web browser.
+  Private: Private videos cannot be watched in Fjernsyn as they require Google login and ownership of the video.
   # Shown on the video error screen, for errors that reopening the video can clear
   Try Again: Try Again
   # Shown when no backend returned a source that the player can load
@@ -1381,23 +1381,27 @@ Description:
 #Tooltips
 Tooltips:
   General Settings:
-    Preferred API Backend: Choose the backend that FreeTube uses to obtain data. The
+    Preferred API Backend: Choose the backend that Fjernsyn uses to obtain data. The
       local API is a built-in extractor. The Invidious API requires an Invidious server
       to connect to.
     Fallback to Non-Preferred Backend on Failure: When your preferred API has a problem,
-      FreeTube will automatically attempt to use your non-preferred API as a fallback
+      Fjernsyn will automatically attempt to use your non-preferred API as a fallback
       method when enabled.
-    Thumbnail Preference: All thumbnails throughout FreeTube will be replaced with
+    Thumbnail Preference: All thumbnails throughout Fjernsyn will be replaced with
       a frame of the video, blurred or hidden instead of the default thumbnail.
-    Invidious Instance: The Invidious instance that FreeTube will connect to for API
+    Invidious Instance: The Invidious instance that Fjernsyn will connect to for API
       calls. Changes to this setting apply only to the current window unless you set this instance as the default.
     Region for Explore: Which country's charts Explore shows. Trending is per country,
       so this decides what is on the page.
     External Link Handling: |
-      Choose the default behavior when a link, which cannot be opened in FreeTube, is clicked.
-      By default FreeTube will open the clicked link in your default browser.
-    Open Deep Links In New Window: URLs passed to FreeTube, such as by redirect
+      Choose the default behavior when a link, which cannot be opened in Fjernsyn, is clicked.
+      By default Fjernsyn will open the clicked link in your default browser.
+    Open Deep Links In New Window: URLs passed to Fjernsyn, such as by redirect
       browser extensions or command line arguments, are opened in a new window.
+    Handle FreeTube Links: Opens freetube:// links, which official FreeTube and the
+      browser redirect extensions use, as well as Fjernsyn's own fjernsyn:// links.
+      Official FreeTube takes these links back each time it starts, and so does Fjernsyn
+      while this is on. On Linux, turning it off only stops Fjernsyn taking them back.
   Player Settings:
     Proxy Videos Through Invidious: Will connect to Invidious to serve videos instead
       of making a direct connection to YouTube.
@@ -1416,7 +1420,7 @@ Tooltips:
   External Player Settings:
     External Player: Choosing an external player will display an icon, for opening the
       video (playlist if supported) in the external player, on the thumbnail. Warning, Invidious settings do not affect external players.
-    Custom External Player Executable: By default, FreeTube will assume that the chosen external
+    Custom External Player Executable: By default, Fjernsyn will assume that the chosen external
       player can be found via the PATH environment variable. If needed, a custom path can
       be set here.
     Ignore Warnings: Suppress warnings for when the current external player does not support
@@ -1431,31 +1435,31 @@ Tooltips:
       which downloads it with its own defaults. Not offered for upcoming videos or live broadcasts.
     Custom Arguments: Command line arguments passed to yt-dlp for every download, with each option and each value as its own entry,
       for instance a format, an output template, subtitles or cookies. They come after
-      FreeTube's own, so they can override them.
+      Fjernsyn's own, so they can override them.
   Distraction Free Settings:
     Hide Channels: Enter a channel ID to hide all videos, playlists and the channel itself from appearing in search, trending, most popular and recommended.
        The channel ID entered must be a complete match and is case sensitive.
-    Hide Videos, Playlists and Channels Containing Text: Enter a word, word fragment, or phrase (case insensitive) to hide all videos, playlists and channels whose original titles contain it throughout all of FreeTube, excluding only History, Your Playlists, and videos inside of playlists.
+    Hide Videos, Playlists and Channels Containing Text: Enter a word, word fragment, or phrase (case insensitive) to hide all videos, playlists and channels whose original titles contain it throughout all of Fjernsyn, excluding only History, Your Playlists, and videos inside of playlists.
     Hide Videos on Watch: 'Hides watched videos from the Videos, Shorts, and Live tabs on the Subscription and Channel pages. This does not affect the Home tab on Channel pages'
   Subscription Settings:
-    Fetch Feeds from RSS: When enabled, FreeTube will use RSS instead of its default
+    Fetch Feeds from RSS: When enabled, Fjernsyn will use RSS instead of its default
       method for grabbing your subscription feed. RSS is faster and prevents IP blocking,
       but doesn't provide certain information like video duration, live status or posts
-    Fetch Automatically: When enabled, FreeTube will automatically fetch
+    Fetch Automatically: When enabled, Fjernsyn will automatically fetch
       your subscription feed on startup and when a new window is opened.
     Fill In Missing Video Details: When your feed comes from RSS it has no video
-      durations. With this enabled, FreeTube quietly fetches the missing details
+      durations. With this enabled, Fjernsyn quietly fetches the missing details
       for the part of the feed you are looking at, one channel at a time, and
       fills them in as they arrive. Results are kept, so each channel is only
       fetched once.
     Recover Failed Refreshes: 'When a refresh cannot reach some of your channels,
-      FreeTube goes back for them in the background: first a profile at a time,
+      Fjernsyn goes back for them in the background: first a profile at a time,
       then one channel at a time, asking for less at once with each attempt. The
       feed stays usable throughout and fills in as they arrive.'
   Experimental Settings:
     Replace HTTP Cache: Disables Electron's disk based HTTP cache and enables a custom in-memory image cache. Will lead to increased RAM usage.
     Disable Hardware Acceleration: Disables GPU hardware acceleration. May fix graphical issues, but will probably perform worse.
-    Regulated Streaming: 'When YouTube stops trusting a playback session, FreeTube
+    Regulated Streaming: 'When YouTube stops trusting a playback session, Fjernsyn
       recovers it in the background rather than interrupting you. This enables the
       more eager version of that, which may keep a spare session ready so a recovery
       costs you nothing at all. Currently identical to the standard behaviour;

@@ -9,9 +9,13 @@
         {{ $t("About.About") }}
       </h2>
       <section class="brand">
-        <div class="logoWithStamp">
-          <FtLogoFull class="logo" />
-          <FtForkStamp class="forkStamp" />
+        <div class="logo">
+          <img
+            class="logoIcon"
+            src="../../../../_icons/fjernsyn.svg"
+            alt=""
+          >
+          <span class="logoName">{{ PRODUCT_NAME }}</span>
         </div>
         <div class="version">
           {{ versionNumber }} {{ $t("About.Beta") }}
@@ -79,14 +83,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FtCard from '../../components/ft-card/ft-card.vue'
-import FtLogoFull from '../../components/FtLogoFull/FtLogoFull.vue'
-import FtForkStamp from '../../components/FtForkStamp/FtForkStamp.vue'
 import { vSaferHtml } from '../../directives/vSaferHtml.js'
 
 import { ABOUT_BITCOIN_ADDRESS } from '../../../constants'
 import packageDetails from '../../../../package.json'
 
 const { t } = useI18n()
+
+const PRODUCT_NAME = packageDetails.productName
 
 const versionNumber = `v${packageDetails.version}`
 
@@ -108,7 +112,7 @@ const forkChunks = computed(() => [
     icon: ['fab', 'github'],
     title: t('About.Source code'),
     content: [
-      '<a href="https://github.com/TomasEkeli/FreeTube" lang="en" dir="ltr">GitHub: TomasEkeli/FreeTube</a>',
+      '<a href="https://github.com/TomasEkeli/Fjernsyn" lang="en" dir="ltr">GitHub: TomasEkeli/Fjernsyn</a>',
       t('About.Forked from {upstreamLink}', {
         upstreamLink: '<a href="https://github.com/FreeTubeApp/FreeTube" lang="en" dir="ltr">FreeTubeApp/FreeTube</a>',
       }),
@@ -120,7 +124,7 @@ const forkChunks = computed(() => [
   {
     icon: ['fas', 'file-download'],
     title: t('About.Downloads'),
-    content: `<a href="https://github.com/TomasEkeli/FreeTube/actions/workflows/build.yml?query=branch%3Amain">${t('About.Build runs on GitHub Actions')}</a>`,
+    content: `<a href="https://github.com/TomasEkeli/Fjernsyn/actions/workflows/build.yml?query=branch%3Amain">${t('About.Build runs on GitHub Actions')}</a>`,
   },
 ])
 

@@ -1,3 +1,5 @@
+// First, so that the data folder is settled before anything computes a path in it
+import './userDataMigration/atStartup'
 import {
   app, BrowserWindow, dialog, Menu, ipcMain,
   powerSaveBlocker, screen, session, shell,
@@ -321,18 +323,45 @@ function runApp() {
 
   const PLAYER_CACHE_PATH = `${userDataPath}/player_cache`
 
-  // See: https://stackoverflow.com/questions/45570589/electron-protocol-handler-not-working-on-windows
-  // remove so we can register each time as we run the app.
-  app.removeAsDefaultProtocolClient('freetube')
+  /**
+   * Makes this app the one the system opens `scheme://` links with.
+   * `fjernsyn://` is always claimed. `freetube://`, which official FreeTube
+   * and the browser redirect extensions use, is claimed only while the
+   * handleFreeTubeLinks setting is on, once the settings are read.
+   *
+   * @param {string} scheme
+   */
+  function claimLinkScheme(scheme) {
+    // See: https://stackoverflow.com/questions/45570589/electron-protocol-handler-not-working-on-windows
+    // remove so we can register each time as we run the app.
+    app.removeAsDefaultProtocolClient(scheme)
 
-  // If we are running a non-packaged version of the app && on windows
-  if (process.env.NODE_ENV === 'development' && process.platform === 'win32') {
-    // Set the path of electron.exe and your app.
-    // These two additional parameters are only available on windows.
-    app.setAsDefaultProtocolClient('freetube', process.execPath, [path.resolve(process.argv[1])])
-  } else {
-    app.setAsDefaultProtocolClient('freetube')
+    // If we are running a non-packaged version of the app && on windows
+    if (process.env.NODE_ENV === 'development' && process.platform === 'win32') {
+      // Set the path of electron.exe and your app.
+      // These two additional parameters are only available on windows.
+      app.setAsDefaultProtocolClient(scheme, process.execPath, [path.resolve(process.argv[1])])
+    } else {
+      app.setAsDefaultProtocolClient(scheme)
+    }
   }
+
+  /**
+   * Gives up `scheme://` links, if this app has them. Electron can do this on
+   * Windows and macOS only; on Linux the links stay with this app until
+   * another one, such as official FreeTube, claims them.
+   *
+   * @param {string} scheme
+   */
+  function releaseLinkScheme(scheme) {
+    if (process.env.NODE_ENV === 'development' && process.platform === 'win32') {
+      app.removeAsDefaultProtocolClient(scheme, process.execPath, [path.resolve(process.argv[1])])
+    } else {
+      app.removeAsDefaultProtocolClient(scheme)
+    }
+  }
+
+  claimLinkScheme('fjernsyn')
 
   if (process.env.NODE_ENV !== 'development') {
     app.on('second-instance', async (_, commandLine, __) => {
@@ -512,6 +541,7 @@ function runApp() {
     let proxyProtocol = 'socks5'
     let proxyHostname = '127.0.0.1'
     let proxyPort = '9050'
+    let handleFreeTubeLinks = true
 
     if (docArray?.length > 0) {
       docArray.forEach((doc) => {
@@ -542,8 +572,17 @@ function runApp() {
               trayOnMinimize = doc.value
             }
             break
+          case 'handleFreeTubeLinks':
+            handleFreeTubeLinks = doc.value
+            break
         }
       })
+    }
+
+    if (handleFreeTubeLinks) {
+      claimLinkScheme('freetube')
+    } else {
+      releaseLinkScheme('freetube')
     }
 
     if (disableSmoothScrolling) {
@@ -1025,6 +1064,8 @@ function runApp() {
       // It will be shown later when ready via `ready-to-show` event
       show: showWindowNow,
       backgroundColor: windowBackground,
+      // The design drawn for small sizes, since a taskbar shows it small, and
+      // WSLg shows nothing at all for the detailed one
       icon: process.env.NODE_ENV === 'development'
         ? path.join(__dirname, '../../_icons/iconColor.png')
         : path.join(__dirname, '../_icons/iconColor.png'),
@@ -1110,14 +1151,16 @@ function runApp() {
             trayClick(window)
           }
         } else {
+          // The design drawn for small sizes; Electron picks the @2x file
+          // beside it on a high density display
           const icon = process.env.NODE_ENV === 'development'
-            ? path.join(__dirname, '..', '..', '_icons', 'iconColor.png')
-            : path.join(__dirname, '..', '_icons', 'iconColor.png')
+            ? path.join(__dirname, '..', '..', '_icons', 'iconTray.png')
+            : path.join(__dirname, '..', '_icons', 'iconTray.png')
 
           tray = new Tray(icon)
 
           tray.setIgnoreDoubleClickEvents(true)
-          tray.setToolTip('FreeTube')
+          tray.setToolTip(packageDetails.productName)
 
           trayWindows = [window]
           createTrayContextMenu()
@@ -1785,6 +1828,13 @@ function runApp() {
                 if (!trayOnMinimize) { showHiddenWindows() }
               }
               break
+            case 'handleFreeTubeLinks':
+              if (data.value) {
+                claimLinkScheme('freetube')
+              } else {
+                releaseLinkScheme('freetube')
+              }
+              break
             case 'baseTheme':
               updateThemeSource(data.value)
               break
@@ -2422,7 +2472,7 @@ function runApp() {
 
   /*
    * Check if an argument was passed and send it over to the GUI (Linux / Windows).
-   * Remove freetube:// protocol if present
+   * Remove the fjernsyn:// or freetube:// protocol if present
    */
   const url = getLinkUrl(process.argv)
   if (url) {
@@ -2430,9 +2480,7 @@ function runApp() {
   }
 
   function baseUrl(arg) {
-    let newArg = arg.replace('freetube://', '')
-    // add support for authority free url
-      .replace('freetube:', '')
+    let newArg = arg.replace(/^(?:fjernsyn|freetube):(?:\/\/)?/i, '')
 
     // fix for Qt URL, like `freetube://https//www.youtube.com/watch?v=...`
     // For details see https://github.com/FreeTubeApp/FreeTube/pull/3119

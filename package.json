@@ -1,22 +1,23 @@
 {
-  "name": "freetube",
-  "productName": "FreeTube",
-  "description": "A private YouTube client",
-  "version": "0.25.3",
+  "name": "fjernsyn",
+  "productName": "Fjernsyn",
+  "desktopName": "fjernsyn.desktop",
+  "description": "A private YouTube client, forked from FreeTube",
+  "version": "0.0.1",
   "license": "AGPL-3.0-or-later",
   "main": "./dist/main.js",
   "private": true,
   "author": {
-    "name": "FreeTube Team",
+    "name": "Tomas Ekeli",
     "email": "noreply@example.com",
-    "url": "https://github.com/FreeTubeApp/FreeTube"
+    "url": "https://github.com/TomasEkeli/Fjernsyn"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FreeTubeApp/FreeTube.git"
+    "url": "git+https://github.com/TomasEkeli/Fjernsyn.git"
   },
   "bugs": {
-    "url": "https://github.com/FreeTubeApp/FreeTube/issues"
+    "url": "https://github.com/TomasEkeli/Fjernsyn"
   },
   "scripts": {
     "build": "pnpm run pack && pnpm run build-release",

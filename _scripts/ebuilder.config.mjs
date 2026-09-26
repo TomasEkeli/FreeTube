@@ -2,7 +2,10 @@ import packageDetails from '../package.json' with { type: 'json' }
 
 /** @type {import('electron-builder').Configuration} */
 export default {
-  appId: `io.freetubeapp.${packageDetails.name}`,
+  // The fork's own id, not one under upstream's io.freetubeapp domain. On
+  // Windows the installer's identity follows it, so Fjernsyn installs beside
+  // an official FreeTube, or an earlier build of this fork, and upgrades neither
+  appId: 'io.github.tomasekeli.fjernsyn',
   copyright: 'Copyleft © 2020-2026',
   // asar: false,
   // compression: 'store',
@@ -12,14 +15,18 @@ export default {
   },
   protocols: [
     {
-      name: 'FreeTube',
+      name: 'Fjernsyn',
+      // freetube:// as well, for the browser redirect extensions; the app
+      // releases it again when the handleFreeTubeLinks setting is off
       schemes: [
+        'fjernsyn',
         'freetube'
       ]
     }
   ],
   files: [
     '_icons/iconColor.*',
+    '_icons/iconTray*.png',
     'icon.svg',
     'dist/**/*',
     '!dist/web/*',
@@ -51,7 +58,13 @@ export default {
   },
   linux: {
     category: 'AudioVideo;Video;Player;Feed;Network',
-    icon: '_icons/icon.svg',
+    // One image per size, so the sizes of 32 and below get the simpler
+    // design drawn for them rather than the full one scaled down
+    icon: '_icons/linux',
+    // Names the desktop entry and its StartupWMClass after package.json's
+    // desktopName, which Electron also takes as the window's app id, so the
+    // desktop can tell which entry, and which icon, a running window belongs to
+    syncDesktopName: true,
     target: ['deb', 'zip', '7z', 'rpm', 'AppImage', 'pacman'], // 'flatpak'],
   },
   // See the following issues for more information
@@ -110,9 +123,11 @@ export default {
     type: 'distribution',
     extendInfo: {
       CFBundleURLTypes: [
+        'fjernsyn',
         'freetube'
       ],
       CFBundleURLSchemes: [
+        'fjernsyn',
         'freetube'
       ],
 

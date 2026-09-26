@@ -44,6 +44,14 @@
           @change="updateOpenDeepLinksInNewWindow"
         />
         <FtToggleSwitch
+          v-if="USING_ELECTRON"
+          :label="t('Settings.General Settings.Handle FreeTube Links')"
+          :default-value="handleFreeTubeLinks"
+          :compact="true"
+          :tooltip="t('Tooltips.General Settings.Handle FreeTube Links')"
+          @change="updateHandleFreeTubeLinks"
+        />
+        <FtToggleSwitch
           v-if="!IS_MAC && !isLinuxWayland && USING_ELECTRON"
           :label="t('Settings.General Settings.Minimize to system tray')"
           :default-value="hideToTrayOnMinimize"
@@ -276,6 +284,16 @@ const openDeepLinksInNewWindow = computed(() => store.getters.getOpenDeepLinksIn
  */
 function updateOpenDeepLinksInNewWindow(value) {
   store.dispatch('updateOpenDeepLinksInNewWindow', value)
+}
+
+/** @type {import('vue').ComputedRef<boolean>} */
+const handleFreeTubeLinks = computed(() => store.getters.getHandleFreeTubeLinks)
+
+/**
+ * @param {boolean} value
+ */
+function updateHandleFreeTubeLinks(value) {
+  store.dispatch('updateHandleFreeTubeLinks', value)
 }
 
 const BACKEND_VALUES = process.env.SUPPORTS_LOCAL_API
