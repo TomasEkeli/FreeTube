@@ -9,16 +9,21 @@
 
   Right-click it, or press the ContextMenu key or Shift+F10 on it, to rename
   it or change its colour. Renaming happens in place.
+
+  It can be dragged along the palette to put the profile somewhere else in
+  the order, or moved a place at a time with Ctrl+Shift+Left and Right.
 -->
 <template>
   <div
     ref="entry"
     class="paletteEntry"
-    :class="{ dropTarget: dragOver, acknowledged }"
+    :class="{ dropTarget: dragOver, acknowledged, dragging, insertBefore, insertAfter }"
     :data-profile-id="profile._id"
     :style="{ '--profile-colour': profile.bgColor }"
-    :title="editing ? null : summary"
+    :title="editing ? null : tooltip"
+    :draggable="editing ? 'false' : 'true'"
     v-on="dropHandlers"
+    @dragstart="startDrag"
     @contextmenu="openMenu"
     @keydown="onKeydown"
   >
@@ -104,10 +109,25 @@ const props = defineProps({
   editing: {
     type: Boolean,
     default: false
+  },
+  /** It is the bubble being dragged */
+  dragging: {
+    type: Boolean,
+    default: false
+  },
+  /** A dragged bubble would land in front of it */
+  insertBefore: {
+    type: Boolean,
+    default: false
+  },
+  /** A dragged bubble would land after it: it is the last */
+  insertAfter: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['toggle', 'drop-channels', 'rename', 'menu'])
+const emit = defineEmits(['toggle', 'drop-channels', 'rename', 'menu', 'drag-profile', 'move'])
 
 const { t } = useI18n()
 
@@ -121,6 +141,21 @@ const summary = computed(() => {
 
   return `${props.profile.name}: ${channels}. ${shared}`
 })
+
+const tooltip = computed(() => `${summary.value}\n${t('Channels.Overview.Reorder Hint')}`)
+
+/**
+ * @param {DragEvent} event
+ */
+function startDrag(event) {
+  // Not while its name is being typed, so that text in the field can be selected
+  if (props.editing) {
+    event.preventDefault()
+    return
+  }
+
+  emit('drag-profile', event)
+}
 
 const acknowledged = ref(false)
 let acknowledgeTimeout = null
@@ -172,6 +207,13 @@ function onKeydown(event) {
   if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
     event.preventDefault()
     emit('menu', { rect: entry.value.getBoundingClientRect() })
+  }
+
+  if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey &&
+    (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.preventDefault()
+    // Which way on screen: the palette knows which way that is in the order
+    emit('move', event.key === 'ArrowRight' ? 1 : -1)
   }
 }
 

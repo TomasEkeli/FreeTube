@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 import store from '../store/index'
 import { calculateColorLuminance, colors } from '../helpers/colors'
-import { pickUnusedColour } from '../helpers/channelsOverview'
+import { moveInOrder, pickUnusedColour, profileOrderIds } from '../helpers/channelsOverview'
 import { deepCopy, showToast } from '../helpers/utils'
 
 /** @import { Profile } from '../helpers/channelsOverview' */
@@ -208,6 +208,23 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     }
   }
 
+  /**
+   * Puts a profile somewhere else in the order: on screen at once, then
+   * saved. The order is a setting and not a profile, so it does not wait on
+   * the queue of profile writes.
+   * @param {string} profileId
+   * @param {number} toIndex its place in the order without it
+   */
+  function reorder(profileId, toIndex) {
+    const current = profileOrderIds(profileList.value)
+    const next = moveInOrder(current, profileId, toIndex)
+
+    if (next === current) { return }
+
+    store.commit('setProfileOrder', next)
+    store.dispatch('updateProfileOrder', next)
+  }
+
   return {
     draft,
     startDraft,
@@ -223,6 +240,7 @@ export function useProfilePaletteEditing({ profileList, afterPendingChanges, ope
     closeProfileMenu,
     colourMenu,
     chooseColour,
-    closeColourMenu
+    closeColourMenu,
+    reorder
   }
 }

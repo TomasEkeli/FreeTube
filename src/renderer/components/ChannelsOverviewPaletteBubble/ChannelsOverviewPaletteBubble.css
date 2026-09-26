@@ -126,3 +126,27 @@
     transform: scale(1);
   }
 }
+
+.paletteEntry.dragging {
+  opacity: 0.4;
+}
+
+/* A bar in the gap where a dragged bubble would land; the palette's gap is 4px */
+.insertBefore::before,
+.insertAfter::after {
+  content: '';
+  position: absolute;
+  inset-block: 6px;
+  inline-size: 3px;
+  border-radius: 2px;
+  background-color: var(--primary-color);
+  pointer-events: none;
+}
+
+.insertBefore::before {
+  inset-inline-start: -4px;
+}
+
+.insertAfter::after {
+  inset-inline-end: -4px;
+}

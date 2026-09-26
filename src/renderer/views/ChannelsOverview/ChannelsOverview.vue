@@ -37,6 +37,7 @@
           @cancel-draft="cancelDraft"
           @rename="finishRename"
           @menu="openProfileMenu"
+          @reorder="reorder"
         />
         <p
           v-if="profiles.length === 0 && draft === null"
@@ -661,7 +662,8 @@ const {
   closeProfileMenu,
   colourMenu,
   chooseColour,
-  closeColourMenu
+  closeColourMenu,
+  reorder
 } = useProfilePaletteEditing({ profileList, afterPendingChanges, openColumn })
 
 /**
