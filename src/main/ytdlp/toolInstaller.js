@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 
+import { extractFiles } from './extract'
 import { managedToolPath, TOOLS } from './toolDetection'
 
 /**
@@ -11,12 +12,15 @@ import { managedToolPath, TOOLS } from './toolDetection'
  */
 
 const YT_DLP_NIGHTLY = 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download'
+const FFMPEG_BUILDS = 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest'
+const DENO = 'https://github.com/denoland/deno/releases/latest/download'
 
 /**
  * @typedef {object} Asset
  * @property {string} url
- * @property {'binary'} kind a plain executable
+ * @property {'binary' | 'zip' | 'tar.xz'} kind a plain executable, or an archive to take files out of
  * @property {{ url: string, name: string | null }} sums the published SHA-256 sums, and the line to look for; `null` for a file that sums only this asset
+ * @property {{ entry: string, name: string }[]} [files] for an archive: which files to take out (see `extract.js`), and their names in the tools folder
  */
 
 /**
@@ -24,7 +28,9 @@ const YT_DLP_NIGHTLY = 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases
  * 2026-09-26. yt-dlp from the nightly channel, which yt-dlp recommends for
  * regular users, since YouTube breaks the stable channel between releases.
  * On Linux the standalone `yt-dlp_linux`, never the zipimport `yt-dlp`, which
- * needs a Python interpreter.
+ * needs a Python interpreter. ffmpeg from yt-dlp's own FFmpeg builds, with
+ * ffprobe beside it since yt-dlp uses both. Deno from Deno's releases, the
+ * `deno` archive rather than the `denort` runtime-only one.
  *
  * @type {Record<import('./toolDetection').Tool, Record<string, Asset>>}
  */
@@ -41,8 +47,34 @@ export const ASSETS = {
       sums: { url: `${YT_DLP_NIGHTLY}/SHA2-256SUMS`, name: 'yt-dlp_linux' },
     },
   },
-  ffmpeg: {},
-  deno: {},
+  ffmpeg: {
+    'win32-x64': {
+      url: `${FFMPEG_BUILDS}/ffmpeg-master-latest-win64-gpl.zip`,
+      kind: 'zip',
+      sums: { url: `${FFMPEG_BUILDS}/checksums.sha256`, name: 'ffmpeg-master-latest-win64-gpl.zip' },
+      files: [{ entry: 'bin/ffmpeg.exe', name: 'ffmpeg.exe' }, { entry: 'bin/ffprobe.exe', name: 'ffprobe.exe' }],
+    },
+    'linux-x64': {
+      url: `${FFMPEG_BUILDS}/ffmpeg-master-latest-linux64-gpl.tar.xz`,
+      kind: 'tar.xz',
+      sums: { url: `${FFMPEG_BUILDS}/checksums.sha256`, name: 'ffmpeg-master-latest-linux64-gpl.tar.xz' },
+      files: [{ entry: 'bin/ffmpeg', name: 'ffmpeg' }, { entry: 'bin/ffprobe', name: 'ffprobe' }],
+    },
+  },
+  deno: {
+    'win32-x64': {
+      url: `${DENO}/deno-x86_64-pc-windows-msvc.zip`,
+      kind: 'zip',
+      sums: { url: `${DENO}/deno-x86_64-pc-windows-msvc.zip.sha256sum`, name: null },
+      files: [{ entry: 'deno.exe', name: 'deno.exe' }],
+    },
+    'linux-x64': {
+      url: `${DENO}/deno-x86_64-unknown-linux-gnu.zip`,
+      kind: 'zip',
+      sums: { url: `${DENO}/deno-x86_64-unknown-linux-gnu.zip.sha256sum`, name: null },
+      files: [{ entry: 'deno', name: 'deno' }],
+    },
+  },
 }
 
 /**
@@ -212,18 +244,51 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
 
       onProgress({ tool, stage: 'verifying' })
 
-      // Never written into place unless it is exactly what was published
+      // Never opened, let alone written into place, unless it is exactly
+      // what was published
       if (actual !== expected) {
         throw new Error(`Checksum mismatch for ${assetName}. It may have been truncated, or a new release came out mid-download; try again`)
       }
 
-      await fs.chmod(download, 0o755)
-      await fs.rename(download, destination)
+      if (asset.kind === 'binary') {
+        await placeExecutables([{ temporary: download, destination }])
+      } else {
+        onProgress({ tool, stage: 'extracting' })
+
+        const extracted = await extractFiles({
+          fs,
+          archivePath: download,
+          kind: asset.kind,
+          files: asset.files.map(file => ({ entry: file.entry, destination: pathModule.join(managedDir, file.name) })),
+        })
+
+        await placeExecutables(extracted)
+      }
     } finally {
       await fs.rm(download)
     }
 
     onProgress({ tool, stage: 'done' })
+  }
+
+  /**
+   * Gives each file its executable bit and moves it into place, only once
+   * they are all ready, so that a failure leaves no partial set behind.
+   *
+   * @param {{ temporary: string, destination: string }[]} files
+   */
+  async function placeExecutables(files) {
+    try {
+      for (const { temporary } of files) {
+        await fs.chmod(temporary, 0o755)
+      }
+
+      for (const { temporary, destination } of files) {
+        await fs.rename(temporary, destination)
+      }
+    } finally {
+      await Promise.all(files.map(({ temporary }) => fs.rm(temporary)))
+    }
   }
 
   /**

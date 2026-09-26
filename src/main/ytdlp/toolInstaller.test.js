@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 
 import { chooseAsset, createToolInstaller, findChecksum, installCoverage } from './toolInstaller'
@@ -18,6 +21,27 @@ function sha256(data) {
   return createHash('sha256').update(data).digest('hex')
 }
 
+const FFMPEG_BUILDS = 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest'
+const DENO = 'https://github.com/denoland/deno/releases/latest/download'
+
+// The extraction fixture happens to be laid out like the ffmpeg builds:
+// a folder holding bin/ffmpeg and bin/ffprobe
+const FFMPEG_TAR_XZ = new Uint8Array(readFileSync(path.join(__dirname, 'fixtures', 'archive.tar.xz')))
+const DENO_BINARY = new TextEncoder().encode('\x7fELF deno')
+const DENO_ZIP = zipSync({ deno: DENO_BINARY })
+
+const FFMPEG_SUMS = `${sha256('win')}  ffmpeg-master-latest-win64-gpl.zip\n${sha256(FFMPEG_TAR_XZ)}  ffmpeg-master-latest-linux64-gpl.tar.xz\n`
+const DENO_SUMS = `${sha256(DENO_ZIP)}  deno-x86_64-unknown-linux-gnu.zip\n`
+
+const ALL_LINUX = {
+  [`${NIGHTLY}/SHA2-256SUMS`]: null,
+  [`${NIGHTLY}/yt-dlp_linux`]: YT_DLP_LINUX,
+  [`${FFMPEG_BUILDS}/checksums.sha256`]: FFMPEG_SUMS,
+  [`${FFMPEG_BUILDS}/ffmpeg-master-latest-linux64-gpl.tar.xz`]: FFMPEG_TAR_XZ,
+  [`${DENO}/deno-x86_64-unknown-linux-gnu.zip.sha256sum`]: DENO_SUMS,
+  [`${DENO}/deno-x86_64-unknown-linux-gnu.zip`]: DENO_ZIP,
+}
+
 const SUMS = [
   `${sha256('zipimport')}  yt-dlp`,
   `${sha256(YT_DLP_EXE)}  yt-dlp.exe`,
@@ -25,6 +49,8 @@ const SUMS = [
   `${sha256('aarch64')}  yt-dlp_linux_aarch64`,
   '',
 ].join('\n')
+
+ALL_LINUX[`${NIGHTLY}/SHA2-256SUMS`] = SUMS
 
 /**
  * A detector that finds a tool when it is in the memory filesystem's managed
@@ -102,6 +128,39 @@ describe('tool installer', () => {
         url: `${NIGHTLY}/yt-dlp.exe`,
         sums: { name: 'yt-dlp.exe' },
       })
+    })
+
+    it('takes the ffmpeg builds from yt-dlp, a tar.xz on Linux and a zip on Windows, with ffprobe', () => {
+      expect(chooseAsset('ffmpeg', 'linux', 'x64')).toEqual({
+        url: `${FFMPEG_BUILDS}/ffmpeg-master-latest-linux64-gpl.tar.xz`,
+        kind: 'tar.xz',
+        sums: { url: `${FFMPEG_BUILDS}/checksums.sha256`, name: 'ffmpeg-master-latest-linux64-gpl.tar.xz' },
+        files: [{ entry: 'bin/ffmpeg', name: 'ffmpeg' }, { entry: 'bin/ffprobe', name: 'ffprobe' }],
+      })
+      expect(chooseAsset('ffmpeg', 'win32', 'x64')).toMatchObject({
+        url: `${FFMPEG_BUILDS}/ffmpeg-master-latest-win64-gpl.zip`,
+        kind: 'zip',
+        files: [{ entry: 'bin/ffmpeg.exe', name: 'ffmpeg.exe' }, { entry: 'bin/ffprobe.exe', name: 'ffprobe.exe' }],
+      })
+    })
+
+    it('takes Deno from its own releases, a zip with a sums file of its own on both', () => {
+      expect(chooseAsset('deno', 'linux', 'x64')).toEqual({
+        url: `${DENO}/deno-x86_64-unknown-linux-gnu.zip`,
+        kind: 'zip',
+        sums: { url: `${DENO}/deno-x86_64-unknown-linux-gnu.zip.sha256sum`, name: null },
+        files: [{ entry: 'deno', name: 'deno' }],
+      })
+      expect(chooseAsset('deno', 'win32', 'x64')).toMatchObject({
+        url: `${DENO}/deno-x86_64-pc-windows-msvc.zip`,
+        sums: { name: null },
+        files: [{ entry: 'deno.exe', name: 'deno.exe' }],
+      })
+    })
+
+    it('covers all three on Windows x64 and Linux x64', () => {
+      expect(installCoverage('linux', 'x64')).toEqual({ 'yt-dlp': true, ffmpeg: true, deno: true })
+      expect(installCoverage('win32', 'x64')).toEqual({ 'yt-dlp': true, ffmpeg: true, deno: true })
     })
 
     it('has nothing for platforms it does not cover', () => {
@@ -186,6 +245,61 @@ describe('tool installer', () => {
 
       expect(result).toEqual({ ok: false, error: 'unsupported', notCovered: ['yt-dlp'] })
       expect(fetch.requested).toEqual([])
+    })
+  })
+
+  describe('installing from archives', () => {
+    it('installs all three on a bare machine, each executable in the managed folder', async () => {
+      const { installer, fs } = setup({ responses: ALL_LINUX, elsewhere: [] })
+
+      const result = await installer.install()
+
+      expect(result).toMatchObject({ ok: true, installed: ['yt-dlp', 'ffmpeg', 'deno'] })
+      expect([...fs.files.keys()].sort()).toEqual([
+        `${MANAGED_DIR}/deno`,
+        `${MANAGED_DIR}/ffmpeg`,
+        `${MANAGED_DIR}/ffprobe`,
+        `${MANAGED_DIR}/yt-dlp`,
+      ])
+      for (const file of fs.files.values()) {
+        expect(file.mode & 0o111).toBe(0o111)
+      }
+      expect(new TextDecoder().decode(fs.files.get(`${MANAGED_DIR}/ffmpeg`).data)).toBe('stand-in for ffmpeg\n'.repeat(40))
+      expect(fs.files.get(`${MANAGED_DIR}/deno`).data).toEqual(DENO_BINARY)
+    })
+
+    it('fetches only Deno when ffmpeg is on PATH', async () => {
+      const { installer, fetch } = setup({ responses: ALL_LINUX, elsewhere: ['yt-dlp', 'ffmpeg'] })
+
+      const result = await installer.install()
+
+      expect(result).toMatchObject({ ok: true, installed: ['deno'] })
+      expect(fetch.requested).toEqual([
+        `${DENO}/deno-x86_64-unknown-linux-gnu.zip.sha256sum`,
+        `${DENO}/deno-x86_64-unknown-linux-gnu.zip`,
+      ])
+    })
+
+    it('never opens an archive that fails its checksum, and leaves nothing behind', async () => {
+      const { installer, fs, progress } = setup({
+        responses: { ...ALL_LINUX, [`${FFMPEG_BUILDS}/ffmpeg-master-latest-linux64-gpl.tar.xz`]: FFMPEG_TAR_XZ.slice(0, 100) },
+        elsewhere: ['yt-dlp', 'deno'],
+      })
+
+      const result = await installer.install()
+
+      expect(result).toMatchObject({ ok: false, error: 'failed', tool: 'ffmpeg' })
+      expect(result.reason).toMatch(/checksum mismatch/i)
+      expect(progress.map(p => p.stage)).not.toContain('extracting')
+      expect(fs.files.size).toBe(0)
+    })
+
+    it('reports extracting for an archive', async () => {
+      const { installer, progress } = setup({ responses: ALL_LINUX, elsewhere: ['yt-dlp', 'ffmpeg'] })
+
+      await installer.install()
+
+      expect(progress.map(p => p.stage)).toEqual(expect.arrayContaining(['downloading', 'verifying', 'extracting', 'done']))
     })
 
     it('joins an install already running instead of starting another', async () => {

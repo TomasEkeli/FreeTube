@@ -56,7 +56,7 @@ export function buildWatchUrl(videoId) {
  * @param {ReturnType<typeof createToolDetector>} [deps.detector] shared with the installer; made from the rest when not given
  */
 export function createDownloadService(deps) {
-  const { spawn, readSetting, defaultDownloadFolder, platform, env } = deps
+  const { spawn, readSetting, managedDir, defaultDownloadFolder, platform, env } = deps
   const detector = deps.detector ?? createToolDetector(deps)
 
   /**
@@ -94,7 +94,7 @@ export function createDownloadService(deps) {
     try {
       tools = await detector.detect()
       folder = (await readSetting('ytDlpDownloadFolder')) || defaultDownloadFolder()
-      args = await buildArgs({ videoId, folder })
+      args = await buildArgs({ videoId, folder, tools })
     } catch (error) {
       running.delete(videoId)
       report({ type: 'failed', videoId, title, reason: String(error?.message ?? error), exitCode: null })
@@ -120,15 +120,25 @@ export function createDownloadService(deps) {
    * yt-dlp's own defaults, plus only what FreeTube needs, then the user's own
    * arguments, then the end-of-options marker and the URL.
    *
-   * @param {{ videoId: string, folder: string }} options
+   * @param {{ videoId: string, folder: string, tools: import('./toolDetection').ToolStatuses }} options
    */
-  async function buildArgs({ videoId, folder }) {
+  async function buildArgs({ videoId, folder, tools }) {
     const args = [
       '--paths', `home:${folder}`,
       // Printed once the file is in its final place, so that the finished
       // outcome can say where it is. yt-dlp is quiet otherwise.
       '--print', 'after_move:filepath',
     ]
+
+    // yt-dlp finds these itself on PATH, but not in FreeTube's tools folder.
+    // The folder rather than the file for ffmpeg, so that ffprobe is found too.
+    if (tools.ffmpeg.found && tools.ffmpeg.source === 'managed') {
+      args.push('--ffmpeg-location', managedDir)
+    }
+
+    if (tools.deno.found && tools.deno.source === 'managed') {
+      args.push('--js-runtimes', `deno:${tools.deno.path}`)
+    }
 
     // Through the same proxy as the rest of FreeTube, so that downloading
     // does not step around the privacy setup

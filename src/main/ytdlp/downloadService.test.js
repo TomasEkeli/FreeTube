@@ -309,6 +309,48 @@ describe('download service', () => {
     })
   })
 
+  describe('tools from the managed folder', () => {
+    it('points yt-dlp at the managed ffmpeg and Deno when those are the ones found', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        executables: ['/usr/bin/yt-dlp', `${MANAGED_DIR}/ffmpeg`, `${MANAGED_DIR}/deno`],
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args[args.indexOf('--ffmpeg-location') + 1]).toBe(MANAGED_DIR)
+      expect(args[args.indexOf('--js-runtimes') + 1]).toBe(`deno:${MANAGED_DIR}/deno`)
+      expect(args.indexOf('--js-runtimes')).toBeLessThan(args.indexOf('--'))
+    })
+
+    it('adds neither when ffmpeg and Deno are on PATH, where yt-dlp finds them itself', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        executables: [`${MANAGED_DIR}/yt-dlp`, '/usr/bin/ffmpeg', '/usr/bin/deno'],
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args).not.toContain('--ffmpeg-location')
+      expect(args).not.toContain('--js-runtimes')
+    })
+
+    it('adds only the one that is managed', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        executables: ['/usr/bin/yt-dlp', '/usr/bin/ffmpeg', `${MANAGED_DIR}/deno`],
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args).not.toContain('--ffmpeg-location')
+      expect(args).toContain('--js-runtimes')
+    })
+  })
+
   describe('which yt-dlp is run', () => {
     const picked = '/opt/custom/yt-dlp'
     const managed = `${MANAGED_DIR}/yt-dlp`
