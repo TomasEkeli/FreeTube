@@ -50,6 +50,8 @@ Optional loudness normalisation corrects each video for how loud it was mastered
 
 A small pin on the control bar keeps the player's controls from fading, and the choice sticks between videos.
 
+![The player with the playback speed menu open, showing the slider and half-step presets, the volume bar and the pin on the control bar](_screenshots/player.webp)
+
 ### SponsorBlock
 
 Some channels read their sponsors as part of the show. You can change SponsorBlock skipping per channel, for those where the ads are actually fun and cool. The switch is on the channel page and on the video you are watching. SponsorBlock settings list the channels you have changed, and you can remove any of them there.
@@ -64,6 +66,8 @@ If one service reports a channel as terminated, Fjernsyn checks an independent e
 
 Scheduled premieres and live streams are in a shelf over the other videos, collapsed by default, and "Hide Upcoming Premieres" does what it says.
 
+![The subscription feed in tight density, with videos, shorts, live streams and posts mixed, the four filters on and the Upcoming shelf collapsed](_screenshots/subscriptions.webp)
+
 ### Channels and profiles
 
 With a few hundred subscriptions, a checkbox list of every channel is unusable, and my profiles went stale. The Channels page is a place to sort channels into profiles.
@@ -77,6 +81,8 @@ Drag a channel to another column to move it, or hold Ctrl to copy it. Drop it on
 Click to select, Shift-click for a range, or use Select all on a column; dragging any selected channel moves the whole selection. The search box narrows every column at once, and each bubble shows how many of its channels match.
 
 A channel in more than one profile sorts to the top of each column it is in. When two of those columns are open, both copies share a colour, so the pairs are easy to spot. Right-click one to remove it from that profile, or keep it there and remove it from all the others.
+
+![The Channels page with profile bubbles along the top, the Unassigned column and three open profile columns, where channels shared between open columns have matching colours](_screenshots/channels.webp)
 
 Double-click a channel to visit its page. Click a column's heading to make that profile active.
 
@@ -99,6 +105,8 @@ Nothing changes until you act:
 - Tick a heading to accept the whole suggestion.
 - Drop a channel on a suggestion to include it when you accept the rest.
 
+![Suggest profiles, with dashed suggestion columns beside Unassigned, a tick and a cross on each channel, and badges on channels that are now in another profile](_screenshots/suggestions.webp)
+
 Each column, including Unassigned, has a Probe button for channels the app knows too little about. It checks three recent videos from each channel, one request at a time, and saves what it finds with the channel. It runs in the background as suggestions fill in, never during subscription refreshes, and stops the moment YouTube pushes back.
 
 Probing a second column queues it behind the first. Press Probe again after a stop to pick up where it left off.
@@ -111,6 +119,8 @@ Explore shows every trending category at once. The categories come from what You
 
 You can change region on the page, and the last four you looked at stay a click away. Pinned regions stay there and do not count towards the four, so you can pin the places you care about and still wander.
 
+![Explore with all six categories on, the region set to Norway and the recent regions NO, GB and US beside it](_screenshots/explore.webp)
+
 ### Layout
 
 Navigation is in the top bar, which gives the page the full width of the window. The control row stays on screen while you scroll.
@@ -118,6 +128,8 @@ Navigation is in the top bar, which gives the page the full width of the window.
 Cards come in tight, standard, spacious and wall density. Wall packs spacious-sized thumbnails edge to edge with the text over them. I use wall with full window as the default viewing mode, so the app mostly gets out of the way.
 
 Hover over a video card to show a tick beside the playlist buttons. Click it to mark the video as watched, or remove it from history if it is already there. I removed the external player button from the cards because I never used it.
+
+![The subscription feed in wall density with posts filtered out, and the watched tick showing on the hovered first card](_screenshots/wall.webp)
 
 ### Comments
 
@@ -132,6 +144,8 @@ The download button hands the video to [yt-dlp](https://github.com/yt-dlp/yt-dlp
 If yt-dlp, ffmpeg or Deno is missing, the first click offers to install what is needed before downloading. You can also install them from settings, or update yt-dlp there when YouTube downloads start failing.
 
 A click downloads the best quality available. Right-click or hold to choose a lower quality, or just the audio. The downloads indicator in the top bar shows progress, time left and where the file is going. You can cancel a download there and resume it later. Once it finishes, the button becomes Show in folder.
+
+![The download button's menu, offering best quality, each resolution from 2160p down to 360p, and audio only](_screenshots/download-menu.webp)
 
 ## Languages
 
