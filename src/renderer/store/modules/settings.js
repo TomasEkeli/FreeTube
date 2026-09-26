@@ -396,6 +396,11 @@ const state = {
   // Download with yt-dlp, Electron only. The button on the watch page shows
   // only while this is on.
   ytDlpEnabled: false,
+  // Empty for the system Downloads folder. Only main's folder picker may set
+  // it; the renderer may only clear it.
+  ytDlpDownloadFolder: '',
+  // A JSON array of strings, like the external player's
+  ytDlpCustomArgs: '[]',
 
   // The settings below have side effects
   currentLocale: 'system',
@@ -541,6 +546,8 @@ export const NON_TRANSFERABLE_SETTINGS = new Set([
   'screenshotFolderPath',
   // YtDlpSettings
   'ytDlpEnabled',
+  'ytDlpDownloadFolder',
+  'ytDlpCustomArgs',
 
   /* Depends on process.env.SUPPORTS_LOCAL_API */
   'backendFallback',

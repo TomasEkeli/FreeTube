@@ -1,4 +1,6 @@
+import { buildProxyUrl } from '../utils'
 import { findOnPath } from './findOnPath'
+import { parseCustomArgs } from './settings'
 
 /**
  * The download service: hands a video to yt-dlp and reports what became of it.
@@ -44,13 +46,14 @@ export function buildWatchUrl(videoId) {
 /**
  * @param {object} deps
  * @param {typeof import('node:child_process').spawn} deps.spawn
+ * @param {(id: keyof typeof import('./settings').SETTING_DEFAULTS) => Promise<any>} deps.readSetting
  * @param {(filePath: string) => Promise<boolean>} deps.isExecutableFile
  * @param {() => string} deps.defaultDownloadFolder the system Downloads folder
  * @param {string} deps.platform
  * @param {Record<string, string | undefined>} deps.env
  */
 export function createDownloadService(deps) {
-  const { spawn, isExecutableFile, defaultDownloadFolder, platform, env } = deps
+  const { spawn, readSetting, isExecutableFile, defaultDownloadFolder, platform, env } = deps
 
   /**
    * Keyed by video id. Holds `null` between accepting a request and having a
@@ -86,8 +89,8 @@ export function createDownloadService(deps) {
     let folder
     try {
       executable = await findOnPath('yt-dlp', { platform, env, isExecutableFile })
-      folder = defaultDownloadFolder()
-      args = buildArgs({ videoId, folder })
+      folder = (await readSetting('ytDlpDownloadFolder')) || defaultDownloadFolder()
+      args = await buildArgs({ videoId, folder })
     } catch (error) {
       running.delete(videoId)
       report({ type: 'failed', videoId, title, reason: String(error?.message ?? error), exitCode: null })
@@ -104,17 +107,39 @@ export function createDownloadService(deps) {
   }
 
   /**
+   * yt-dlp's own defaults, plus only what FreeTube needs, then the user's own
+   * arguments, then the end-of-options marker and the URL.
+   *
    * @param {{ videoId: string, folder: string }} options
    */
-  function buildArgs({ videoId, folder }) {
-    return [
+  async function buildArgs({ videoId, folder }) {
+    const args = [
       '--paths', `home:${folder}`,
       // Printed once the file is in its final place, so that the finished
       // outcome can say where it is. yt-dlp is quiet otherwise.
       '--print', 'after_move:filepath',
-      '--',
-      buildWatchUrl(videoId),
     ]
+
+    // Through the same proxy as the rest of FreeTube, so that downloading
+    // does not step around the privacy setup
+    if (await readSetting('useProxy')) {
+      const protocol = await readSetting('proxyProtocol')
+      const withCredentials = protocol === 'http' || protocol === 'https'
+
+      args.push('--proxy', buildProxyUrl({
+        protocol,
+        hostname: await readSetting('proxyHostname'),
+        port: await readSetting('proxyPort'),
+        username: withCredentials ? await readSetting('proxyUsername') : '',
+        password: withCredentials ? await readSetting('proxyPassword') : '',
+      }))
+    }
+
+    const customArgs = parseCustomArgs(await readSetting('ytDlpCustomArgs'))
+
+    args.push(...customArgs, '--', buildWatchUrl(videoId))
+
+    return args
   }
 
   /**

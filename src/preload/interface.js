@@ -206,6 +206,14 @@ export default {
   },
 
   /**
+   * Main saves the choice to the setting itself, the renderer may not
+   * @returns {Promise<string | undefined>}
+   */
+  ytDlpChooseFolder: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_CHOOSE_FOLDER)
+  },
+
+  /**
    * @param {number} factor
    */
   setZoomFactor: (factor) => {

@@ -690,6 +690,11 @@ Settings:
   yt-dlp Settings:
     yt-dlp Settings: yt-dlp
     Enable Download Button: Show a download button on the watch page
+    Download Folder: Download Folder
+    System Downloads Folder: The system Downloads folder
+    Choose Folder: Choose Folder
+    Use Downloads Folder: Use Downloads Folder
+    Custom Arguments: Custom yt-dlp Arguments
   Privacy Settings:
     Privacy Settings: Privacy
     Remember History: Remember Watch History
@@ -1343,6 +1348,9 @@ Tooltips:
   yt-dlp Settings:
     Enable Download Button: Shows a button on the watch page that hands the video to yt-dlp,
       which downloads it with its own defaults. Not offered for upcoming videos or live broadcasts.
+    Custom Arguments: Command line arguments passed to yt-dlp for every download, with each option and each value as its own entry,
+      for instance a format, an output template, subtitles or cookies. They come after
+      FreeTube's own, so they can override them.
   Distraction Free Settings:
     Hide Channels: Enter a channel ID to hide all videos, playlists and the channel itself from appearing in search, trending, most popular and recommended.
        The channel ID entered must be a complete match and is case sensitive.

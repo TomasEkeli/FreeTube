@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createDownloadService } from './downloadService'
+import { SETTING_DEFAULTS } from './settings'
 import { createFakeSpawn, until } from './testing/fakeProcess'
 
 const VIDEO_ID = 'dQw4w9WgXcQ'
@@ -10,13 +11,16 @@ const REQUEST = { videoId: VIDEO_ID, title: 'A video' }
  * @param {object} options
  * @param {(command: string, args: string[]) => import('./testing/fakeProcess').Script} [options.respond]
  * @param {string[]} [options.executables] files that exist and can be run
+ * @param {Partial<typeof SETTING_DEFAULTS>} [options.settings]
  */
-function setup({ respond = () => ({}), executables = ['/usr/bin/yt-dlp'] } = {}) {
+function setup({ respond = () => ({}), executables = ['/usr/bin/yt-dlp'], settings = {} } = {}) {
   const fake = createFakeSpawn(respond)
   const outcomes = []
+  const stored = { ...SETTING_DEFAULTS, ytDlpEnabled: true, ...settings }
 
   const service = createDownloadService({
     spawn: fake.spawn,
+    readSetting: async id => stored[id],
     isExecutableFile: async filePath => executables.includes(filePath),
     defaultDownloadFolder: () => '/home/viewer/Downloads',
     platform: 'linux',
@@ -57,6 +61,84 @@ describe('download service', () => {
       const { args } = downloads()[0]
       const print = args.indexOf('--print')
       expect(args[print + 1]).toBe('after_move:filepath')
+    })
+
+    it('downloads into the chosen folder when there is one', async () => {
+      const { service, report, downloads, outcomes } = setup({ settings: { ytDlpDownloadFolder: '/mnt/videos' } })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args[args.indexOf('--paths') + 1]).toBe('home:/mnt/videos')
+    })
+
+    it('puts the custom arguments after its own and before the end-of-options marker', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        settings: { ytDlpCustomArgs: JSON.stringify(['-x', '--audio-format', 'opus']) },
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      const custom = args.indexOf('-x')
+      expect(args.slice(custom, custom + 3)).toEqual(['-x', '--audio-format', 'opus'])
+      expect(custom).toBeGreaterThan(args.indexOf('--print'))
+      expect(args.indexOf('--')).toBe(custom + 3)
+    })
+
+    it('ignores custom arguments that are not a JSON array of strings', async () => {
+      const { service, report, downloads, outcomes } = setup({ settings: { ytDlpCustomArgs: '{"not": "a list"}' } })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args.slice(-2)).toEqual(['--', `https://www.youtube.com/watch?v=${VIDEO_ID}`])
+    })
+
+    it('passes the proxy when FreeTube\'s proxy is on', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        settings: { useProxy: true, proxyProtocol: 'socks5', proxyHostname: '10.0.0.2', proxyPort: '1080' },
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args[args.indexOf('--proxy') + 1]).toBe('socks5://10.0.0.2:1080')
+      expect(args.indexOf('--proxy')).toBeLessThan(args.indexOf('--'))
+    })
+
+    it('passes the proxy credentials for an HTTP proxy', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        settings: {
+          useProxy: true,
+          proxyProtocol: 'http',
+          proxyHostname: 'proxy.lan',
+          proxyPort: '3128',
+          proxyUsername: 'me',
+          proxyPassword: 'p@ss:word',
+        },
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      const { args } = downloads()[0]
+      expect(args[args.indexOf('--proxy') + 1]).toBe('http://me:p%40ss%3Aword@proxy.lan:3128')
+    })
+
+    it('passes no proxy when FreeTube\'s proxy is off', async () => {
+      const { service, report, downloads, outcomes } = setup({
+        settings: { useProxy: false, proxyHostname: '10.0.0.2' },
+      })
+
+      await service.start(REQUEST, report)
+      await until(() => outcomes.length >= 2)
+
+      expect(downloads()[0].args).not.toContain('--proxy')
     })
 
     it('never spawns through a shell', async () => {

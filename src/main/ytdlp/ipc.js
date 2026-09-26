@@ -4,23 +4,34 @@ import { constants as fsConstants } from 'node:fs'
 import fs from 'node:fs/promises'
 
 import { IpcChannels } from '../../constants'
+import { settings } from '../../datastores/handlers/base'
 import { isFreeTubeUrl } from '../utils'
 import { createDownloadService, isValidVideoId } from './downloadService'
+import { createSettingsReader } from './settings'
+
+export { isRendererWritableYtDlpSetting } from './settings'
 
 /**
  * The IPC surface of download with yt-dlp. The handlers are thin: check the
  * sender, check the payload, call a module, forward what it says.
+ *
+ * @param {object} deps
+ * @param {(webContents: import('electron').WebContents, currentPath: string | undefined, options: object) => Promise<string | undefined>} deps.chooseDefaultFolder
+ *   main's picker for settings the renderer may not write
  */
-export function registerYtDlpHandlers() {
+export function registerYtDlpHandlers({ chooseDefaultFolder }) {
+  const readSetting = createSettingsReader(id => settings._findOne(id))
+
   const downloadService = createDownloadService({
     spawn,
+    readSetting,
     isExecutableFile,
     defaultDownloadFolder: () => app.getPath('downloads'),
     platform: process.platform,
     env: process.env,
   })
 
-  ipcMain.on(IpcChannels.YTDLP_DOWNLOAD, (event, payload) => {
+  ipcMain.on(IpcChannels.YTDLP_DOWNLOAD, async (event, payload) => {
     // Only from FreeTube, and only from the window the viewer is using: the
     // preload has already required a recent click
     if (!isFreeTubeUrl(event.senderFrame.url) || !event.sender.isFocused()) {
@@ -28,6 +39,11 @@ export function registerYtDlpHandlers() {
     }
 
     if (payload == null || typeof payload !== 'object' || !isValidVideoId(payload.videoId)) {
+      return
+    }
+
+    // The button is not there while the feature is off, so neither is this
+    if (!await readSetting('ytDlpEnabled')) {
       return
     }
 
@@ -57,6 +73,18 @@ export function registerYtDlpHandlers() {
       // yt-dlp did not say where it put the file, or it has moved since
       await shell.openPath(finished.folder)
     }
+  })
+
+  ipcMain.handle(IpcChannels.YTDLP_CHOOSE_FOLDER, async (event) => {
+    if (!isFreeTubeUrl(event.senderFrame.url)) {
+      return
+    }
+
+    return await chooseDefaultFolder(event.sender, await readSetting('ytDlpDownloadFolder'), {
+      settingId: 'ytDlpDownloadFolder',
+      defaultPathName: 'downloads',
+      properties: ['openDirectory', 'createDirectory'],
+    })
   })
 
   app.on('will-quit', () => {
