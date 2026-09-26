@@ -263,7 +263,7 @@ Channels:
       Coverage: FreeTube knows something about {known} of {total} channels, and enough to recognise {profiles} of {profileCount} profiles. Watch videos in a channel to get suggestions for it.
       # Headings of the proposed columns: for an existing profile, for a new
       # profile from a YouTube category, and for one from a shared tag
-      Profile Heading: Suggested for {profile}
+      Profile Heading: '{profile} suggestions'
       Category Heading: 'Suggested: {category}'
       Tag Heading: 'Tagged: {tag}'
       # The menu on a proposed column's heading, beside the tick that accepts
