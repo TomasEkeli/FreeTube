@@ -102,6 +102,7 @@ const DBActions = {
 
   CHANNELS: {
     UPDATE_TAGS: 20,
+    UPDATE_VIDEO_SAMPLES: 21,
   },
 }
 
@@ -148,6 +149,7 @@ const SyncEvents = {
 
   CHANNELS: {
     UPDATE_TAGS: 20,
+    UPDATE_VIDEO_SAMPLES: 21,
   },
 }
 

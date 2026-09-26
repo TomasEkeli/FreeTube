@@ -164,6 +164,7 @@
           :menu-label="column.kind === 'proposal' ? t('Channels.Overview.Suggestions.Actions', { suggestion: columnTitle(column) }) : ''"
           :badges="proposalDetails.get(column.key)?.badges"
           :evidence="proposalDetails.get(column.key)?.evidence"
+          :probing-id="channelProbingProgress.current"
           :channels="column.channels"
           :animate="animatingChange"
           :reset-key="normalisedQuery"
@@ -184,7 +185,19 @@
           @accept-all="acceptProposal(column.proposal)"
           @accept-channel="(channel) => acceptChannel(column, channel)"
           @reject-channel="(channel) => rejectChannel(column, channel)"
-        />
+        >
+          <template #header-actions>
+            <button
+              v-if="probeStates.has(column.key)"
+              type="button"
+              class="probeButton"
+              :title="probeStates.get(column.key).title"
+              @click="toggleProbing(column)"
+            >
+              {{ probeStates.get(column.key).label }}
+            </button>
+          </template>
+        </ChannelsOverviewColumn>
         <p
           v-if="openColumns.length === 0 && profiles.length > 0 && !suggestionsShown"
           key="hint"
@@ -206,6 +219,11 @@
           <p>{{ t('Channels.Overview.Suggestions.None Why', suggestions.coverage) }}</p>
           <p>{{ t('Channels.Overview.Suggestions.None Seed') }}</p>
           <p>{{ t('Channels.Overview.Suggestions.None Rejected') }}</p>
+          <FtButton
+            v-if="channelsNeedingProbing.length > 0"
+            :label="t('Channels.Overview.Suggestions.Probe All', { count: channelsNeedingProbing.length }, channelsNeedingProbing.length)"
+            @click="probeChannels(channelsNeedingProbing)"
+          />
         </section>
       </TransitionGroup>
     </template>
@@ -279,6 +297,8 @@ import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/loca
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
 import { useProfilePaletteEditing } from '../../composables/useProfilePaletteEditing'
 import { useProfileSuggestions } from '../../composables/useProfileSuggestions'
+import { channelProbingProgress, isProbing, probeChannels, stopProbing } from '../../helpers/channelProbing'
+import { channelsToProbe, needsVideoSamples } from '../../helpers/profileSuggestions'
 import { calculateColorLuminance, colors } from '../../helpers/colors'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
@@ -434,8 +454,90 @@ const {
   dismiss,
   reject,
   place,
-  dropLapsedKeeps
+  dropLapsedKeeps,
+  channelTags,
+  videoSamples
 } = useProfileSuggestions({ profileList, collator })
+
+/**
+ * Every channel FreeTube knows too little about, which the Probe on the
+ * no-suggestions text would look at: the pool first, then those in one profile.
+ */
+const channelsNeedingProbing = computed(() => {
+  return channelsToProbe(profileList.value, channelTags.value, videoSamples.value, collator.value)
+})
+
+/**
+ * The Probe on each column that has anything to probe, by column key: the
+ * pool's and each profile's, for the channels in it and no others. While any
+ * of them are waiting or being probed, it stops them instead.
+ * @type {import('vue').ComputedRef<Map<string, { label: string, title: string }>>}
+ */
+const probeStates = computed(() => {
+  const states = new Map()
+
+  for (const column of columns.value) {
+    if (column.kind === 'proposal') { continue }
+
+    const probing = column.allChannels.filter(channel => isProbing(channel.id)).length
+
+    if (probing > 0) {
+      states.set(column.key, {
+        label: t('Channels.Overview.Suggestions.Probing', { count: probing }),
+        title: t('Channels.Overview.Suggestions.Probing Hint')
+      })
+      continue
+    }
+
+    const count = probeCandidates(column).length
+
+    if (count > 0) {
+      states.set(column.key, {
+        label: t('Channels.Overview.Suggestions.Probe'),
+        title: t('Channels.Overview.Suggestions.Probe Hint', { count }, count)
+      })
+    }
+  }
+
+  return states
+})
+
+/**
+ * A column's channels FreeTube knows too little about
+ * @param {Column} column
+ * @returns {Channel[]}
+ */
+function probeCandidates(column) {
+  return column.allChannels.filter(channel => {
+    return needsVideoSamples(channel, channelTags.value[channel.id], videoSamples.value[channel.id])
+  })
+}
+
+/**
+ * Starts probing a column's channels, after any already going, or stops them.
+ * It goes on in the background, off the page too, and what it finds shows in
+ * the suggestions as it goes.
+ * @param {Column} column
+ */
+function toggleProbing(column) {
+  const probing = column.allChannels.filter(channel => isProbing(channel.id))
+
+  if (probing.length > 0) {
+    stopProbing(probing.map(channel => channel.id))
+  } else {
+    probeChannels(probeCandidates(column))
+  }
+}
+
+watch(() => channelProbingProgress.running, (running) => {
+  if (running) { return }
+
+  if (channelProbingProgress.ended === 'refused') {
+    showToast(t('Channels.Overview.Suggestions.Probe Refused'))
+  } else if (channelProbingProgress.ended === 'finished' && channelProbingProgress.done > 0) {
+    showToast(t('Channels.Overview.Suggestions.Probe Finished', { count: channelProbingProgress.done }, channelProbingProgress.done))
+  }
+})
 
 /**
  * The pool as drawn: while suggestions are shown, only the channels no
@@ -575,6 +677,8 @@ function describeEvidence(evidence, percent) {
       return t('Channels.Overview.Suggestions.Evidence Tags', { tags: evidence.tags.join(', ') })
     case 'placed':
       return t('Channels.Overview.Suggestions.Evidence Placed')
+    case 'sampled':
+      return t('Channels.Overview.Suggestions.Evidence Sampled', { category: evidence.category, count: evidence.count, total: evidence.total })
     default:
       return ''
   }

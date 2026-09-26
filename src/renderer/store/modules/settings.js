@@ -735,6 +735,10 @@ const customActions = {
             commit('updateChannelTagsByChannel', data)
             break
 
+          case SyncEvents.CHANNELS.UPDATE_VIDEO_SAMPLES:
+            commit('updateVideoSamplesByChannel', data)
+            break
+
           default:
             console.error('channels: invalid sync event received')
         }

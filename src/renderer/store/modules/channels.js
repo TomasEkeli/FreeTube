@@ -15,10 +15,18 @@ const state = {
    * other reasons, so it fills in as the app is used.
    */
   channelTags: {},
+
+  /**
+   * A few of each channel's recent videos, looked at on request to learn what
+   * it makes, by channel id: see `VideoSamples` in helpers/profileSuggestions.
+   */
+  videoSamples: {},
 }
 
 const getters = {
   getChannelTags: (state) => state.channelTags,
+
+  getVideoSamples: (state) => state.videoSamples,
 }
 
 const actions = {
@@ -26,14 +34,20 @@ const actions = {
     try {
       const records = await DBChannelHandlers.find()
       const channelTags = {}
+      const videoSamples = {}
 
       for (const record of records) {
         if (record.channelTags != null && Array.isArray(record.channelTags.tags)) {
           channelTags[record._id] = record.channelTags
         }
+
+        if (record.videoSamples != null && Array.isArray(record.videoSamples.videos)) {
+          videoSamples[record._id] = record.videoSamples
+        }
       }
 
       commit('setChannelTags', channelTags)
+      commit('setVideoSamples', videoSamples)
     } catch (errMessage) {
       console.error(errMessage)
     }
@@ -67,6 +81,23 @@ const actions = {
       console.error(errMessage)
     }
   },
+
+  /**
+   * Keeps what a look at a channel's recent videos found, which is kept
+   * whatever it is, even nothing, so that the channel is not looked at again.
+   * @param {any} context
+   * @param {{ channelId: string, videos: import('../../helpers/profileSuggestions').VideoSample[] }} payload
+   */
+  async updateVideoSamples({ commit }, { channelId, videos }) {
+    const videoSamples = { videos, sampledAt: Date.now() }
+
+    try {
+      commit('updateVideoSamplesByChannel', { channelId, videoSamples })
+      await DBChannelHandlers.updateVideoSamples(channelId, videoSamples)
+    } catch (errMessage) {
+      console.error(errMessage)
+    }
+  },
 }
 
 const mutations = {
@@ -77,6 +108,14 @@ const mutations = {
   setChannelTags(state, channelTags) {
     // Any seen while this was loading are newer than what was on disk
     state.channelTags = { ...channelTags, ...state.channelTags }
+  },
+
+  updateVideoSamplesByChannel(state, { channelId, videoSamples }) {
+    state.videoSamples[channelId] = videoSamples
+  },
+
+  setVideoSamples(state, videoSamples) {
+    state.videoSamples = { ...videoSamples, ...state.videoSamples }
   },
 }
 

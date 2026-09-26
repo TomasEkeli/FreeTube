@@ -272,7 +272,9 @@ export function watchedCategories(historyEntries) {
  * - `tagged`: its tag `tag` names the profile or group
  * - `tags`: its first few tags, `tags`, for a tag group
  * - `placed`: put there by hand
+ * - `sampled`: its category, from `count` of `total` of its recent videos
  * @typedef {{ type: 'watched', category: string, count: number }
+ *   | { type: 'sampled', category: string, count: number, total: number }
  *   | { type: 'placed' }
  *   | { type: 'artist' }
  *   | { type: 'categoryShare', category: string, share: number, profileId: string }
@@ -287,18 +289,132 @@ export function watchedCategories(historyEntries) {
  * @property {Evidence} evidence how it was decided
  */
 
+/** How many of a channel's recent videos are looked at when probing it */
+export const VIDEO_SAMPLE_SIZE = 3
+
+/**
+ * How many of a channel's sampled videos must carry a tag for it to stand in
+ * for the channel's own tags: one video's tags are about that video
+ */
+export const MIN_SHARED_VIDEO_TAG = 2
+
+/**
+ * @typedef {object} VideoSample
+ * @property {string} videoId
+ * @property {string} category YouTube's category for it, empty if it gave none
+ * @property {string[]} keywords its tags, normalised as channel tags are
+ */
+
+/**
+ * A few of a channel's recent videos, looked at to learn what it makes, as
+ * kept on its channel record. `videos` is empty for a channel that had none
+ * to look at, so that it is not looked for again.
+ * @typedef {object} VideoSamples
+ * @property {VideoSample[]} videos newest first
+ * @property {number} sampledAt ms since epoch
+ */
+
+/**
+ * Whether a channel is a music artist's or a Topic channel, whose category
+ * is known without looking at anything.
+ * @param {Channel} channel
+ * @param {ChannelTags | null | undefined} tags
+ * @returns {boolean}
+ */
+function isMusicChannel(channel, tags) {
+  return Boolean(tags?.musicArtist) || (typeof channel.name === 'string' && channel.name.endsWith(' - Topic'))
+}
+
+/**
+ * Whether it is worth looking at a channel's recent videos: not yet looked at,
+ * and not already known to be Music.
+ * @param {Channel} channel
+ * @param {ChannelTags | null | undefined} tags
+ * @param {VideoSamples | null | undefined} samples
+ * @returns {boolean}
+ */
+export function needsVideoSamples(channel, tags, samples) {
+  return !Array.isArray(samples?.videos) && !isMusicChannel(channel, tags)
+}
+
+/**
+ * One sampled video, as it is kept: its category trimmed, and its tags
+ * normalised as a channel's are, the channel's own name among those dropped.
+ * @param {string} videoId
+ * @param {unknown} category
+ * @param {unknown} keywords
+ * @param {string} [channelName]
+ * @returns {VideoSample}
+ */
+export function videoSample(videoId, category, keywords, channelName) {
+  return {
+    videoId,
+    category: typeof category === 'string' ? category.trim() : '',
+    keywords: normaliseChannelTags({ tags: Array.isArray(keywords) ? keywords : [] }, channelName).tags
+  }
+}
+
+/**
+ * The channels worth probing of all of them, in the order to probe them: the
+ * pool first, as that is what most wants sorting, then the channels in one
+ * profile, which make their profiles recognisable. Each alphabetically. A
+ * channel in two or more profiles is left to the duplicates UI.
+ * @param {Profile[]} profileList
+ * @param {Record<string, ChannelTags>} channelTags
+ * @param {Record<string, VideoSamples>} videoSamples
+ * @param {Intl.Collator} collator
+ * @returns {Channel[]}
+ */
+export function channelsToProbe(profileList, channelTags, videoSamples, collator) {
+  const memberships = channelMemberships(profileList)
+  const subscribed = sortChannels(uniqueChannels(primaryProfile(profileList)?.subscriptions ?? []), collator)
+  const wanted = subscribed.filter(channel => needsVideoSamples(channel, channelTags?.[channel.id], videoSamples?.[channel.id]))
+
+  return [
+    ...wanted.filter(channel => !memberships.has(channel.id)),
+    ...wanted.filter(channel => memberships.get(channel.id)?.length === 1)
+  ]
+}
+
+/**
+ * The tags most of a channel's sampled videos share, most shared first, for
+ * a channel whose page gave none of its own.
+ * @param {VideoSamples | null | undefined} samples
+ * @returns {string[]}
+ */
+export function sharedVideoTags(samples) {
+  /** @type {Map<string, number>} */
+  const counts = new Map()
+
+  for (const video of samples?.videos ?? []) {
+    for (const tag of new Set(video.keywords ?? [])) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    }
+  }
+
+  // Sorted by count, and Map order keeps the first seen first within one
+  return [...counts]
+    .filter(([, count]) => count >= MIN_SHARED_VIDEO_TAG)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TAG_LIMIT)
+    .map(([tag]) => tag)
+}
+
 /**
  * The category a channel is taken to be: Music for a YouTube music artist
  * channel or a Topic channel (YouTube's own, named "Someone - Topic"); failing
  * that, the category most of its watched videos had, a tie going to the one
- * watched most recently; failing that, none.
+ * watched most recently; failing that, the category most of its sampled
+ * recent videos had, a tie going to the newest; failing that, none. What was
+ * watched comes first, as it is what the channel is to the one watching.
  * @param {Channel} channel
  * @param {ChannelTags | null | undefined} tags
  * @param {Map<string, WatchedCategory> | null | undefined} watched this channel's, from `watchedCategories`
+ * @param {VideoSamples | null | undefined} [samples]
  * @returns {ChannelCategory | null}
  */
-export function channelCategory(channel, tags, watched) {
-  if (tags?.musicArtist || (typeof channel.name === 'string' && channel.name.endsWith(' - Topic'))) {
+export function channelCategory(channel, tags, watched, samples) {
+  if (isMusicChannel(channel, tags)) {
     return { name: MUSIC_CATEGORY, evidence: { type: 'artist' } }
   }
 
@@ -310,9 +426,29 @@ export function channelCategory(channel, tags, watched) {
     }
   }
 
-  if (best === null) { return null }
+  if (best !== null) {
+    return { name: best.name, evidence: { type: 'watched', category: best.name, count: best.count } }
+  }
 
-  return { name: best.name, evidence: { type: 'watched', category: best.name, count: best.count } }
+  const sampled = (samples?.videos ?? []).filter(video => typeof video.category === 'string' && video.category !== '')
+  /** @type {Map<string, number>} in order of first seen, newest first */
+  const counts = new Map()
+
+  for (const video of sampled) {
+    counts.set(video.category, (counts.get(video.category) ?? 0) + 1)
+  }
+
+  let top = null
+
+  for (const [name, count] of counts) {
+    if (top === null || count > top.count) {
+      top = { name, count }
+    }
+  }
+
+  if (top === null) { return null }
+
+  return { name: top.name, evidence: { type: 'sampled', category: top.name, count: top.count, total: sampled.length } }
 }
 
 /**
@@ -324,16 +460,21 @@ export function channelCategory(channel, tags, watched) {
  */
 
 /**
+ * The channel's own tags, or, where its page gave none, the tags its sampled
+ * videos share.
  * @param {Channel} channel
  * @param {ChannelTags | null | undefined} tags
  * @param {Map<string, WatchedCategory> | null | undefined} watched
+ * @param {VideoSamples | null | undefined} [samples]
  * @returns {KnownChannel}
  */
-export function knownChannel(channel, tags, watched) {
+export function knownChannel(channel, tags, watched, samples) {
+  const own = Array.isArray(tags?.tags) ? tags.tags : []
+
   return {
     channel,
-    category: channelCategory(channel, tags, watched),
-    tags: Array.isArray(tags?.tags) ? tags.tags.filter(tag => !STOP_TAGS.has(tag)) : []
+    category: channelCategory(channel, tags, watched, samples),
+    tags: (own.length > 0 ? own : sharedVideoTags(samples)).filter(tag => !STOP_TAGS.has(tag))
   }
 }
 
@@ -574,6 +715,7 @@ export function addKeep(keeps, memberships, channelId, profileId) {
  * @property {Map<string, Map<string, WatchedCategory>>} [watched] from `watchedCategories`
  * @property {Keeps} [keeps]
  * @property {Placements} [placements] channels put in proposed columns by hand
+ * @property {Record<string, VideoSamples> | Map<string, VideoSamples>} [videoSamples] by channel id
  * @property {Intl.Collator} collator
  * @property {Set<string>} [dismissed] proposal keys dismissed this session
  */
@@ -592,7 +734,7 @@ export function addKeep(keeps, memberships, channelId, profileId) {
  * @param {ProposeInput} input
  * @returns {Proposals}
  */
-export function proposeProfiles({ profileList, channelTags = {}, watched = new Map(), keeps = {}, placements = {}, collator, dismissed = new Set() }) {
+export function proposeProfiles({ profileList, channelTags = {}, watched = new Map(), keeps = {}, placements = {}, videoSamples = {}, collator, dismissed = new Set() }) {
   const memberships = channelMemberships(profileList)
   const profiles = nonPrimaryProfiles(profileList)
   const subscribed = uniqueChannels(primaryProfile(profileList)?.subscriptions ?? [])
@@ -602,6 +744,9 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
   const tagsOf = channelTags instanceof Map
     ? id => channelTags.get(id)
     : id => channelTags?.[id]
+  const samplesOf = videoSamples instanceof Map
+    ? id => videoSamples.get(id)
+    : id => videoSamples?.[id]
 
   /** @type {Map<string, KnownChannel>} */
   const known = new Map()
@@ -611,9 +756,13 @@ export function proposeProfiles({ profileList, channelTags = {}, watched = new M
     const tags = tagsOf(channel.id)
     const watchedHere = watched.get(channel.id)
 
-    known.set(channel.id, knownChannel(channel, tags, watchedHere))
+    const samples = samplesOf(channel.id)
 
-    if ((Array.isArray(tags?.tags) && tags.tags.length > 0) || tags?.musicArtist || (watchedHere?.size ?? 0) > 0) {
+    known.set(channel.id, knownChannel(channel, tags, watchedHere, samples))
+
+    const sampledSomething = (samples?.videos ?? []).some(video => video.category !== '' || video.keywords?.length > 0)
+
+    if ((Array.isArray(tags?.tags) && tags.tags.length > 0) || tags?.musicArtist || (watchedHere?.size ?? 0) > 0 || sampledSomething) {
       knownCount++
     }
   }

@@ -25,7 +25,7 @@ const dismissed = shallowRef(new Set())
 const placements = shallowRef(new Map())
 
 /** The mutations that change what is remembered of channels' tags */
-const TAG_MUTATIONS = new Set(['updateChannelTagsByChannel', 'setChannelTags'])
+const TAG_MUTATIONS = new Set(['updateChannelTagsByChannel', 'setChannelTags', 'updateVideoSamplesByChannel', 'setVideoSamples'])
 
 /**
  * How long newly remembered tags wait before the suggestions are worked out
@@ -78,6 +78,14 @@ export function useProfileSuggestions({ profileList, collator }) {
     return { ...toRaw(store.getters.getChannelTags) }
   })
 
+  /** What was learnt from channels' recent videos, taken when it last settled, as the tags are */
+  const videoSamples = computed(() => {
+    // eslint-disable-next-line no-unused-expressions
+    tagsVersion.value
+
+    return { ...toRaw(store.getters.getVideoSamples) }
+  })
+
   /** @type {import('vue').ComputedRef<Record<string, string>>} */
   const keeps = computed(() => store.getters.getProfileSuggestionKeeps ?? {})
 
@@ -91,6 +99,7 @@ export function useProfileSuggestions({ profileList, collator }) {
       watched: watched.value,
       keeps: keeps.value,
       placements: placements.value,
+      videoSamples: videoSamples.value,
       collator: collator.value,
       dismissed: dismissed.value
     })
@@ -176,5 +185,5 @@ export function useProfileSuggestions({ profileList, collator }) {
     }
   }
 
-  return { shown, suggestions, toggleSuggestions, dismiss, reject, place, dropLapsedKeeps }
+  return { shown, suggestions, toggleSuggestions, dismiss, reject, place, dropLapsedKeeps, channelTags, videoSamples }
 }

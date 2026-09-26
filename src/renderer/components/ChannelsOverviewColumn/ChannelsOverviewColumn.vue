@@ -92,6 +92,8 @@
           <FontAwesomeIcon :icon="['fas', 'ellipsis-vertical']" />
         </ChannelsOverviewMenuButton>
       </span>
+      <!-- Anything else the page puts on the heading -->
+      <slot name="header-actions" />
       <!-- What is shown: while searching, the matches -->
       <button
         v-if="channels.length > 0"
@@ -125,6 +127,7 @@
         :callout="calloutColours.get(channel.id) ?? null"
         :badge="badges.get(channel.id) ?? null"
         :evidence="evidence.get(channel.id) ?? null"
+        :probing="channel.id === probingId"
         :accept-label="proposed ? channelAcceptLabel : null"
         :reject-label="proposed ? channelRejectLabel : null"
         @accept="emit('accept-channel', channel)"
@@ -241,6 +244,11 @@ const props = defineProps({
   menuLabel: {
     type: String,
     default: ''
+  },
+  /** The channel being probed now, anywhere, which shows it happening */
+  probingId: {
+    type: String,
+    default: null
   },
   /** What the tick on a proposed column's heading does, to all of it */
   acceptLabel: {

@@ -1267,6 +1267,41 @@ export async function getLocalChannelId(url, doLogError = false) {
 }
 
 /**
+ * What a video is, without what it takes to play it: its category and its
+ * own tags, for learning what a channel makes. One `/player` request on a
+ * plain session, with no PO token and no player script. YouTube calls such a
+ * video unplayable, and still describes it.
+ *
+ * Throws what the request throws, an HTTP 403 or 429 included, so that a
+ * caller can tell being refused from a video that is gone.
+ * @param {string} videoId
+ * @returns {Promise<{ category: string, keywords: string[] } | null>} null when
+ * YouTube did not describe it
+ */
+export async function getLocalVideoMetadata(videoId) {
+  const session = await createSession()
+  const response = await session.actions.execute('/player', {
+    videoId,
+    racyCheckOk: true,
+    contentCheckOk: true
+  })
+
+  const category = response.data?.microformat?.playerMicroformatRenderer?.category
+  const keywords = response.data?.videoDetails?.keywords
+
+  if (typeof category !== 'string' && !Array.isArray(keywords)) {
+    // Asked to sign in, with nothing said about the video, is being refused
+    if (response.data?.playabilityStatus?.status === 'LOGIN_REQUIRED') {
+      throw new Error(`Request for ${videoId} refused: LOGIN_REQUIRED`)
+    }
+
+    return null
+  }
+
+  return { category: category ?? '', keywords: Array.isArray(keywords) ? keywords : [] }
+}
+
+/**
  * Returns the channel or the channel termination reason
  * @param {string} id
  */

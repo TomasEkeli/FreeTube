@@ -235,6 +235,10 @@ class Channels {
   static updateTags(channelId, channelTags) {
     return window.ftElectron.dbChannels(DBActions.CHANNELS.UPDATE_TAGS, { channelId, channelTags })
   }
+
+  static updateVideoSamples(channelId, videoSamples) {
+    return window.ftElectron.dbChannels(DBActions.CHANNELS.UPDATE_VIDEO_SAMPLES, { channelId, videoSamples })
+  }
 }
 
 export {

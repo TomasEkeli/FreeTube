@@ -467,6 +467,14 @@ class Channels {
       { upsert: true }
     )
   }
+
+  static updateVideoSamples(channelId, videoSamples) {
+    return db.channels.updateAsync(
+      { _id: channelId },
+      { $set: { videoSamples } },
+      { upsert: true }
+    )
+  }
 }
 
 function loadDatastores() {

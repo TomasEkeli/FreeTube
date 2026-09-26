@@ -79,6 +79,29 @@
   font-size: 14px;
 }
 
+/* As small as the column heading's Select all, which it sits beside */
+.probeButton {
+  flex: 0 0 auto;
+  padding-block: 3px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.probeButton:hover,
+.probeButton:focus-visible {
+  background-color: color-mix(in srgb, var(--primary-color) 38%, transparent);
+}
+
+.noSuggestions :deep(.btn) {
+  margin-inline: 0;
+}
+
 .columns {
   display: flex;
   align-items: stretch;
