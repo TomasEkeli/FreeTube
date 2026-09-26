@@ -61,6 +61,8 @@ const IpcChannels = {
   YTDLP_CHOOSE_FOLDER: 'ytdlp-choose-folder',
   YTDLP_CHOOSE_EXECUTABLE: 'ytdlp-choose-executable',
   YTDLP_DETECT_TOOLS: 'ytdlp-detect-tools',
+  YTDLP_INSTALL_TOOLS: 'ytdlp-install-tools',
+  YTDLP_INSTALL_PROGRESS: 'ytdlp-install-progress',
 }
 
 const DBActions = {

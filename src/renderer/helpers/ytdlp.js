@@ -1,3 +1,5 @@
+import { reactive } from 'vue'
+
 import i18n from '../i18n/index'
 import { showToast } from './utils'
 
@@ -28,6 +30,16 @@ export function downloadWithYtDlp(videoId, title) {
 }
 
 /**
+ * The install as this window knows it, for the settings section to show.
+ * Progress arrives for installs started from any window.
+ */
+export const ytDlpInstallState = reactive({
+  /** @type {import('../../main/ytdlp/toolInstaller').InstallProgress | null} */
+  progress: null,
+  installing: false,
+})
+
+/**
  * Registered once, at startup.
  */
 export function setupYtDlpOutcomeToasts() {
@@ -36,6 +48,82 @@ export function setupYtDlpOutcomeToasts() {
   }
 
   window.ftElectron.handleYtDlpDownloadOutcome(showOutcome)
+
+  window.ftElectron.handleYtDlpInstallProgress((progress) => {
+    ytDlpInstallState.progress = progress
+  })
+}
+
+/**
+ * Installs whatever is missing. Joins an install already running, here or in
+ * main.
+ *
+ * @returns {Promise<import('../../main/ytdlp/toolInstaller').InstallResult | undefined>}
+ */
+export async function installYtDlpTools() {
+  ytDlpInstallState.installing = true
+  try {
+    return await window.ftElectron.ytDlpInstallTools()
+  } finally {
+    ytDlpInstallState.installing = false
+    ytDlpInstallState.progress = null
+  }
+}
+
+/**
+ * @param {import('../../main/ytdlp/toolInstaller').InstallProgress} progress
+ */
+export function formatInstallProgress(progress) {
+  const t = i18n.global.t
+  const tool = TOOL_NAMES[progress.tool]
+
+  switch (progress.stage) {
+    case 'downloading':
+      if (progress.total) {
+        return t('Settings.yt-dlp Settings.Install Progress.Downloading with size', {
+          tool,
+          percent: Math.floor((progress.received / progress.total) * 100),
+          received: toMegabytes(progress.received),
+          total: toMegabytes(progress.total),
+        })
+      }
+      return t('Settings.yt-dlp Settings.Install Progress.Downloading', { tool })
+    case 'verifying':
+      return t('Settings.yt-dlp Settings.Install Progress.Verifying', { tool })
+    case 'extracting':
+      return t('Settings.yt-dlp Settings.Install Progress.Extracting', { tool })
+    case 'done':
+      return t('Settings.yt-dlp Settings.Install Progress.Done', { tool })
+  }
+  return ''
+}
+
+/**
+ * @param {import('../../main/ytdlp/toolInstaller').InstallResult} result
+ */
+export function formatInstallResult(result) {
+  const t = i18n.global.t
+
+  if (result.ok) {
+    return result.installed.length > 0
+      ? t('Settings.yt-dlp Settings.Install Result.Installed', { tools: formatToolList(result.installed) })
+      : t('Settings.yt-dlp Settings.Install Result.Nothing to install')
+  }
+
+  if (result.error === 'unsupported') {
+    return t('Settings.yt-dlp Settings.Install Result.Unsupported', { tools: formatToolList(result.notCovered) })
+  }
+
+  return result.tool
+    ? t('Settings.yt-dlp Settings.Install Result.Failed', { tool: TOOL_NAMES[result.tool], reason: result.reason })
+    : t('Settings.yt-dlp Settings.Install Result.Failed without tool', { reason: result.reason })
+}
+
+/**
+ * @param {number} bytes
+ */
+function toMegabytes(bytes) {
+  return (bytes / (1024 * 1024)).toFixed(0)
 }
 
 /**
@@ -87,7 +175,7 @@ function showOutcome(outcome) {
 /**
  * @param {import('../../main/ytdlp/toolDetection').Tool[]} tools
  */
-function formatToolList(tools) {
+export function formatToolList(tools) {
   const names = tools.map(tool => TOOL_NAMES[tool])
 
   try {

@@ -710,6 +710,21 @@ Settings:
     Found Automatically: Found automatically
     Choose File: Choose File
     Find Automatically: Find Automatically
+    Install Missing Tools: 'Install {tools}'
+    'Install It Yourself': 'FreeTube cannot install {tool} on this system. Install it yourself, see'
+    Install Progress:
+      Starting: Starting the install…
+      Downloading: 'Downloading {tool}…'
+      Downloading with size: 'Downloading {tool}… {percent}% ({received} of {total} MB)'
+      Verifying: 'Checking {tool} against its published checksum…'
+      Extracting: 'Unpacking {tool}…'
+      Done: '{tool} installed'
+    Install Result:
+      Installed: '{tools} installed into FreeTube''s tools folder'
+      Nothing to install: Nothing was missing
+      Unsupported: 'FreeTube cannot install {tools} on this system'
+      Failed: 'Could not install {tool}: {reason}'
+      Failed without tool: 'Could not install: {reason}'
   Privacy Settings:
     Privacy Settings: Privacy
     Remember History: Remember Watch History

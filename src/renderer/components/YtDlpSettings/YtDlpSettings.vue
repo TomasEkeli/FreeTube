@@ -63,6 +63,43 @@
       >
         {{ t('Settings.yt-dlp Settings.Deno Missing Warning') }}
       </p>
+      <p
+        v-for="tool in notCovered"
+        :key="tool"
+        class="toolWarning"
+      >
+        {{ t('Settings.yt-dlp Settings.Install It Yourself', { tool: TOOL_NAMES[tool] }) }}
+        <a
+          :href="INSTRUCTIONS_URLS[tool]"
+          target="_blank"
+          rel="noopener noreferrer"
+        >{{ INSTRUCTIONS_URLS[tool] }}</a>
+      </p>
+      <FtFlexBox
+        v-if="installable.length > 0 || installing || installMessage !== ''"
+        class="toolActions"
+      >
+        <FtButton
+          v-if="installable.length > 0 && !installing"
+          :label="t('Settings.yt-dlp Settings.Install Missing Tools', { tools: formatToolList(installable) })"
+          :icon="['fas', 'download']"
+          @click="install"
+        />
+        <p
+          v-if="installing"
+          class="toolProgress"
+          role="status"
+        >
+          {{ progressText }}
+        </p>
+        <p
+          v-else-if="installMessage !== ''"
+          class="toolProgress"
+          role="status"
+        >
+          {{ installMessage }}
+        </p>
+      </FtFlexBox>
     </div>
     <FtFlexBox class="pathRow">
       <p class="pathLabel">
@@ -140,7 +177,21 @@ import FtButton from '../FtButton/FtButton.vue'
 import FtInputTags from '../FtInputTags/FtInputTags.vue'
 
 import store from '../../store/index'
-import { TOOL_NAMES } from '../../helpers/ytdlp'
+import {
+  formatInstallProgress,
+  formatInstallResult,
+  formatToolList,
+  installYtDlpTools,
+  TOOL_NAMES,
+  ytDlpInstallState,
+} from '../../helpers/ytdlp'
+
+// Where each project says to install it by hand, for when FreeTube cannot
+const INSTRUCTIONS_URLS = {
+  'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/wiki/Installation',
+  ffmpeg: 'https://github.com/yt-dlp/FFmpeg-Builds',
+  deno: 'https://docs.deno.com/runtime/getting_started/installation/',
+}
 
 const { t } = useI18n()
 
@@ -149,9 +200,47 @@ const TOOLS = /** @type {const} */ (['yt-dlp', 'ffmpeg', 'deno'])
 /** @type {import('vue').Ref<import('../../../main/ytdlp/toolDetection').ToolStatuses | null>} */
 const statuses = ref(null)
 
+/** @type {import('vue').Ref<Record<string, boolean>>} */
+const coverage = ref({})
+
+/** Installing in main, whether started here or elsewhere */
+const installingElsewhere = ref(false)
+
 async function detectTools() {
   statuses.value = null
-  statuses.value = (await window.ftElectron.ytDlpDetectTools()).tools
+  const detected = await window.ftElectron.ytDlpDetectTools()
+  statuses.value = detected.tools
+  coverage.value = detected.coverage
+  installingElsewhere.value = detected.installing
+}
+
+const missing = computed(() => {
+  return statuses.value === null ? [] : TOOLS.filter(tool => !statuses.value[tool].found)
+})
+
+// What FreeTube can fetch here, and what it has to leave to the viewer
+const installable = computed(() => missing.value.filter(tool => coverage.value[tool]))
+const notCovered = computed(() => missing.value.filter(tool => !coverage.value[tool]))
+
+const installing = computed(() => ytDlpInstallState.installing || installingElsewhere.value)
+
+const progressText = computed(() => {
+  return ytDlpInstallState.progress
+    ? formatInstallProgress(ytDlpInstallState.progress)
+    : t('Settings.yt-dlp Settings.Install Progress.Starting')
+})
+
+const installMessage = ref('')
+
+async function install() {
+  installMessage.value = ''
+  const result = await installYtDlpTools()
+
+  if (result) {
+    installMessage.value = formatInstallResult(result)
+  }
+
+  await detectTools()
 }
 
 onMounted(detectTools)

@@ -222,10 +222,34 @@ export default {
   },
 
   /**
-   * @returns {Promise<{ tools: import('../main/ytdlp/toolDetection').ToolStatuses }>}
+   * @returns {Promise<{
+   *   tools: import('../main/ytdlp/toolDetection').ToolStatuses,
+   *   coverage: Record<import('../main/ytdlp/toolDetection').Tool, boolean>,
+   *   installing: boolean
+   * }>}
    */
   ytDlpDetectTools: () => {
     return ipcRenderer.invoke(IpcChannels.YTDLP_DETECT_TOOLS)
+  },
+
+  /**
+   * @returns {Promise<import('../main/ytdlp/toolInstaller').InstallResult | undefined>}
+   */
+  ytDlpInstallTools: () => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      return ipcRenderer.invoke(IpcChannels.YTDLP_INSTALL_TOOLS)
+    }
+    return Promise.resolve(undefined)
+  },
+
+  /**
+   * @param {(progress: import('../main/ytdlp/toolInstaller').InstallProgress) => void} handler
+   */
+  handleYtDlpInstallProgress: (handler) => {
+    ipcRenderer.on(IpcChannels.YTDLP_INSTALL_PROGRESS, (_, progress) => {
+      handler(progress)
+    })
   },
 
   /**

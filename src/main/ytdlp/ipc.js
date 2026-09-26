@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, net, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import { constants as fsConstants } from 'node:fs'
 import fs from 'node:fs/promises'
@@ -10,6 +10,8 @@ import { isFreeTubeUrl } from '../utils'
 import { createDownloadService, isValidVideoId } from './downloadService'
 import { createSettingsReader } from './settings'
 import { createToolDetector } from './toolDetection'
+import { createToolInstaller, installCoverage } from './toolInstaller'
+import { nodeFileSystem } from './nodeFileSystem'
 
 export { isRendererWritableYtDlpSetting } from './settings'
 
@@ -46,6 +48,19 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     defaultDownloadFolder: () => app.getPath('downloads'),
     platform: process.platform,
     env: process.env,
+  })
+
+  const installer = createToolInstaller({
+    // Electron's own fetch, so that the tools come through FreeTube's proxy
+    fetch: url => net.fetch(url),
+    fs: nodeFileSystem,
+    detector,
+    managedDir,
+    platform: process.platform,
+    arch: process.arch,
+    onProgress: (progress) => {
+      broadcastToFreeTube(IpcChannels.YTDLP_INSTALL_PROGRESS, progress)
+    },
   })
 
   ipcMain.on(IpcChannels.YTDLP_DOWNLOAD, async (event, payload) => {
@@ -124,7 +139,20 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       return
     }
 
-    return { tools: await detector.detect({ fresh: true }) }
+    return {
+      tools: await detector.detect({ fresh: true }),
+      coverage: installCoverage(process.platform, process.arch),
+      installing: installer.isInstalling(),
+    }
+  })
+
+  ipcMain.handle(IpcChannels.YTDLP_INSTALL_TOOLS, async (event) => {
+    // The preload has required a recent click
+    if (!isFreeTubeUrl(event.senderFrame.url) || !event.sender.isFocused()) {
+      return
+    }
+
+    return await installer.install()
   })
 
   app.on('will-quit', () => {
@@ -153,6 +181,18 @@ function sendToFreeTube(preferred, channel, payload) {
     .find(window => !window.webContents.isDestroyed() && isFreeTubeUrl(window.webContents.getURL()))
 
   window?.webContents.send(channel, payload)
+}
+
+/**
+ * @param {string} channel
+ * @param {any} payload
+ */
+function broadcastToFreeTube(channel, payload) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.webContents.isDestroyed() && isFreeTubeUrl(window.webContents.getURL())) {
+      window.webContents.send(channel, payload)
+    }
+  }
 }
 
 /**
