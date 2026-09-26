@@ -127,25 +127,27 @@
   color: var(--tertiary-text-color);
 }
 
+/*
+ * On the thumbnail's top and bottom corners, one above the other, as badges
+ * on it: the thumbnail is 84px, centred, 12px from the top, and each button a
+ * little over its edge. Placed from the middle, as the square's width varies
+ * with the column's.
+ */
 .acceptMark,
 .rejectMark {
+  inset-inline-start: calc(50% + 18px);
   padding: 0;
   border: 0;
   cursor: pointer;
 }
 
 .acceptMark {
-  inset-inline-end: 4px;
+  inset-block-start: 8px;
   color: var(--primary-color);
 }
 
-/*
- * On the thumbnail's bottom corner, as a badge on it: the thumbnail is 84px,
- * centred, 12px from the top, and the button a little over its edge
- */
 .rejectMark {
   inset-block-start: 70px;
-  inset-inline-start: calc(50% + 18px);
   color: var(--tertiary-text-color);
 }
 

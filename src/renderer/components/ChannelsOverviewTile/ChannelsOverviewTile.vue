@@ -19,9 +19,9 @@
 
   In a proposed column, hovering says why the channel is suggested there, and
   a channel suggested out of the profile it is in now has a badge in that
-  profile's colour, naming it. A tick in the top corner accepts the
-  suggestion for this channel, and a cross on the thumbnail's bottom corner
-  rejects it, which leaves the channel where it is.
+  profile's colour, naming it. A tick on the thumbnail's top corner accepts
+  the suggestion for this channel, and a cross on its bottom corner rejects
+  it, which leaves the channel where it is.
 -->
 <template>
   <div
