@@ -719,6 +719,14 @@ Settings:
       Verifying: 'Checking {tool} against its published checksum…'
       Extracting: 'Unpacking {tool}…'
       Done: '{tool} installed'
+    Update yt-dlp: Update yt-dlp
+    Updating yt-dlp: Updating yt-dlp…
+    Update Unavailable While Downloading: yt-dlp cannot be updated while a download is running
+    Update Result:
+      Updated: 'yt-dlp updated to {version}'
+      Current: 'yt-dlp is up to date ({version})'
+      Package Manager: This yt-dlp was installed by pip or a package manager, and has to be updated the way it was installed
+      Failed: 'Could not update yt-dlp: {reason}'
     Install Result:
       Installed: '{tools} installed into FreeTube''s tools folder'
       Nothing to install: Nothing was missing

@@ -63,6 +63,7 @@ const IpcChannels = {
   YTDLP_DETECT_TOOLS: 'ytdlp-detect-tools',
   YTDLP_INSTALL_TOOLS: 'ytdlp-install-tools',
   YTDLP_INSTALL_PROGRESS: 'ytdlp-install-progress',
+  YTDLP_UPDATE: 'ytdlp-update',
 }
 
 const DBActions = {

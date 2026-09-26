@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { chooseAsset, createToolInstaller, findChecksum, installCoverage } from './toolInstaller'
 import { managedToolPath, TOOLS } from './toolDetection'
 import { createFakeFetch, createMemoryFileSystem } from './testing/memoryFileSystem'
+import { createFakeSpawn } from './testing/fakeProcess'
 
 const MANAGED_DIR = '/data/FreeTube/bin'
 const NIGHTLY = 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download'
@@ -322,6 +323,93 @@ describe('tool installer', () => {
 
       expect(first).toBe(second)
       expect(fetch.requested.filter(url => url.endsWith('/yt-dlp_linux'))).toHaveLength(1)
+    })
+  })
+
+  describe('updating yt-dlp', () => {
+    /**
+     * @param {import('./testing/fakeProcess').Script | null} script what `yt-dlp -U` does; null for no yt-dlp at all
+     * @param {string} [versionAfter]
+     */
+    function setupUpdate(script, versionAfter = '2026.09.16.232951') {
+      let version = '2026.08.30.232658'
+      const fake = createFakeSpawn(() => {
+        if (script?.exitCode === 0 && /Updated/.test(script.stdout ?? '')) {
+          version = versionAfter
+        }
+        return script
+      })
+
+      const found = () => ({ tool: 'yt-dlp', found: true, source: 'managed', path: `${MANAGED_DIR}/yt-dlp`, version })
+      const absent = { tool: 'yt-dlp', found: false, source: null, path: null, version: null }
+
+      const installer = createToolInstaller({
+        fetch: createFakeFetch({}).fetch,
+        fs: createMemoryFileSystem(),
+        detector: {
+          invalidate: () => {},
+          detect: async () => ({ 'yt-dlp': script === null ? absent : found() }),
+        },
+        managedDir: MANAGED_DIR,
+        platform: 'linux',
+        arch: 'x64',
+        spawn: fake.spawn,
+      })
+
+      return { installer, fake }
+    }
+
+    it('runs the self-update on the yt-dlp downloads use, and reports the new version', async () => {
+      const { installer, fake } = setupUpdate({
+        stdout: [
+          'Current version: nightly@2026.08.30.232658 from yt-dlp/yt-dlp-nightly-builds',
+          'Latest version: nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds',
+          'Updating to nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds ...',
+          'Updated yt-dlp to nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds',
+          '',
+        ].join('\n'),
+        exitCode: 0,
+      })
+
+      expect(await installer.updateYtDlp()).toEqual({ status: 'updated', version: '2026.09.16.232951' })
+      expect(fake.calls[0]).toMatchObject({ command: `${MANAGED_DIR}/yt-dlp`, args: ['-U'] })
+    })
+
+    it('says when it is already up to date', async () => {
+      const { installer } = setupUpdate({
+        stdout: 'Latest version: nightly@2026.08.30.232658 from yt-dlp/yt-dlp-nightly-builds\nyt-dlp is up to date (nightly@2026.08.30.232658 from yt-dlp/yt-dlp-nightly-builds)\n',
+        exitCode: 0,
+      })
+
+      expect(await installer.updateYtDlp()).toEqual({ status: 'current', version: '2026.08.30.232658' })
+    })
+
+    it('recognises a yt-dlp that a package manager has to update', async () => {
+      const { installer } = setupUpdate({
+        stderr: 'ERROR: You installed yt-dlp with pip or using the wheel from PyPi; Use that to update\n',
+        exitCode: 1,
+      })
+
+      expect(await installer.updateYtDlp()).toEqual({ status: 'package-manager' })
+    })
+
+    it('fails with yt-dlp\'s own reason otherwise', async () => {
+      const { installer } = setupUpdate({
+        stderr: 'ERROR: Unable to write to /usr/local/bin/yt-dlp; try running as administrator\n',
+        exitCode: 1,
+      })
+
+      expect(await installer.updateYtDlp()).toEqual({
+        status: 'failed',
+        reason: 'Unable to write to /usr/local/bin/yt-dlp; try running as administrator',
+      })
+    })
+
+    it('says there is nothing to update when there is no yt-dlp', async () => {
+      const { installer, fake } = setupUpdate(null)
+
+      expect(await installer.updateYtDlp()).toEqual({ status: 'missing' })
+      expect(fake.calls).toHaveLength(0)
     })
   })
 

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 
 import { extractFiles } from './extract'
+import { runCapture } from './runCapture'
 import { managedToolPath, TOOLS } from './toolDetection'
 
 /**
@@ -164,10 +165,11 @@ const STALL_MS = 30_000
  * @param {string} deps.managedDir
  * @param {string} deps.platform
  * @param {string} deps.arch
+ * @param {typeof import('node:child_process').spawn} [deps.spawn] for updating yt-dlp
  * @param {(progress: InstallProgress) => void} [deps.onProgress]
  * @param {number} [deps.stallMs]
  */
-export function createToolInstaller({ fetch, fs, detector, managedDir, platform, arch, onProgress = () => {}, stallMs = STALL_MS }) {
+export function createToolInstaller({ fetch, fs, detector, managedDir, platform, arch, spawn, onProgress = () => {}, stallMs = STALL_MS }) {
   const pathModule = platform === 'win32' ? path.win32 : path.posix
 
   /** @type {Promise<InstallResult> | null} */
@@ -375,5 +377,84 @@ export function createToolInstaller({ fetch, fs, detector, managedDir, platform,
     })
   }
 
-  return { install, isInstalling }
+  /**
+   * Runs yt-dlp's own self-update on the yt-dlp that downloads use, which
+   * keeps the channel it came from: nightly, for the managed copy.
+   *
+   * @returns {Promise<UpdateResult>}
+   */
+  async function updateYtDlp() {
+    const ytDlp = (await detector.detect({ fresh: true }))['yt-dlp']
+
+    if (!ytDlp.found) {
+      return { status: 'missing' }
+    }
+
+    const { code, stdout, stderr, error } = await runCapture(spawn, ytDlp.path, ['-U'], { timeoutMs: UPDATE_TIMEOUT_MS })
+    detector.invalidate()
+
+    const outcome = interpretUpdate({ code, stdout, stderr, error })
+
+    if (outcome.status === 'updated' || outcome.status === 'current') {
+      const after = (await detector.detect({ fresh: true }))['yt-dlp']
+      return { ...outcome, version: after.version ?? outcome.version }
+    }
+
+    return outcome
+  }
+
+  return { install, isInstalling, updateYtDlp }
+}
+
+// The self-update downloads the whole binary again
+const UPDATE_TIMEOUT_MS = 5 * 60 * 1000
+
+/**
+ * @typedef {(
+ *   { status: 'updated', version: string | null } |
+ *   { status: 'current', version: string | null } |
+ *   { status: 'package-manager' } |
+ *   { status: 'failed', reason: string } |
+ *   { status: 'missing' } |
+ *   { status: 'busy' }
+ * )} UpdateResult
+ */
+
+/**
+ * What yt-dlp's `-U` said, in yt-dlp's words where it has any.
+ *
+ * @param {{ code: number | null, stdout: string, stderr: string, error: Error | null }} run
+ * @returns {UpdateResult}
+ */
+export function interpretUpdate({ code, stdout, stderr, error }) {
+  if (error) {
+    return { status: 'failed', reason: error.message }
+  }
+
+  const output = `${stdout}\n${stderr}`
+
+  // "Updated yt-dlp to nightly@2026.09.16.232951 from yt-dlp/yt-dlp-nightly-builds"
+  const updated = /Updated yt-dlp to (?:\w+@)?(\S+)/.exec(output)
+  if (code === 0 && updated) {
+    return { status: 'updated', version: updated[1] }
+  }
+
+  // "yt-dlp is up to date (nightly@2026.09.16.232951 from ...)"
+  const current = /yt-dlp is up to date \((?:\w+@)?([^\s)]+)/.exec(output)
+  if (code === 0 && current) {
+    return { status: 'current', version: current[1] }
+  }
+
+  // Installed with pip, or a package manager, which yt-dlp leaves to update it:
+  // "You installed yt-dlp with pip or using the wheel from PyPi; Use that to update"
+  if (/Use that to update/i.test(output)) {
+    return { status: 'package-manager' }
+  }
+
+  const errorLines = output.split(/\r?\n/).filter(line => line.startsWith('ERROR:'))
+  const reason = errorLines.length > 0
+    ? errorLines.at(-1).slice('ERROR:'.length).trim()
+    : `yt-dlp exited with code ${code}`
+
+  return { status: 'failed', reason }
 }

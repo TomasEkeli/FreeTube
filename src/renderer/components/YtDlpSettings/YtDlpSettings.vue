@@ -76,7 +76,7 @@
         >{{ INSTRUCTIONS_URLS[tool] }}</a>
       </p>
       <FtFlexBox
-        v-if="installable.length > 0 || installing || installMessage !== ''"
+        v-if="statuses !== null"
         class="toolActions"
       >
         <FtButton
@@ -84,6 +84,14 @@
           :label="t('Settings.yt-dlp Settings.Install Missing Tools', { tools: formatToolList(installable) })"
           :icon="['fas', 'download']"
           @click="install"
+        />
+        <FtButton
+          v-if="statuses['yt-dlp'].found && !installing"
+          :label="updating ? t('Settings.yt-dlp Settings.Updating yt-dlp') : t('Settings.yt-dlp Settings.Update yt-dlp')"
+          :icon="['fas', 'sync']"
+          :disabled="updating || downloading"
+          :title="downloading ? t('Settings.yt-dlp Settings.Update Unavailable While Downloading') : null"
+          @click="update"
         />
         <p
           v-if="installing"
@@ -98,6 +106,12 @@
           role="status"
         >
           {{ installMessage }}
+        </p>
+        <p
+          v-if="!installing && downloading && statuses['yt-dlp'].found"
+          class="toolProgress"
+        >
+          {{ t('Settings.yt-dlp Settings.Update Unavailable While Downloading') }}
         </p>
       </FtFlexBox>
     </div>
@@ -181,6 +195,7 @@ import {
   formatInstallProgress,
   formatInstallResult,
   formatToolList,
+  formatUpdateResult,
   installYtDlpTools,
   TOOL_NAMES,
   ytDlpInstallState,
@@ -212,6 +227,28 @@ async function detectTools() {
   statuses.value = detected.tools
   coverage.value = detected.coverage
   installingElsewhere.value = detected.installing
+  downloading.value = detected.downloading
+}
+
+/** A download is running, so yt-dlp may not be replaced under it */
+const downloading = ref(false)
+
+const updating = ref(false)
+
+async function update() {
+  installMessage.value = ''
+  updating.value = true
+  try {
+    const result = await window.ftElectron.ytDlpUpdate()
+
+    if (result) {
+      installMessage.value = formatUpdateResult(result)
+    }
+  } finally {
+    updating.value = false
+  }
+
+  await detectTools()
 }
 
 const missing = computed(() => {

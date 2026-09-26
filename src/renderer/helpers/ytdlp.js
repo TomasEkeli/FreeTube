@@ -157,6 +157,28 @@ export function formatInstallResult(result) {
 }
 
 /**
+ * @param {import('../../main/ytdlp/toolInstaller').UpdateResult} result
+ */
+export function formatUpdateResult(result) {
+  const t = i18n.global.t
+
+  switch (result.status) {
+    case 'updated':
+      return t('Settings.yt-dlp Settings.Update Result.Updated', { version: result.version })
+    case 'current':
+      return t('Settings.yt-dlp Settings.Update Result.Current', { version: result.version })
+    case 'package-manager':
+      return t('Settings.yt-dlp Settings.Update Result.Package Manager')
+    case 'busy':
+      return t('Settings.yt-dlp Settings.Update Unavailable While Downloading')
+    case 'missing':
+      return t('Settings.yt-dlp Settings.yt-dlp Missing Warning')
+    default:
+      return t('Settings.yt-dlp Settings.Update Result.Failed', { reason: result.reason })
+  }
+}
+
+/**
  * @param {number} bytes
  */
 function toMegabytes(bytes) {

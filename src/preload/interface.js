@@ -225,7 +225,8 @@ export default {
    * @returns {Promise<{
    *   tools: import('../main/ytdlp/toolDetection').ToolStatuses,
    *   coverage: Record<import('../main/ytdlp/toolDetection').Tool, boolean>,
-   *   installing: boolean
+   *   installing: boolean,
+   *   downloading: boolean
    * }>}
    */
   ytDlpDetectTools: () => {
@@ -240,6 +241,17 @@ export default {
     // require the user to have interacted with the page recently
     if (navigator.userActivation.isActive) {
       return ipcRenderer.invoke(IpcChannels.YTDLP_INSTALL_TOOLS, thenDownload ? { thenDownload } : {})
+    }
+    return Promise.resolve(undefined)
+  },
+
+  /**
+   * @returns {Promise<import('../main/ytdlp/toolInstaller').UpdateResult | undefined>}
+   */
+  ytDlpUpdate: () => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      return ipcRenderer.invoke(IpcChannels.YTDLP_UPDATE)
     }
     return Promise.resolve(undefined)
   },

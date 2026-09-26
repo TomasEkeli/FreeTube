@@ -58,6 +58,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     managedDir,
     platform: process.platform,
     arch: process.arch,
+    spawn,
     onProgress: (progress) => {
       broadcastToFreeTube(IpcChannels.YTDLP_INSTALL_PROGRESS, progress)
     },
@@ -173,7 +174,22 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
       tools: await detector.detect({ fresh: true }),
       coverage: installCoverage(process.platform, process.arch),
       installing: installer.isInstalling(),
+      downloading: downloadService.isBusy(),
     }
+  })
+
+  ipcMain.handle(IpcChannels.YTDLP_UPDATE, async (event) => {
+    // The preload has required a recent click
+    if (!isFreeTubeUrl(event.senderFrame.url) || !event.sender.isFocused()) {
+      return
+    }
+
+    // Replacing the binary under a running yt-dlp fails on Windows
+    if (downloadService.isBusy() || installer.isInstalling()) {
+      return { status: 'busy' }
+    }
+
+    return await installer.updateYtDlp()
   })
 
   ipcMain.handle(IpcChannels.YTDLP_INSTALL_TOOLS, async (event, payload) => {
