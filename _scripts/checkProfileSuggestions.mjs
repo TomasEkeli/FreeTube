@@ -14,6 +14,7 @@ import {
   addKeep,
   channelCategory,
   channelFit,
+  channelsToLearn,
   channelTagsChanged,
   FIT_THRESHOLD,
   hasCharacter,
@@ -23,12 +24,15 @@ import {
   MIN_TAG_GROUP,
   MOVE_MARGIN,
   MOVE_THRESHOLD,
+  needsVideoSamples,
   normaliseChannelTags,
   profileCharacter,
   proposeProfiles,
   pruneKeeps,
+  sharedVideoTags,
   TAG_LIMIT,
   UNASSIGNED,
+  videoSample,
   watchedCategories,
 } from '../src/renderer/helpers/profileSuggestions.js'
 import { channelMemberships } from '../src/renderer/helpers/channelsOverview.js'
@@ -578,6 +582,52 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   check('a placement wins over a keep', idsIn(proposeProfiles({ profileList, keeps: { b: UNASSIGNED }, placements: { b: { key: 'profile:p1', from: UNASSIGNED } }, collator }), 'profile:p1') === 'b')
   check('a group named as a profile by now is that profile\'s', idsIn(proposeProfiles({ profileList, placements: new Map([['b', { key: 'category:Music', from: UNASSIGNED }]]), collator }), 'profile:p4') === 'b')
   check('a placement into a profile that is gone is ignored', idsIn(proposeProfiles({ profileList, watched, placements: { b: { key: 'profile:gone', from: UNASSIGNED } }, collator }), 'category:Comedy') === 'b')
+}
+
+// Learning from a channel's recent videos
+{
+  const samples = (...videos) => ({ sampledAt: 1, videos: videos.map(([category, keywords = []], i) => ({ videoId: `v${i}`, category, keywords })) })
+  const plain = { id: 'c', name: 'Some Channel' }
+
+  check('a sampled video keeps its category trimmed and its tags normalised', JSON.stringify(videoSample('v', ' Gaming ', ['Retro Games', 'Some Channel', 'x', 'retro games'], 'Some Channel')) === JSON.stringify({ videoId: 'v', category: 'Gaming', keywords: ['retro games'] }))
+  check('a sample with no category keeps an empty one', videoSample('v', undefined, undefined).category === '' && videoSample('v', undefined, undefined).keywords.length === 0)
+
+  check('the most common sampled category is the channel\'s', channelCategory(plain, null, null, samples(['Comedy'], ['Gaming'], ['Gaming']))?.name === 'Gaming')
+  check('a tie goes to the newest video', channelCategory(plain, null, null, samples(['Comedy'], ['Gaming']))?.name === 'Comedy')
+  check('the evidence counts the sampled videos', JSON.stringify(channelCategory(plain, null, null, samples(['Gaming'], ['Gaming'], ['']))?.evidence) === JSON.stringify({ type: 'sampled', category: 'Gaming', count: 2, total: 2 }))
+  const watched = new Map([['Education', { count: 1, lastWatched: 1 }]])
+  check('what was watched comes before what was sampled', channelCategory(plain, null, watched, samples(['Gaming'], ['Gaming']))?.name === 'Education')
+  check('samples with no category give none', channelCategory(plain, null, null, samples([''], [''])) === null)
+
+  check('a channel not looked at needs samples', needsVideoSamples(plain, null, undefined))
+  check('one looked at does not, even with no videos found', !needsVideoSamples(plain, null, { sampledAt: 1, videos: [] }))
+  check('a Topic channel does not', !needsVideoSamples({ id: 't', name: 'Band - Topic' }, null, undefined))
+  check('an artist channel does not', !needsVideoSamples(plain, { tags: [], musicArtist: true }, undefined))
+
+  const shared = samples(['', ['lofi', 'study', 'rain']], ['', ['study', 'lofi']], ['', ['lofi', 'jazz']])
+  check('video tags on enough of the videos are shared, most shared first', JSON.stringify(sharedVideoTags(shared)) === JSON.stringify(['lofi', 'study']))
+  check('a tag repeated on one video counts once', sharedVideoTags(samples(['', ['solo', 'solo']])).length === 0)
+  check('shared video tags stand in when the channel has none', JSON.stringify(knownChannel(plain, { tags: [], musicArtist: false }, null, shared).tags) === JSON.stringify(['lofi', 'study']))
+  check('but never over the channel\'s own', JSON.stringify(knownChannel(plain, { tags: ['chill'], musicArtist: false }, null, shared).tags) === JSON.stringify(['chill']))
+
+  const ch = (id, name = `Channel ${id}`) => ({ id, name, thumbnail: '' })
+  const profile = (_id, name, channels) => ({ _id, name, bgColor: '#000000', textColor: '#FFFFFF', subscriptions: channels })
+  const [a, b, c, d, e] = [ch('a', 'Zed'), ch('b', 'Alpha'), ch('c'), ch('d'), ch('e', 'Band - Topic')]
+  const profileList = [
+    profile(MAIN_PROFILE_ID, 'All Channels', [a, b, c, d, e]),
+    profile('p1', 'One', [c, d]),
+    profile('p2', 'Two', [d])
+  ]
+  const learn = channelsToLearn(profileList, {}, { a: { sampledAt: 1, videos: [] } }, collator)
+  check('learning takes the pool first, then channels in one profile, skipping the rest', learn.map(channel => channel.id).join(',') === 'b,c')
+
+  const result = proposeProfiles({
+    profileList: [profile(MAIN_PROFILE_ID, 'All Channels', [a, b])],
+    videoSamples: new Map([['a', samples(['Gaming'])], ['b', samples(['Gaming'], ['Comedy'])]]),
+    collator
+  })
+  check('sampled categories group channels as watched ones do', result.proposals[0]?.key === 'category:Gaming' && result.proposals[0].channels.length === 2)
+  check('and count towards what is known', result.coverage.known === 2)
 }
 
 if (failures > 0) {
