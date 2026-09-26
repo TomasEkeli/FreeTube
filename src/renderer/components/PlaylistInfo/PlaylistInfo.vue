@@ -671,7 +671,7 @@ function handleExport(value) {
 function getExportFilename(title, extension) {
   const dateStr = getTodayDateStrLocalTimezone()
   const sanitisedTitle = title.replaceAll(/[ "%*/:<>?\\|]/g, '_')
-  return `freetube-playlist-${sanitisedTitle}-${dateStr}.${extension}`
+  return `fjernsyn-playlist-${sanitisedTitle}-${dateStr}.${extension}`
 }
 
 async function exportAsFreeTubeDatabase() {

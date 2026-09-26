@@ -633,7 +633,7 @@ async function exportFreeTubeSubscriptions() {
     return JSON.stringify(profile)
   }).join('\n') + '\n'// a trailing line is expected
   const dateStr = getTodayDateStrLocalTimezone()
-  const exportFileName = 'freetube-subscriptions-' + dateStr + '.db'
+  const exportFileName = 'fjernsyn-subscriptions-' + dateStr + '.db'
 
   await promptAndWriteToFile(
     exportFileName,
@@ -1020,7 +1020,7 @@ async function exportFreeTubeWatchHistory() {
     return JSON.stringify(historyEntry)
   }).join('\n') + '\n'
   const dateStr = getTodayDateStrLocalTimezone()
-  const exportFileName = 'freetube-watch-history-' + dateStr + '.db'
+  const exportFileName = 'fjernsyn-watch-history-' + dateStr + '.db'
 
   await promptAndWriteToFile(
     exportFileName,
@@ -1284,7 +1284,7 @@ async function importPlaylists() {
 
 async function exportPlaylists() {
   const dateStr = getTodayDateStrLocalTimezone()
-  const exportFileName = 'freetube-playlists-' + dateStr + '.db'
+  const exportFileName = 'fjernsyn-playlists-' + dateStr + '.db'
 
   const playlistsDb = allPlaylists.value.map(playlist => {
     return JSON.stringify(playlist)
@@ -1445,7 +1445,7 @@ async function exportFreeTubeSearchHistory() {
     return JSON.stringify(entry)
   }).join('\n') + '\n'
   const dateStr = getTodayDateStrLocalTimezone()
-  const exportFileName = 'freetube-search-history-' + dateStr + '.db'
+  const exportFileName = 'fjernsyn-search-history-' + dateStr + '.db'
 
   await promptAndWriteToFile(
     exportFileName,
@@ -1548,7 +1548,7 @@ async function exportSettings() {
     .map(([_id, value]) => JSON.stringify({ _id, value }))
     .join('\n') + '\n'
   const dateStr = getTodayDateStrLocalTimezone()
-  const exportFileName = 'freetube-settings-' + dateStr + '.db'
+  const exportFileName = 'fjernsyn-settings-' + dateStr + '.db'
 
   await promptAndWriteToFile(
     exportFileName,

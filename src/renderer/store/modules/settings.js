@@ -393,6 +393,9 @@ const state = {
   generalAutoLoadMorePaginatedItemsEnabled: false,
   commentAutoLoadEnabled: true,
   hideToTrayOnMinimize: false,
+  // Claim freetube:// links as well as fjernsyn:// ones, for the browser
+  // redirect extensions. Electron only; main claims or releases the scheme.
+  handleFreeTubeLinks: true,
   // Download with yt-dlp, Electron only. The button on the watch page shows
   // only while this is on.
   ytDlpEnabled: false,
@@ -545,6 +548,7 @@ export const NON_TRANSFERABLE_SETTINGS = new Set([
   // Others
   'disableSmoothScrolling',
   'hideToTrayOnMinimize',
+  'handleFreeTubeLinks',
   'screenshotAskPath',
   'screenshotFolderPath',
   // YtDlpSettings

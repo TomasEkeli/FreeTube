@@ -9,29 +9,31 @@
 }
 
 /*
- * The logo and the stamp share one grid cell, so the stamp sits over the logo
- * without absolute positioning, and stays centred on it in either writing
- * direction. The container is what the stamp's size is measured against, so it
- * shrinks with the logo on a narrow window.
+ * The icon, then the name. The container is what every size here is measured
+ * against, so the whole mark shrinks together on a narrow window.
  */
-.logoWithStamp {
-  display: inline-grid;
+.logo {
+  align-items: center;
   container-type: inline-size;
+  display: inline-flex;
   inline-size: 500px;
+  justify-content: center;
   max-inline-size: 100%;
 }
 
-.logoWithStamp > * {
-  grid-area: 1 / 1;
+.logoIcon {
+  block-size: 26cqi;
+  inline-size: 26cqi;
+
+  /* Not a gap on the container: that would be measured against its parent */
+  margin-inline-end: 4cqi;
 }
 
-.logo {
-  inline-size: 100%;
-}
-
-.forkStamp {
-  place-self: center;
-  font-size: 15cqi;
+.logoName {
+  font-size: 13cqi;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .version {

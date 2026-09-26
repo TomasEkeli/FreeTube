@@ -220,88 +220,62 @@
   }
 
   .logo {
-    /* What the fork stamp's doubled edge has to match, state for state */
-    --fork-stamp-gap: var(--card-bg-color);
-
     align-items: center;
+    color: var(--primary-text-color);
     cursor: pointer;
     display: flex;
     padding-block: 0;
     padding-inline: 10px 25px;
+    text-decoration: none;
 
     @include top-nav-is-colored {
-      --fork-stamp-gap: var(--primary-color);
+      color: var(--text-with-main-color);
     }
 
     &:hover {
-      --fork-stamp-gap: var(--side-nav-hover-color);
-
       background-color: var(--side-nav-hover-color);
       color: var(--side-nav-hover-text-color);
       transition: background 0.2s ease-in;
 
       @include top-nav-is-colored {
-        --fork-stamp-gap: var(--primary-color-hover);
-
         background-color: var(--primary-color-hover);
+        color: var(--text-with-main-color);
       }
     }
 
     &:active {
-      --fork-stamp-gap: var(--tertiary-text-color);
-
       background-color: var(--tertiary-text-color);
       transition: background 0.2s ease-in;
 
       @include top-nav-is-colored {
-        --fork-stamp-gap: var(--primary-color-active);
-
         background-color: var(--primary-color-active);
       }
     }
 
+    /*
+     * The test card's disc on its own, without the app icon's tile, and the
+     * same on every theme: it needs no variant per theme or for a coloured
+     * bar, the way the FreeTube icon did.
+     */
     .logoIcon {
-      background-image: var(--logo-icon);
-      background-position: right top;
+      background-image: url('../../../../_icons/fjernsynMark.svg');
+      background-position: center;
       background-repeat: no-repeat;
-      background-size: 25px;
-      block-size: 25px;
-      inline-size: 25px;
-
-      @include top-nav-is-colored {
-        background-image: var(--logo-icon-bar-color);
-      }
+      background-size: 28px;
+      block-size: 28px;
+      inline-size: 28px;
     }
 
+    /* The name goes on a narrow window, leaving the disc */
     .logoText {
-      background-image: var(--logo-text);
-      background-position: right top;
-      background-repeat: no-repeat;
-      background-size: 100px;
-      block-size: 40px;
-      margin-inline-start: 5px;
-      position: relative;
-      inset-block-start: -3px;
-      inline-size: 100px;
-
-      /*
-       * The stamp sits in the middle of the wordmark, and goes when the
-       * wordmark does on a narrow window: over the icon alone it would be too
-       * small to read.
-       */
-      display: grid;
-      place-items: center;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      margin-inline-start: 4px;
 
       @media only screen and (width <= 680px) {
         display: none;
-      }
-
-      @include top-nav-is-colored {
-        background-image: var(--logo-text-bar-color);
-      }
-
-      .forkStamp {
-        font-size: 16px;
       }
     }
   }
