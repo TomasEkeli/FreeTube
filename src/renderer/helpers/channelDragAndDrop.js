@@ -10,6 +10,9 @@
  * The payload travels in the drag data under a type of its own, which also
  * tells a drop target that the drag is one of ours: while a drag is over a
  * target the browser shows the types but withholds the data.
+ *
+ * The picture drawn under the pointer serves the palette too, where a
+ * profile's bubble is dragged to put it somewhere else in the order.
  */
 
 /** @typedef {{ channelId: string, profileId: string | null }} DraggedChannel */
@@ -33,26 +36,33 @@ export function startChannelDrag(event, channels, label) {
   const source = event.target instanceof Element ? event.target.closest('[data-channel-id]') ?? event.target : null
 
   if (source instanceof HTMLElement) {
-    startDragPicture(event, source, channels.length > 1 ? label : null)
+    // A selection carries a badge with the count, as the square alone is one
+    // of however many are going
+    startDragPicture(event, source, channels.length > 1 ? label : null, (copy) => {
+      copy.removeAttribute('data-channel-id')
+      copy.classList.remove('dragging', 'selected')
+      copy.querySelectorAll('.selectedMark, .corner').forEach(el => el.remove())
+    })
   }
 }
 
 /**
- * The picture that follows the pointer during a drag is drawn by the page,
- * not left to the browser. The browser's is only let go of once the drop has
- * been dealt with and the system has played its own ending to the drag, which
- * on some desktops leaves it hanging over the drop for up to a second. The
- * page's goes the moment the drop lands. It is a copy of the channel's
- * square, and for a selection it carries a badge with the count, as the
- * square alone is one of however many are going.
+ * The picture that follows the pointer during a drag on the Channels page,
+ * of a channel or of a profile's bubble, is drawn by the page, not left to
+ * the browser. The browser's is only let go of once the drop has been dealt
+ * with and the system has played its own ending to the drag, which on some
+ * desktops leaves it hanging over the drop for up to a second. The page's
+ * goes the moment the drop lands. It is a copy of what is dragged.
  *
  * The browser still gets a picture, an empty one, as without one it draws
- * its own of the square.
+ * its own of the element.
  * @param {DragEvent} event
  * @param {HTMLElement} source
  * @param {string | null} badgeLabel
+ * @param {(copy: HTMLElement) => void} cleanCopy takes out of the copy what
+ *   only the original should have: ids, the marks of its state
  */
-function startDragPicture(event, source, badgeLabel) {
+export function startDragPicture(event, source, badgeLabel, cleanCopy) {
   const empty = document.createElement('div')
   Object.assign(empty.style, { position: 'fixed', top: '-10px', left: '-10px', width: '1px', height: '1px', opacity: '0' })
   document.body.appendChild(empty)
@@ -77,9 +87,7 @@ function startDragPicture(event, source, badgeLabel) {
   })
 
   const copy = source.cloneNode(true)
-  copy.removeAttribute('data-channel-id')
-  copy.classList.remove('dragging', 'selected')
-  copy.querySelectorAll('.selectedMark, .corner').forEach(el => el.remove())
+  cleanCopy(copy)
   Object.assign(copy.style, {
     width: `${rect.width}px`,
     height: `${rect.height}px`,

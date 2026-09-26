@@ -32,7 +32,7 @@
       :channel-count="new Set(profile.subscriptions.map(channel => channel.id)).size"
       :duplicate-count="duplicateCounts.get(profile._id) ?? 0"
       :editing="profile._id === renamingProfileId"
-      :dragging="profile._id === fadedProfileId"
+      :dragging="profile._id === draggingProfileId"
       :insert-before="markerIndex === index"
       :insert-after="markerIndex === profiles.length && index === profiles.length - 1"
       @toggle="emit('toggle', profile._id)"
@@ -79,6 +79,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import ChannelsOverviewPaletteBubble from '../ChannelsOverviewPaletteBubble/ChannelsOverviewPaletteBubble.vue'
 import ChannelsOverviewProfileNameField from '../ChannelsOverviewProfileNameField/ChannelsOverviewProfileNameField.vue'
 
+import { startDragPicture } from '../../helpers/channelDragAndDrop'
 import { insertionIndex, moveTarget } from '../../helpers/channelsOverview'
 
 const props = defineProps({
@@ -135,16 +136,18 @@ const PROFILE_DRAG_TYPE = 'application/x-freetube-profile'
  */
 const draggingProfileId = ref(null)
 
-/**
- * The bubble shown faded as it is dragged. A frame after the drag starts,
- * once the browser has taken its picture of the bubble for the cursor, which
- * would otherwise be faded too.
- * @type {import('vue').Ref<string | null>}
- */
-const fadedProfileId = ref(null)
-
 /** Where the dragged bubble would land, as an insertion index, or null where it would not move */
 const markerIndex = ref(null)
+
+/**
+ * Where the last dragover worked out the bubble would land, which is where
+ * the drop puts it: exactly where the bar was. The drop's own position is not
+ * worked out again, as it can differ, and Chromium reports some drag events
+ * at 0, 0. Not cleared by leaving the palette, which the next dragover over
+ * it follows at once when it is only a move from one bubble to the next.
+ * @type {number | null}
+ */
+let lastInsertion = null
 
 /** What a keyboard move did, for a screen reader */
 const announcement = ref('')
@@ -160,13 +163,24 @@ function isRtl() {
 function startProfileDrag(event, profileId) {
   event.dataTransfer.effectAllowed = 'move'
   event.dataTransfer.setData(PROFILE_DRAG_TYPE, profileId)
-  draggingProfileId.value = profileId
 
-  requestAnimationFrame(() => {
-    if (draggingProfileId.value === profileId) {
-      fadedProfileId.value = profileId
-    }
-  })
+  // The page's own picture of the bubble, as for a channel: the browser's
+  // hangs over the drop for up to a second on some desktops
+  const source = event.target instanceof Element ? event.target.closest('.paletteEntry') : null
+
+  if (source instanceof HTMLElement) {
+    startDragPicture(event, source, null, (copy) => {
+      copy.removeAttribute('data-profile-id')
+      copy.removeAttribute('title')
+      copy.classList.remove('dragging', 'insertBefore', 'insertAfter', 'dropTarget', 'acknowledged')
+      copy.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
+      copy.querySelectorAll('[tabindex]').forEach(element => element.removeAttribute('tabindex'))
+    })
+  }
+
+  // After the copy is taken, so that it is not faded like the bubble left behind
+  draggingProfileId.value = profileId
+  lastInsertion = null
 }
 
 /**
@@ -198,9 +212,13 @@ function onProfileDragOver(event) {
   event.preventDefault()
   event.dataTransfer.dropEffect = 'move'
 
+  // Chromium reports 0, 0 for the last events of a drag leaving the window
+  if (event.clientX === 0 && event.clientY === 0) { return }
+
   const insertion = dropInsertion(event)
   const from = draggedIndex()
 
+  lastInsertion = insertion
   markerIndex.value = moveTarget(from, insertion) === from ? null : insertion
 }
 
@@ -225,7 +243,7 @@ function onProfileDrop(event) {
 
   const profileId = draggingProfileId.value
   const from = draggedIndex()
-  const to = moveTarget(from, dropInsertion(event))
+  const to = moveTarget(from, lastInsertion ?? dropInsertion(event))
 
   endProfileDrag()
 
@@ -236,8 +254,8 @@ function onProfileDrop(event) {
 
 function endProfileDrag() {
   draggingProfileId.value = null
-  fadedProfileId.value = null
   markerIndex.value = null
+  lastInsertion = null
 }
 
 /**
