@@ -74,11 +74,11 @@ On the local API, comments load themselves as you scroll to them, keep paging, a
 
 ### Downloads
 
-Upstream took its download button out in January 2026. It had been half broken for a long time, and SABR broke it the rest of the way. The button is back here, but it hands the video to [yt-dlp](https://github.com/yt-dlp/yt-dlp), which does the real work: picking formats, merging video and audio, and getting past YouTube's challenges. It is off until switched on in the yt-dlp section of the settings, and exists only in the desktop builds.
+The download button is back. Upstream removed theirs in January 2026, since it had long been half broken and SABR broke it completely. This one hands the video to [yt-dlp](https://github.com/yt-dlp/yt-dlp). Switch it on in the yt-dlp section of the settings (desktop builds only).
 
-yt-dlp needs ffmpeg to merge video and audio, and Deno to run the JavaScript YouTube requires. The settings section shows whether each is found, which version and where from. If any is missing, one button installs it into a folder of FreeTube's own: fetched from each project's releases, checked against their published checksums, and needing neither administrator rights nor anything else installed first. Pressing download with something missing offers the same install and then goes on with the download. Update yt-dlp is there too, since a stale yt-dlp is the usual reason YouTube downloads start failing.
+If yt-dlp, or the ffmpeg and Deno it needs, is missing, the first press offers to install them and then downloads. The settings section can do the same, and can update yt-dlp when YouTube downloads start failing.
 
-A click downloads the best quality yt-dlp can get, into the Downloads folder or one you pick. Right-click or hold the button for anything from 2160p down to 360p, or the audio alone. A downloads indicator in the top bar shows each download's stage, progress, time left and where the file is going, and can cancel it. A cancelled download, or one cut short by quitting, resumes where it stopped the next time you press download. Once a video has downloaded, its button turns into Show in folder. Downloads go through FreeTube's proxy, and custom yt-dlp arguments in the settings apply to all of them.
+A click downloads the best quality available. Right-click or hold for a lower one, or the audio alone. A downloads indicator in the top bar shows progress, time left and where the file is going, and can cancel. A cancelled download picks up where it stopped. Once finished, the button becomes Show in folder.
 
 ### Build and tooling
 
