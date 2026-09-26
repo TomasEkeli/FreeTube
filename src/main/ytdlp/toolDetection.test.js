@@ -92,6 +92,20 @@ describe('tool detection', () => {
     expect(fake.calls).toHaveLength(9)
   })
 
+  it('looks again when a tool it found has been removed since', async () => {
+    const answers = {
+      '/usr/bin/yt-dlp': '2026.09.16\n',
+      '/usr/bin/ffmpeg': 'ffmpeg version 7.1\n',
+      '/usr/bin/deno': 'deno 2.5.1\n',
+    }
+    const { detector } = setup({ answers })
+
+    await detector.detect()
+    delete answers['/usr/bin/deno']
+
+    expect((await detector.detect()).deno.found).toBe(false)
+  })
+
   it('never reuses a detection with something missing', async () => {
     const { detector, fake } = setup({ answers: { '/usr/bin/yt-dlp': '2026.09.16\n' } })
 

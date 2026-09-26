@@ -134,9 +134,15 @@ export function createToolDetector({ spawn, isExecutableFile, readSetting, manag
     const storedPick = await readSetting('ytDlpExecutablePath')
     const picked = typeof storedPick === 'string' ? storedPick : ''
 
-    // A different pick since is a different yt-dlp
+    // A different pick since is a different yt-dlp, and a tool removed since
+    // is no longer there: checking for the files is cheap, unlike the probes
     if (!fresh && cache !== null && cache.picked === picked && now() - cache.at < CACHE_MS) {
-      return cache.statuses
+      const { statuses } = cache
+      const stillThere = await Promise.all(TOOLS.map(tool => isExecutableFile(statuses[tool].path)))
+
+      if (stillThere.every(Boolean)) {
+        return statuses
+      }
     }
 
     const [ytDlp, ffmpeg, deno] = await Promise.all(TOOLS.map(tool => detectTool(tool, picked)))
