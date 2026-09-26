@@ -1,0 +1,70 @@
+.pathRow {
+  align-items: center;
+  column-gap: 1rem;
+  margin-block: 0;
+  margin-inline: auto;
+  inline-size: 95%;
+}
+
+.pathLabel,
+.pathButton {
+  flex-grow: 0;
+}
+
+.pathValue {
+  flex-grow: 1;
+  margin-block-start: 10px;
+}
+
+.tools {
+  margin-block: 0 1rem;
+  margin-inline: auto;
+  inline-size: 95%;
+}
+
+.toolsHeading {
+  margin-block: 0.5rem;
+}
+
+.toolList {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toolRow {
+  display: contents;
+}
+
+.toolName {
+  font-weight: bold;
+}
+
+.toolSource {
+  margin-inline-start: 0.5rem;
+  color: var(--tertiary-text-color);
+  overflow-wrap: anywhere;
+}
+
+.toolMissing,
+.toolWarning {
+  color: var(--accent-color);
+}
+
+.toolWarning {
+  margin-block: 0.5rem 0;
+}
+
+.toolActions {
+  align-items: center;
+  justify-content: flex-start;
+  column-gap: 1rem;
+  margin-block-start: 0.5rem;
+}
+
+.toolProgress {
+  margin: 0;
+}

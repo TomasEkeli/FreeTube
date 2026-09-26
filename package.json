@@ -55,7 +55,8 @@
     "check-subscription-video-details": "node _scripts/checkSubscriptionVideoDetails.mjs",
     "check-subscription-recovery-groups": "node _scripts/checkSubscriptionRecoveryGroups.mjs",
     "check-channels-overview": "node _scripts/checkChannelsOverview.mjs",
-    "check-profile-suggestions": "node _scripts/checkProfileSuggestions.mjs"
+    "check-profile-suggestions": "node _scripts/checkProfileSuggestions.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
@@ -68,6 +69,7 @@
     "bgutils-js": "^4.0.3",
     "dompurify": "^3.4.15",
     "electron-context-menu": "^4.1.2",
+    "fflate": "^0.8.3",
     "googlevideo": "^4.1.1",
     "marked": "^18.0.14",
     "process": "^0.11.10",
@@ -78,6 +80,7 @@
     "vue-observe-visibility": "^2.0.0-alpha.1",
     "vue-router": "^5.3.1",
     "vuex": "^4.1.0",
+    "xz-decompress": "^0.2.3",
     "youtubei.js": "^18.0.0"
   },
   "devDependencies": {
@@ -117,6 +120,7 @@
     "stylelint-high-performance-animation": "^2.0.0",
     "stylelint-use-logical-spec": "^5.0.1",
     "terser": "^5.51.2",
+    "vitest": "^5.0.2",
     "vue-eslint-parser": "^10.4.1",
     "vue-loader": "^17.4.2",
     "webpack": "^5.111.1",

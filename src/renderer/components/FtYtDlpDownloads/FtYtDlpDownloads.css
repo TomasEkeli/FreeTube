@@ -1,0 +1,141 @@
+.ytDlpDownloads {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-inline-end: 6px;
+}
+
+.indicator {
+  position: relative;
+  display: inline-flex;
+}
+
+.indicatorRing {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.indicatorCount {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 0;
+  min-inline-size: 16px;
+  padding-inline: 3px;
+  border-radius: 8px;
+  background-color: var(--accent-color);
+  color: var(--text-with-accent-color);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.panel {
+  position: absolute;
+  inset-block-start: calc(100% - 6px);
+  inset-inline-end: 0;
+  box-sizing: border-box;
+  inline-size: min(28rem, 92vw);
+  max-block-size: 70vh;
+  overflow-y: auto;
+  padding-block: 12px;
+  padding-inline: 16px;
+  border-radius: 6px;
+  background-color: var(--card-bg-color);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 40%);
+  color: var(--primary-text-color);
+  line-height: normal;
+  text-align: start;
+  z-index: 5;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--accent-color);
+}
+
+.panelTitle {
+  margin-block: 0 8px;
+  font-size: 1.1rem;
+}
+
+.empty {
+  margin: 0;
+  color: var(--secondary-text-color);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding-block: 10px;
+  border-block-start: 1px solid var(--secondary-card-bg-color);
+}
+
+.row:first-child {
+  border-block-start: none;
+  padding-block-start: 0;
+}
+
+.rowTitle {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-weight: bold;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rowQuality {
+  display: inline-block;
+  margin-block: 4px 0;
+  padding-block: 1px;
+  padding-inline: 6px;
+  border-radius: 4px;
+  background-color: var(--secondary-card-bg-color);
+  font-size: 0.8rem;
+}
+
+.rowStatus,
+.rowDetails,
+.rowWhere {
+  margin-block: 4px 0;
+  font-size: 0.9rem;
+}
+
+.rowDetails {
+  color: var(--secondary-text-color);
+}
+
+/* The whole path, wrapped, never cut down to the file name */
+.rowWhere {
+  color: var(--secondary-text-color);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.rowProgress {
+  display: block;
+  inline-size: 100%;
+  block-size: 6px;
+  margin-block-start: 6px;
+  accent-color: var(--accent-color);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+.rowActions :deep(.btn) {
+  margin: 0;
+  padding-block: 6px;
+  padding-inline: 12px;
+  font-size: 0.85rem;
+}

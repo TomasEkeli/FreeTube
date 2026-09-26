@@ -29,7 +29,8 @@ import contextMenu from 'electron-context-menu'
 import packageDetails from '../../package.json'
 import { handleOpenInExternalPlayer } from './externalPlayer'
 import { generatePoToken } from './poTokenGenerator'
-import { isFreeTubeUrl } from './utils'
+import { buildProxyUrl, isFreeTubeUrl } from './utils'
+import { isRendererWritableYtDlpSetting, registerYtDlpHandlers } from './ytdlp/ipc'
 
 const brotliDecompressAsync = promisify(brotliDecompress)
 
@@ -552,7 +553,7 @@ function runApp() {
     }
 
     if (useProxy) {
-      proxyUrl = `${proxyProtocol}://${proxyHostname}:${proxyPort}`
+      proxyUrl = buildProxyUrl({ protocol: proxyProtocol, hostname: proxyHostname, port: proxyPort })
 
       session.defaultSession.setProxy({
         proxyRules: proxyUrl
@@ -1422,17 +1423,28 @@ function runApp() {
   })
 
   /**
+   * Shows a picker and saves the choice to a setting that only main may write.
+   * The screenshot folder by default; the yt-dlp settings pass their own.
+   *
    * @param {import('electron').WebContents} webContents
    * @param {string | undefined} [currentPath]
+   * @param {object} [options]
+   * @param {string} [options.settingId]
+   * @param {Parameters<typeof app.getPath>[0]} [options.defaultPathName] where the picker opens when nothing is chosen yet
+   * @param {import('electron').OpenDialogOptions['properties']} [options.properties]
    */
-  async function chooseDefaultFolder(webContents, currentPath) {
+  async function chooseDefaultFolder(webContents, currentPath, {
+    settingId = 'screenshotFolderPath',
+    defaultPathName = 'pictures',
+    properties = ['openDirectory']
+  } = {}) {
     if (typeof currentPath !== 'string' || currentPath.length === 0) {
-      currentPath = app.getPath('pictures')
+      currentPath = app.getPath(defaultPathName)
     }
 
     const dialogOptions = {
       defaultPath: currentPath,
-      properties: ['openDirectory']
+      properties
     }
 
     let result
@@ -1447,8 +1459,6 @@ function runApp() {
     if (result.canceled) {
       return
     }
-
-    const settingId = 'screenshotFolderPath'
 
     await baseHandlers.settings.upsert(settingId, result.filePaths[0])
 
@@ -1608,6 +1618,8 @@ function runApp() {
 
   ipcMain.on(IpcChannels.OPEN_IN_EXTERNAL_PLAYER, handleOpenInExternalPlayer)
 
+  registerYtDlpHandlers({ chooseDefaultFolder })
+
   ipcMain.handle(IpcChannels.GET_REPLACE_HTTP_CACHE, (event) => {
     if (isFreeTubeUrl(event.senderFrame.url)) {
       return replaceHttpCache
@@ -1737,6 +1749,12 @@ function runApp() {
           // This one is only allowed to be changed by the CHOOSE_DEFAULT_FOLDER IPC action
           // to avoid the "write to default folder" IPC calls being abused to write to arbitrary locations
           if (data._id === 'screenshotFolderPath') {
+            return null
+          }
+
+          // The same goes for the yt-dlp executable and download folder,
+          // which only main's pickers may set
+          if (!isRendererWritableYtDlpSetting(data._id, data.value)) {
             return null
           }
 

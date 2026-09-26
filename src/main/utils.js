@@ -1,4 +1,26 @@
 /**
+ * The proxy URL from FreeTube's proxy settings, in the one place it is built,
+ * for Electron's own proxy and for the programs FreeTube runs alike.
+ *
+ * Credentials are only included when given, and Electron is never given them
+ * this way: it asks for them through its `login` event instead.
+ *
+ * @param {object} proxy
+ * @param {string} proxy.protocol
+ * @param {string} proxy.hostname
+ * @param {string | number} proxy.port
+ * @param {string} [proxy.username]
+ * @param {string} [proxy.password]
+ */
+export function buildProxyUrl({ protocol, hostname, port, username, password }) {
+  const credentials = username
+    ? `${encodeURIComponent(username)}${password ? ':' + encodeURIComponent(password) : ''}@`
+    : ''
+
+  return `${protocol}://${credentials}${hostname}:${port}`
+}
+
+/**
  * @param {string | URL} url
  */
 export function isFreeTubeUrl(url) {

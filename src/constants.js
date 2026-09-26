@@ -52,7 +52,21 @@ const IpcChannels = {
   WRITE_TO_DEFAULT_FOLDER: 'write-to-default-folder',
 
   OPEN_IN_EXTERNAL_PLAYER: 'open-in-external-player',
-  OPEN_IN_EXTERNAL_PLAYER_RESULT: 'open-in-external-player-result'
+  OPEN_IN_EXTERNAL_PLAYER_RESULT: 'open-in-external-player-result',
+
+  // The fork's download with yt-dlp, see src/main/ytdlp/
+  YTDLP_DOWNLOAD: 'ytdlp-download',
+  YTDLP_DOWNLOAD_OUTCOME: 'ytdlp-download-outcome',
+  YTDLP_REVEAL: 'ytdlp-reveal',
+  YTDLP_CHOOSE_FOLDER: 'ytdlp-choose-folder',
+  YTDLP_CHOOSE_EXECUTABLE: 'ytdlp-choose-executable',
+  YTDLP_DETECT_TOOLS: 'ytdlp-detect-tools',
+  YTDLP_INSTALL_TOOLS: 'ytdlp-install-tools',
+  YTDLP_INSTALL_PROGRESS: 'ytdlp-install-progress',
+  YTDLP_UPDATE: 'ytdlp-update',
+  YTDLP_CANCEL: 'ytdlp-cancel',
+  YTDLP_LIST_DOWNLOADS: 'ytdlp-list-downloads',
+  YTDLP_DISMISS: 'ytdlp-dismiss',
 }
 
 const DBActions = {

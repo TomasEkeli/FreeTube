@@ -240,6 +240,7 @@
       </div>
     </div>
     <FtProfileSelector class="side profiles" />
+    <FtYtDlpDownloads />
   </nav>
 </template>
 
@@ -252,6 +253,7 @@ import { useRoute, useRouter } from 'vue-router'
 import FtInput from '../FtInput/FtInput.vue'
 import FtProfileSelector from '../FtProfileSelector/FtProfileSelector.vue'
 import FtIconButton from '../FtIconButton/FtIconButton.vue'
+import FtYtDlpDownloads from '../FtYtDlpDownloads/FtYtDlpDownloads.vue'
 import FtForkStamp from '../FtForkStamp/FtForkStamp.vue'
 
 import store from '../../store/index'

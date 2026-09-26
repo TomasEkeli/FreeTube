@@ -180,6 +180,116 @@ export default {
   },
 
   /**
+   * @param {{ videoId: string, title: string, quality?: import('../main/ytdlp/downloadService').Quality, fresh?: boolean }} request
+   */
+  ytDlpDownload: (request) => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      ipcRenderer.send(IpcChannels.YTDLP_DOWNLOAD, request)
+    }
+  },
+
+  /**
+   * @param {(outcome: import('../main/ytdlp/downloadService').DownloadOutcome & { toast: boolean }) => void} handler
+   */
+  handleYtDlpDownloadOutcome: (handler) => {
+    ipcRenderer.on(IpcChannels.YTDLP_DOWNLOAD_OUTCOME, (_, outcome) => {
+      handler(outcome)
+    })
+  },
+
+  /**
+   * @param {string} videoId
+   */
+  ytDlpReveal: (videoId) => {
+    ipcRenderer.send(IpcChannels.YTDLP_REVEAL, videoId)
+  },
+
+  /**
+   * @param {string} videoId
+   */
+  ytDlpCancel: (videoId) => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      ipcRenderer.send(IpcChannels.YTDLP_CANCEL, videoId)
+    }
+  },
+
+  /**
+   * @returns {Promise<{ downloads: import('../main/ytdlp/downloadService').DownloadSnapshot[], finished: Record<string, string | null> }>}
+   */
+  ytDlpListDownloads: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_LIST_DOWNLOADS)
+  },
+
+  /**
+   * @param {string} videoId
+   */
+  ytDlpDismiss: (videoId) => {
+    ipcRenderer.send(IpcChannels.YTDLP_DISMISS, videoId)
+  },
+
+  /**
+   * Main saves the choice to the setting itself, the renderer may not
+   * @returns {Promise<string | undefined>}
+   */
+  ytDlpChooseFolder: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_CHOOSE_FOLDER)
+  },
+
+  /**
+   * Main saves the choice to the setting itself, the renderer may not
+   * @returns {Promise<string | undefined>}
+   */
+  ytDlpChooseExecutable: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_CHOOSE_EXECUTABLE)
+  },
+
+  /**
+   * @returns {Promise<{
+   *   tools: import('../main/ytdlp/toolDetection').ToolStatuses,
+   *   coverage: Record<import('../main/ytdlp/toolDetection').Tool, boolean>,
+   *   installing: boolean,
+   *   downloading: boolean
+   * }>}
+   */
+  ytDlpDetectTools: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_DETECT_TOOLS)
+  },
+
+  /**
+   * @param {{ videoId: string, title: string, quality?: import('../main/ytdlp/downloadService').Quality, fresh?: boolean }} [thenDownload] what to download once the install succeeds
+   * @returns {Promise<import('../main/ytdlp/toolInstaller').InstallResult | undefined>}
+   */
+  ytDlpInstallTools: (thenDownload) => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      return ipcRenderer.invoke(IpcChannels.YTDLP_INSTALL_TOOLS, thenDownload ? { thenDownload } : {})
+    }
+    return Promise.resolve(undefined)
+  },
+
+  /**
+   * @returns {Promise<import('../main/ytdlp/toolInstaller').UpdateResult | undefined>}
+   */
+  ytDlpUpdate: () => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      return ipcRenderer.invoke(IpcChannels.YTDLP_UPDATE)
+    }
+    return Promise.resolve(undefined)
+  },
+
+  /**
+   * @param {(progress: import('../main/ytdlp/toolInstaller').InstallProgress) => void} handler
+   */
+  handleYtDlpInstallProgress: (handler) => {
+    ipcRenderer.on(IpcChannels.YTDLP_INSTALL_PROGRESS, (_, progress) => {
+      handler(progress)
+    })
+  },
+
+  /**
    * @param {number} factor
    */
   setZoomFactor: (factor) => {

@@ -687,6 +687,52 @@ Settings:
     Players:
       None:
         Name: None
+  yt-dlp Settings:
+    yt-dlp Settings: yt-dlp
+    Enable Download Button: Show a download button on the watch page
+    Download Folder: Download Folder
+    System Downloads Folder: The system Downloads folder
+    Choose Folder: Choose Folder
+    Use Downloads Folder: Use Downloads Folder
+    Custom Arguments: Custom yt-dlp Arguments
+    Tools: Tools
+    Looking: Looking…
+    Not found: Not found
+    Source Picked: 'chosen: {path}'
+    Source Managed: installed by FreeTube
+    Source Path: 'on PATH: {path}'
+    yt-dlp Missing Warning: Without yt-dlp there is nothing to download with.
+    ffmpeg Missing Warning: Without ffmpeg, yt-dlp cannot merge separate video and audio, and falls back to a
+      single low quality file, or to separate unmerged files.
+    Deno Missing Warning: Without Deno, yt-dlp cannot run the JavaScript YouTube requires, and YouTube downloads
+      may fail or be limited.
+    yt-dlp Executable: yt-dlp Executable
+    Found Automatically: Found automatically
+    Choose File: Choose File
+    Find Automatically: Find Automatically
+    Install Missing Tools: 'Install {tools}'
+    'Install It Yourself': 'FreeTube cannot install {tool} on this system. Install it yourself, see'
+    Install Progress:
+      Starting: Starting the install…
+      Downloading: 'Downloading {tool}…'
+      Downloading with size: 'Downloading {tool}… {percent}% ({received} of {total} MB)'
+      Verifying: 'Checking {tool} against its published checksum…'
+      Extracting: 'Unpacking {tool}…'
+      Done: '{tool} installed'
+    Update yt-dlp: Update yt-dlp
+    Updating yt-dlp: Updating yt-dlp…
+    Update Unavailable While Downloading: yt-dlp cannot be updated while a download is running
+    Update Result:
+      Updated: 'yt-dlp updated to {version}'
+      Current: 'yt-dlp is up to date ({version})'
+      Package Manager: This yt-dlp was installed by pip or a package manager, and has to be updated the way it was installed
+      Failed: 'Could not update yt-dlp: {reason}'
+    Install Result:
+      Installed: '{tools} installed into FreeTube''s tools folder'
+      Nothing to install: Nothing was missing
+      Unsupported: 'FreeTube cannot install {tools} on this system'
+      Failed: 'Could not install {tool}: {reason}'
+      Failed without tool: 'Could not install: {reason}'
   Privacy Settings:
     Privacy Settings: Privacy
     Remember History: Remember Watch History
@@ -1136,6 +1182,57 @@ Video:
       reversing playlists: reversing playlists
       shuffling playlists: shuffling playlists
       looping playlists: looping playlists
+  yt-dlp:
+    Download with yt-dlp: Download with yt-dlp
+    Download started: 'Downloading "{title}" to {path}'
+    Resuming download: 'Resuming download of "{title}" to {path}'
+    Download cancelled: 'Cancelled "{title}". Press download again to resume'
+    Show in folder: 'Show in folder: {path}'
+    Downloads:
+      Downloads: Downloads
+      Downloads running: 'Downloads, {count} running'
+      Saving to: 'Saving to {path}'
+      Saved to: 'Saved to {path}'
+      Was saving to: 'Was saving to {path}'
+      Saving into folder: 'Saving into {path}'
+      Percent of size: '{percent}% of {size}'
+      Speed: '{speed}/s'
+      Time left: '{time} left'
+      Cancel: Cancel
+      Show in folder: Show in Folder
+      Dismiss: Dismiss
+      Nothing here: No downloads
+      Status:
+        Waiting: Waiting for the tools to be installed…
+        Preparing: Preparing…
+        Resuming: Resuming…
+        Downloading: Downloading
+        Downloading video: 'Downloading video, part {part} of {parts}'
+        Downloading audio: 'Downloading audio, part {part} of {parts}'
+        Downloading part: 'Downloading part {part} of {parts}'
+        Merging: Merging video and audio…
+        Processing: Processing…
+        Finished: Finished
+        Cancelled: Cancelled. Press download again to resume
+        Failed: 'Failed: {reason}'
+        Failed with exit code: 'Failed, yt-dlp stopped with exit code {exitCode}'
+    Already downloading: '"{title}" is already downloading'
+    Download finished: 'Downloaded "{title}". Click to show the file'
+    Download finished with quality: 'Downloaded "{title}" ({quality}). Click to show the file'
+    Right-click for other qualities: 'Download with yt-dlp. Right-click or hold for another quality, or audio only'
+    Right-click to download another quality: Right-click or hold to download another quality, or audio only
+    Quality:
+      Height: '{height}p'
+      Audio only: Audio only
+      Download best: Download best quality
+      Download up to: 'Download up to {height}p'
+      Download audio only: Download audio only
+    Download failed: 'Could not download "{title}": {reason}'
+    Download failed with exit code: 'Could not download "{title}": yt-dlp stopped with exit code {exitCode}'
+    yt-dlp could not be started: yt-dlp could not be started. Check the yt-dlp section in Settings
+    Tools missing: 'Cannot download yet, {tools} not found. See the yt-dlp section in Settings'
+    Tools missing, click to install: 'Cannot download yet, {tools} not found. Click to install, then the download starts'
+    Waiting for install: '"{title}" will download once the tools are installed or updated'
   Player:
     TranslatedCaptionTemplate: '{language} (translated from "{originalLanguage}")'
     Audio Tracks: Audio Tracks
@@ -1329,6 +1426,12 @@ Tooltips:
       Custom arguments will still be passed on.
     Custom External Player Arguments: Any custom command line arguments you want to be passed on to the external player.
     DefaultCustomArgumentsTemplate: "(Default: '{defaultCustomArguments}')"
+  yt-dlp Settings:
+    Enable Download Button: Shows a button on the watch page that hands the video to yt-dlp,
+      which downloads it with its own defaults. Not offered for upcoming videos or live broadcasts.
+    Custom Arguments: Command line arguments passed to yt-dlp for every download, with each option and each value as its own entry,
+      for instance a format, an output template, subtitles or cookies. They come after
+      FreeTube's own, so they can override them.
   Distraction Free Settings:
     Hide Channels: Enter a channel ID to hide all videos, playlists and the channel itself from appearing in search, trending, most popular and recommended.
        The channel ID entered must be a complete match and is case sensitive.
