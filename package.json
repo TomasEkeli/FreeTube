@@ -2,7 +2,7 @@
   "name": "fjernsyn",
   "productName": "Fjernsyn",
   "description": "A private YouTube client, forked from FreeTube",
-  "version": "0.25.3",
+  "version": "0.0.1",
   "license": "AGPL-3.0-or-later",
   "main": "./dist/main.js",
   "private": true,

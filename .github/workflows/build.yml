@@ -269,98 +269,98 @@ jobs:
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-setup-x64.exe
-        path: build/fjernsyn Setup ${{ steps.versionNumber.outputs.version }}.exe
+        path: build/Fjernsyn Setup ${{ steps.versionNumber.outputs.version }}.exe
 
     - name: Upload Windows x64 Portable Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-win-x64-portable.exe
-        path: build/fjernsyn ${{ steps.versionNumber.outputs.version }}.exe
+        path: build/Fjernsyn ${{ steps.versionNumber.outputs.version }}.exe
 
     - name: Upload Windows x64 .zip Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-win-x64-portable.zip
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-win.zip
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-win.zip
 
     - name: Upload Windows x64 .7z Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-win-x64-portable.7z
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-win.7z
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-win.7z
 
     - name: Upload Windows arm64 .exe Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-setup-arm64.exe
-        path: build/fjernsyn Setup ${{ steps.versionNumber.outputs.version }}.exe
+        path: build/Fjernsyn Setup ${{ steps.versionNumber.outputs.version }}.exe
 
     - name: Upload Windows arm64 Portable Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-win-arm64-portable.exe
-        path: build/fjernsyn ${{ steps.versionNumber.outputs.version }}.exe
+        path: build/Fjernsyn ${{ steps.versionNumber.outputs.version }}.exe
 
     - name: Upload Windows arm64 .zip Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-win-arm64-portable.zip
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-win.zip
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-win.zip
 
     - name: Upload Windows arm64 .7z Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'windows') && startsWith(matrix.runtime, 'win-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-win-arm64-portable.7z
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-win.7z
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-win.7z
 
     - name: Upload Mac x64 .dmg Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'macos') && startsWith(matrix.runtime, 'osx-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-mac-x64.dmg
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}.dmg
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}.dmg
 
     - name: Upload Mac x64 .zip Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'macos') && startsWith(matrix.runtime, 'osx-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-mac-x64.zip
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-mac.zip
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-mac.zip
 
     - name: Upload Mac x64 .7z Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'macos') && startsWith(matrix.runtime, 'osx-x64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-mac-x64.7z
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-mac.7z
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-mac.7z
 
     - name: Upload Mac arm64 .dmg Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'macos') && startsWith(matrix.runtime, 'osx-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-mac-arm64.dmg
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64.dmg
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64.dmg
 
     - name: Upload Mac arm64 .zip Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'macos') && startsWith(matrix.runtime, 'osx-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-mac-arm64.zip
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-mac.zip
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-mac.zip
 
     - name: Upload Mac arm64 .7z Artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
       if: startsWith(matrix.os, 'macos') && startsWith(matrix.runtime, 'osx-arm64')
       with:
         name: fjernsyn-${{ steps.versionNumber.outputs.version }}-mac-arm64.7z
-        path: build/fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-mac.7z
+        path: build/Fjernsyn-${{ steps.versionNumber.outputs.version }}-arm64-mac.7z
 
     - name: Save pnpm cache
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
