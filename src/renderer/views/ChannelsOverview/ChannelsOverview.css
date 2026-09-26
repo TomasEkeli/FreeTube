@@ -35,6 +35,15 @@
   margin: 0;
 }
 
+/* The question mark's text is several paragraphs: kept to a readable width */
+.suggestHelp :deep(.text) {
+  inline-size: min(60ch, 80vw);
+  max-inline-size: none;
+  padding-inline: 16px;
+  border-radius: 12px;
+  text-align: start;
+}
+
 .channelSearch {
   flex: 0 1 280px;
   min-inline-size: 180px;

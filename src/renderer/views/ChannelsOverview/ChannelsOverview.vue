@@ -74,6 +74,13 @@
           :label="suggestionsShown ? t('Channels.Overview.Suggestions.Hide Suggestions') : t('Channels.Overview.Suggestions.Suggest Profiles')"
           @click="toggleSuggestions"
         />
+        <!-- How suggestions are made, as the page says when there are none -->
+        <FtTooltip
+          class="suggestHelp"
+          position="bottom"
+          allow-newlines
+          :tooltip="suggestionsHelp"
+        />
         <!-- Always there, so that a screen reader is listening before the count changes -->
         <span
           class="selectedCount"
@@ -258,6 +265,7 @@ import FtButton from '../../components/FtButton/FtButton.vue'
 import FtCard from '../../components/ft-card/ft-card.vue'
 import FtInput from '../../components/FtInput/FtInput.vue'
 import FtPrompt from '../../components/FtPrompt/FtPrompt.vue'
+import FtTooltip from '../../components/FtTooltip/FtTooltip.vue'
 import ChannelsOverviewColourMenu from '../../components/ChannelsOverviewColourMenu/ChannelsOverviewColourMenu.vue'
 import ChannelsOverviewColumn from '../../components/ChannelsOverviewColumn/ChannelsOverviewColumn.vue'
 import ChannelsOverviewPalette from '../../components/ChannelsOverviewPalette/ChannelsOverviewPalette.vue'
@@ -480,6 +488,17 @@ const columns = computed(() => {
 
   return [poolColumn, ...proposalColumns.value, ...openColumns.value]
 })
+
+/**
+ * How suggestions are made and how to get more, for the question mark by the
+ * button: the explanation the page gives when there are none, less what is
+ * only true then
+ */
+const suggestionsHelp = computed(() => [
+  t('Channels.Overview.Suggestions.None How'),
+  t('Channels.Overview.Suggestions.None Seed'),
+  t('Channels.Overview.Suggestions.None Rejected')
+].join('\n\n'))
 
 /** @type {import('vue').ComputedRef<Map<string, Profile>>} */
 const profilesById = computed(() => new Map(profiles.value.map(profile => [profile._id, profile])))
