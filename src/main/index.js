@@ -2199,6 +2199,15 @@ function runApp() {
           )
           return null
 
+        case DBActions.SUBSCRIPTION_CACHE.UPDATE_CHANNEL_TAGS_BY_CHANNEL:
+          await baseHandlers.subscriptionCache.updateChannelTagsByChannelId(data.channelId, data.channelTags)
+          syncOtherWindows(
+            IpcChannels.SYNC_SUBSCRIPTION_CACHE,
+            event,
+            { event: SyncEvents.SUBSCRIPTION_CACHE.UPDATE_CHANNEL_TAGS_BY_CHANNEL, data }
+          )
+          return null
+
         case DBActions.GENERAL.DELETE_MULTIPLE:
           await baseHandlers.subscriptionCache.deleteMultipleChannels(data)
           syncOtherWindows(

@@ -754,6 +754,10 @@ const customActions = {
             commit('updatePostsCacheByChannel', data)
             break
 
+          case SyncEvents.SUBSCRIPTION_CACHE.UPDATE_CHANNEL_TAGS_BY_CHANNEL:
+            commit('updateChannelTagsByChannel', data)
+            break
+
           case SyncEvents.GENERAL.DELETE_MULTIPLE:
             commit('clearCachesForManyChannels', data)
             break

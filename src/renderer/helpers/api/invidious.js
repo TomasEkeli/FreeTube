@@ -4,6 +4,7 @@ import { isNullOrEmpty } from '../strings'
 import autolinker from 'autolinker'
 import { FormatUtils, Misc, Player } from 'youtubei.js'
 import { parseVideoClipsParams } from './shared'
+import { rememberChannelTags } from '../channelTags'
 
 /** @typedef {{url: string, width: number, height: number}} InvidiousImageObject */
 /** @typedef {{quality: string, url: string, width: number, height: number}} InvidiousThumbnailObject */
@@ -140,6 +141,14 @@ export async function invidiousGetChannelInfo(channelId) {
     if (tab === 'posts') return 'community'
     return tab
   })
+
+  // Invidious passes on the page's tags, but not the creator's keywords that
+  // stand in for them where there are none, nor whether it is an artist's
+  // channel. So only tags it actually has are kept, and the artist flag stays
+  // whatever Local last said.
+  if (Array.isArray(channelInfo.tags) && channelInfo.tags.length > 0) {
+    rememberChannelTags(channelInfo.authorId ?? channelId, channelInfo.author, { tags: channelInfo.tags }, { artistKnown: false })
+  }
 
   return channelInfo
 }

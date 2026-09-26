@@ -441,6 +441,19 @@ class SubscriptionCache {
     )
   }
 
+  /**
+   * The channel's tags alone, leaving every feed on the record as it was. A
+   * channel can have tags before it has anything cached, so the record is
+   * made if there is none.
+   */
+  static updateChannelTagsByChannelId(channelId, channelTags) {
+    return db.subscriptionCache.updateAsync(
+      { _id: channelId },
+      { $set: { channelTags } },
+      { upsert: true }
+    )
+  }
+
   static deleteMultipleChannels(channelIds) {
     return db.subscriptionCache.removeAsync({ _id: { $in: channelIds } }, { multi: true })
   }

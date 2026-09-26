@@ -218,6 +218,13 @@ class SubscriptionCache {
     )
   }
 
+  static updateChannelTagsByChannelId(channelId, channelTags) {
+    return window.ftElectron.dbSubscriptionCache(
+      DBActions.SUBSCRIPTION_CACHE.UPDATE_CHANNEL_TAGS_BY_CHANNEL,
+      { channelId, channelTags }
+    )
+  }
+
   static deleteMultipleChannels(channelIds) {
     return window.ftElectron.dbSubscriptionCache(DBActions.GENERAL.DELETE_MULTIPLE, channelIds)
   }

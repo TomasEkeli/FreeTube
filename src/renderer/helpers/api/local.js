@@ -5,6 +5,7 @@ import { parseLooseJSON } from 'bgutils-js/utils'
 import { SEARCH_CHAR_LIMIT } from '../../../constants'
 import { PlayerCache } from './PlayerCache'
 import { traceWatch } from '../watchTrace'
+import { rememberChannelTags } from '../channelTags'
 import {
   CHANNEL_HANDLE_REGEX,
   calculatePublishedDate,
@@ -1274,6 +1275,8 @@ export async function getLocalChannel(id) {
   let result
   try {
     result = await innertube.getChannel(id)
+
+    rememberChannelTags(result.metadata?.external_id ?? id, result.metadata?.title, result.metadata)
   } catch (error) {
     if (error instanceof Utils.ChannelError) {
       result = {
@@ -1302,6 +1305,8 @@ export async function getLocalChannelVideos(id) {
 
     const videosTab = new YT.Channel(session.actions, response)
     const { id: channelId = id, name, thumbnailUrl } = parseLocalChannelHeader(videosTab, true)
+
+    rememberChannelTags(channelId, name, videosTab.metadata)
 
     let videos
 
@@ -1360,6 +1365,8 @@ export async function getLocalChannelLiveStreams(id) {
 
     let liveStreamsTab = new YT.Channel(session.actions, response)
     const { id: channelId = id, name, thumbnailUrl } = parseLocalChannelHeader(liveStreamsTab, true)
+
+    rememberChannelTags(channelId, name, liveStreamsTab.metadata)
 
     let videos
 
