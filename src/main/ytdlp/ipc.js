@@ -44,6 +44,7 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
     spawn,
     readSetting,
     isExecutableFile,
+    listDirectory: dir => fs.readdir(dir),
     managedDir,
     detector,
     defaultDownloadFolder: () => app.getPath('downloads'),
@@ -110,20 +111,59 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
         ? { ...outcome, installable: outcome.missing.every(tool => coverage[tool]) }
         : outcome
 
-      sendToFreeTube(sender, IpcChannels.YTDLP_DOWNLOAD_OUTCOME, payload)
+      // Every window's downloads panel follows it; only the window that
+      // asked shows the toasts
+      sendToAllFreeTube(sender, IpcChannels.YTDLP_DOWNLOAD_OUTCOME, payload)
     }
 
     // A press during an install waits for it rather than being told the
     // tools are missing, and one during an update waits rather than have
-    // yt-dlp replaced under it; then it goes ahead
+    // yt-dlp replaced under it; then it goes ahead, unless cancelled meanwhile
     const pending = installer.pendingWork()
     if (pending !== null) {
+      waiting.add(videoId)
       report({ type: 'waiting-for-install', ...request })
       await pending
+
+      if (!waiting.delete(videoId)) {
+        report({ type: 'cancelled', ...request })
+        return
+      }
     }
 
     await downloadService.start(request, report)
   }
+
+  /** Downloads waiting for an install or update to finish, by video id */
+  const waiting = new Set()
+
+  ipcMain.on(IpcChannels.YTDLP_CANCEL, (event, videoId) => {
+    // The preload has required a recent click
+    if (!isFreeTubeUrl(event.senderFrame.url) || !isValidVideoId(videoId)) {
+      return
+    }
+
+    // Taken out of the waiting set, it is dropped once the wait is over
+    if (!waiting.delete(videoId)) {
+      downloadService.cancel(videoId)
+    }
+  })
+
+  ipcMain.handle(IpcChannels.YTDLP_LIST_DOWNLOADS, (event) => {
+    if (!isFreeTubeUrl(event.senderFrame.url)) {
+      return
+    }
+
+    return downloadService.list()
+  })
+
+  ipcMain.on(IpcChannels.YTDLP_DISMISS, (event, videoId) => {
+    if (!isFreeTubeUrl(event.senderFrame.url) || !isValidVideoId(videoId)) {
+      return
+    }
+
+    downloadService.dismiss(videoId)
+  })
 
   ipcMain.on(IpcChannels.YTDLP_REVEAL, async (event, videoId) => {
     if (!isFreeTubeUrl(event.senderFrame.url) || !isValidVideoId(videoId)) {
@@ -226,24 +266,24 @@ export function registerYtDlpHandlers({ chooseDefaultFolder }) {
 }
 
 /**
- * Sends to the window that asked, or, when that one has closed since, to
- * another FreeTube window, so that a download finishing after its window has
- * gone is still reported.
+ * Sends to every FreeTube window, marking one of them to show the toast: the
+ * window that asked, or, when that one has closed since, another, so that a
+ * download finishing after its window has gone is still told.
  *
  * @param {import('electron').WebContents} preferred
  * @param {string} channel
- * @param {any} payload
+ * @param {object} payload
  */
-function sendToFreeTube(preferred, channel, payload) {
-  if (!preferred.isDestroyed() && isFreeTubeUrl(preferred.getURL())) {
-    preferred.send(channel, payload)
-    return
+function sendToAllFreeTube(preferred, channel, payload) {
+  const windows = BrowserWindow.getAllWindows()
+    .map(window => window.webContents)
+    .filter(webContents => !webContents.isDestroyed() && isFreeTubeUrl(webContents.getURL()))
+
+  const toastHere = windows.includes(preferred) ? preferred : windows[0]
+
+  for (const webContents of windows) {
+    webContents.send(channel, { ...payload, toast: webContents === toastHere })
   }
-
-  const window = BrowserWindow.getAllWindows()
-    .find(window => !window.webContents.isDestroyed() && isFreeTubeUrl(window.webContents.getURL()))
-
-  window?.webContents.send(channel, payload)
 }
 
 /**

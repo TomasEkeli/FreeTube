@@ -1184,7 +1184,38 @@ Video:
       looping playlists: looping playlists
   yt-dlp:
     Download with yt-dlp: Download with yt-dlp
-    Download started: 'Downloading "{title}" with yt-dlp'
+    Download started: 'Downloading "{title}" to {path}'
+    Resuming download: 'Resuming download of "{title}" to {path}'
+    Download cancelled: 'Cancelled "{title}". Press download again to resume'
+    Show in folder: 'Show in folder: {path}'
+    Download again: Download again
+    Downloads:
+      Downloads: Downloads
+      Downloads running: 'Downloads, {count} running'
+      Saving to: 'Saving to {path}'
+      Saved to: 'Saved to {path}'
+      Saving into folder: 'Saving into {path}'
+      Percent of size: '{percent}% of {size}'
+      Speed: '{speed}/s'
+      Time left: '{time} left'
+      Cancel: Cancel
+      Show in folder: Show in Folder
+      Dismiss: Dismiss
+      Nothing here: No downloads
+      Status:
+        Waiting: Waiting for the tools to be installed…
+        Preparing: Preparing…
+        Resuming: Resuming…
+        Downloading: Downloading
+        Downloading video: 'Downloading video, part {part} of {parts}'
+        Downloading audio: 'Downloading audio, part {part} of {parts}'
+        Downloading part: 'Downloading part {part} of {parts}'
+        Merging: Merging video and audio…
+        Processing: Processing…
+        Finished: Finished
+        Cancelled: Cancelled. Press download again to resume
+        Failed: 'Failed: {reason}'
+        Failed with exit code: 'Failed, yt-dlp stopped with exit code {exitCode}'
     Already downloading: '"{title}" is already downloading'
     Download finished: 'Downloaded "{title}". Click to show the file'
     Download failed: 'Could not download "{title}": {reason}'

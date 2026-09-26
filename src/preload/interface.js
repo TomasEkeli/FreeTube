@@ -190,7 +190,7 @@ export default {
   },
 
   /**
-   * @param {(outcome: import('../main/ytdlp/downloadService').DownloadOutcome) => void} handler
+   * @param {(outcome: import('../main/ytdlp/downloadService').DownloadOutcome & { toast: boolean }) => void} handler
    */
   handleYtDlpDownloadOutcome: (handler) => {
     ipcRenderer.on(IpcChannels.YTDLP_DOWNLOAD_OUTCOME, (_, outcome) => {
@@ -203,6 +203,30 @@ export default {
    */
   ytDlpReveal: (videoId) => {
     ipcRenderer.send(IpcChannels.YTDLP_REVEAL, videoId)
+  },
+
+  /**
+   * @param {string} videoId
+   */
+  ytDlpCancel: (videoId) => {
+    // require the user to have interacted with the page recently
+    if (navigator.userActivation.isActive) {
+      ipcRenderer.send(IpcChannels.YTDLP_CANCEL, videoId)
+    }
+  },
+
+  /**
+   * @returns {Promise<{ downloads: import('../main/ytdlp/downloadService').DownloadSnapshot[], finished: Record<string, string | null> }>}
+   */
+  ytDlpListDownloads: () => {
+    return ipcRenderer.invoke(IpcChannels.YTDLP_LIST_DOWNLOADS)
+  },
+
+  /**
+   * @param {string} videoId
+   */
+  ytDlpDismiss: (videoId) => {
+    ipcRenderer.send(IpcChannels.YTDLP_DISMISS, videoId)
   },
 
   /**

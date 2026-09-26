@@ -1,0 +1,12 @@
+.ytDlpDownloadButton {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Around the button, not over it: clicks go through to the button */
+.ring {
+  position: absolute;
+  inset: -3px;
+  inline-size: calc(100% + 6px);
+  block-size: calc(100% + 6px);
+}

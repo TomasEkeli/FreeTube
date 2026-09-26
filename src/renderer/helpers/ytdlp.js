@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 
 import i18n from '../i18n/index'
 import { showToast } from './utils'
+import { applyOutcome, loadYtDlpDownloads } from './ytdlpDownloads'
 
 /**
  * The renderer's half of download with yt-dlp: asking main to download, and
@@ -47,7 +48,18 @@ export function setupYtDlpOutcomeToasts() {
     return
   }
 
-  window.ftElectron.handleYtDlpDownloadOutcome(showOutcome)
+  window.ftElectron.handleYtDlpDownloadOutcome((outcome) => {
+    // Every window's panel follows every download; one window tells of it
+    applyOutcome(outcome)
+
+    if (outcome.toast) {
+      showOutcome(outcome)
+    }
+  })
+
+  loadYtDlpDownloads().catch((error) => {
+    console.error('Could not load the yt-dlp downloads', error)
+  })
 
   window.ftElectron.handleYtDlpInstallProgress((progress) => {
     ytDlpInstallState.progress = progress
@@ -193,8 +205,20 @@ function showOutcome(outcome) {
   const title = outcome.title
 
   switch (outcome.type) {
-    case 'started':
-      showToast(t('Video.yt-dlp.Download started', { title }))
+    case 'started': {
+      // Where it is going, as soon as yt-dlp has said; the folder until then
+      const path = outcome.download.destination ?? outcome.download.folder
+      showToast(
+        outcome.download.resuming
+          ? t('Video.yt-dlp.Resuming download', { title, path })
+          : t('Video.yt-dlp.Download started', { title, path }),
+        LONG_TOAST_MS
+      )
+      break
+    }
+
+    case 'cancelled':
+      showToast(t('Video.yt-dlp.Download cancelled', { title }))
       break
 
     case 'already-running':
