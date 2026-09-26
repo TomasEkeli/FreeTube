@@ -289,7 +289,7 @@ export function watchedCategories(historyEntries) {
  * @property {Evidence} evidence how it was decided
  */
 
-/** How many of a channel's recent videos are looked at when learning about it */
+/** How many of a channel's recent videos are looked at when probing it */
 export const VIDEO_SAMPLE_SIZE = 3
 
 /**
@@ -355,17 +355,17 @@ export function videoSample(videoId, category, keywords, channelName) {
 }
 
 /**
- * The channels worth learning about, in the order to learn them: the pool
- * first, as that is what most wants sorting, then the channels in one profile,
- * which make their profiles recognisable. Each alphabetically. A channel in
- * two or more profiles is left to the duplicates UI.
+ * The channels worth probing of all of them, in the order to probe them: the
+ * pool first, as that is what most wants sorting, then the channels in one
+ * profile, which make their profiles recognisable. Each alphabetically. A
+ * channel in two or more profiles is left to the duplicates UI.
  * @param {Profile[]} profileList
  * @param {Record<string, ChannelTags>} channelTags
  * @param {Record<string, VideoSamples>} videoSamples
  * @param {Intl.Collator} collator
  * @returns {Channel[]}
  */
-export function channelsToLearn(profileList, channelTags, videoSamples, collator) {
+export function channelsToProbe(profileList, channelTags, videoSamples, collator) {
   const memberships = channelMemberships(profileList)
   const subscribed = sortChannels(uniqueChannels(primaryProfile(profileList)?.subscriptions ?? []), collator)
   const wanted = subscribed.filter(channel => needsVideoSamples(channel, channelTags?.[channel.id], videoSamples?.[channel.id]))

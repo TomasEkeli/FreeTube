@@ -80,7 +80,7 @@
 }
 
 /* As small as the column heading's Select all, which it sits beside */
-.learnButton {
+.probeButton {
   flex: 0 0 auto;
   padding-block: 3px;
   padding-inline: 8px;
@@ -93,13 +93,9 @@
   cursor: pointer;
 }
 
-.learnButton:hover,
-.learnButton:focus-visible {
+.probeButton:hover,
+.probeButton:focus-visible {
   background-color: color-mix(in srgb, var(--primary-color) 38%, transparent);
-}
-
-.coverage .learnButton {
-  margin-inline-start: 8px;
 }
 
 .noSuggestions :deep(.btn) {

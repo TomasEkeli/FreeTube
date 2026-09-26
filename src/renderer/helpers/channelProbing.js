@@ -7,9 +7,9 @@ import { enqueueSubscriptionJob, subscriptionWorkerProgress, LANE_ENRICHMENT, LA
 import { VIDEO_SAMPLE_SIZE, videoSample } from './profileSuggestions'
 
 /**
- * Learning about channels on request, from the Channels page: for each channel
- * FreeTube knows too little about, a look at a few of its recent videos, whose
- * categories and tags then feed the suggestions.
+ * Probing channels on request, from the Channels page: for each channel asked
+ * about that FreeTube knows too little about, a look at a few of its recent
+ * videos, whose categories and tags then feed the suggestions.
  *
  * It goes carefully, as it asks YouTube for things nobody is waiting on:
  *
@@ -23,13 +23,17 @@ import { VIDEO_SAMPLE_SIZE, videoSample } from './profileSuggestions'
  * channels cost one request per video and nothing more. A channel with none
  * cached costs one more, for its videos tab, which also records its tags.
  *
+ * Channels are probed one at a time, in the order they were asked for: asking
+ * for a second column's while the first's are going queues them behind. Each
+ * column can take its own back out of the queue.
+ *
  * It lives here rather than on the page, so that leaving the page does not
- * stop it. What it learns is kept on each channel's record as it goes, so
- * stopping loses nothing, and starting again carries on where it stopped.
+ * stop it. What it finds is kept on each channel's record as it goes, so
+ * stopping loses nothing, and probing again carries on where it stopped.
  */
 
 /** The pause between two of its requests, over and above the lane's own */
-export const LEARNING_GAP_MS = 2000
+export const PROBE_GAP_MS = 2000
 
 /** How often to look again whether a refresh has finished */
 const REFRESH_POLL_MS = 1000
@@ -44,21 +48,31 @@ let failuresInARow = 0
 
 const progress = reactive({
   running: false,
-  /** Channels finished in this run */
+  /** Channels probed since it last started */
   done: 0,
-  /** Channels this run set out to learn about */
-  total: 0,
-  /** @type {'finished' | 'stopped' | 'refused' | null} how the last run ended */
+  /** @type {'finished' | 'refused' | null} how the last run ended */
   ended: null
 })
 
-/** How learning is going, for the page to read. Mutated only in here. */
-export const channelLearningProgress = readonly(progress)
+/** How probing is going, for the page to read. Mutated only in here. */
+export const channelProbingProgress = readonly(progress)
 
-let stopRequested = false
+/**
+ * The channels still to probe, the one being probed first, in order
+ * @type {import('./channelsOverview').Channel[]}
+ */
+const queue = []
 
-function isStopRequested() {
-  return stopRequested
+/** The ids of the channels in the queue, for the page to ask about */
+const queued = reactive(new Set())
+
+/**
+ * Whether a channel is waiting to be probed, or being probed now.
+ * @param {string} channelId
+ * @returns {boolean}
+ */
+export function isProbing(channelId) {
+  return queued.has(channelId)
 }
 
 /**
@@ -69,8 +83,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/** Waits for the subscriptions to be left alone: a refresh always comes first */
-async function waitForQuiet() {
+/**
+ * Waits for the subscriptions to be left alone: a refresh always comes first.
+ * @param {() => boolean} isStopped
+ */
+async function waitForQuiet(isStopped) {
   const busy = () => [LANE_REFRESH, LANE_RECOVERY].some(lane => {
     const counts = subscriptionWorkerProgress.lanes[lane]
 
@@ -78,7 +95,7 @@ async function waitForQuiet() {
   })
 
   // Stopping is asked for from outside, while this waits
-  while (busy() && !isStopRequested()) {
+  while (busy() && !isStopped()) {
     await sleep(REFRESH_POLL_MS)
   }
 }
@@ -103,12 +120,13 @@ class Refused extends Error {}
  * @param {string} key
  * @param {string} label
  * @param {() => Promise<T>} request
+ * @param {() => boolean} isStopped
  * @returns {Promise<T | null>}
  */
-async function ask(key, label, request) {
-  await waitForQuiet()
+async function ask(key, label, request, isStopped) {
+  await waitForQuiet(isStopped)
 
-  if (stopRequested) { return null }
+  if (isStopped()) { return null }
 
   let result = null
   let failure = null
@@ -125,7 +143,7 @@ async function ask(key, label, request) {
     }
   })
 
-  await sleep(LEARNING_GAP_MS)
+  await sleep(PROBE_GAP_MS)
 
   if (failure !== null) {
     failuresInARow++
@@ -170,21 +188,23 @@ function usingInvidious() {
 }
 
 /**
- * Looks at one channel's recent videos and keeps what they say.
+ * Looks at one channel's recent videos and keeps what they say. Gives up, with
+ * nothing kept, if the channel is taken out of the queue meanwhile.
  * @param {import('./channelsOverview').Channel} channel
  */
-async function learnAbout(channel) {
+async function probe(channel) {
   const label = channel.name ?? channel.id
+  const isStopped = () => !queued.has(channel.id)
   let videoIds = cachedVideoIds(channel.id)
 
   if (videoIds.length === 0) {
-    const listed = await ask(`learn-channel-${channel.id}`, label, async () => {
+    const listed = await ask(`probe-channel-${channel.id}`, label, async () => {
       return usingInvidious()
         ? (await getInvidiousChannelVideos(channel.id))?.videos
         : (await getLocalChannelVideos(channel.id))?.videos
-    })
+    }, isStopped)
 
-    if (stopRequested) { return }
+    if (isStopped()) { return }
 
     videoIds = (listed ?? []).map(video => video.videoId).filter(id => typeof id === 'string').slice(0, VIDEO_SAMPLE_SIZE)
   }
@@ -192,11 +212,11 @@ async function learnAbout(channel) {
   const videos = []
 
   for (const videoId of videoIds) {
-    const metadata = await ask(`learn-video-${videoId}`, label, () => {
+    const metadata = await ask(`probe-video-${videoId}`, label, () => {
       return usingInvidious() ? invidiousGetVideoMetadata(videoId) : getLocalVideoMetadata(videoId)
-    })
+    }, isStopped)
 
-    if (stopRequested) { return }
+    if (isStopped()) { return }
 
     if (metadata !== null) {
       videos.push(videoSample(videoId, metadata.category, metadata.keywords, channel.name))
@@ -206,46 +226,76 @@ async function learnAbout(channel) {
   // Kept even when nothing was found, so that the channel is not asked about
   // again: a channel with no videos has nothing more to say
   await store.dispatch('updateVideoSamples', { channelId: channel.id, videos })
+
+  progress.done++
 }
 
-/**
- * Learns about the channels given, in order, one at a time. Does nothing
- * while a run is already going.
- * @param {import('./channelsOverview').Channel[]} channels
- */
-export async function learnAboutChannels(channels) {
-  if (progress.running || channels.length === 0) { return }
-
-  stopRequested = false
-  failuresInARow = 0
+async function run() {
   progress.running = true
   progress.done = 0
-  progress.total = channels.length
   progress.ended = null
+  failuresInARow = 0
 
   try {
-    for (const channel of channels) {
-      if (stopRequested) { break }
+    while (queue.length > 0) {
+      const channel = queue[0]
 
-      await learnAbout(channel)
+      await probe(channel)
 
-      if (!stopRequested) {
-        progress.done++
-      }
+      // It may have been taken out of the queue while it was being probed
+      const index = queue.indexOf(channel)
+
+      if (index !== -1) { queue.splice(index, 1) }
+
+      queued.delete(channel.id)
     }
 
-    progress.ended = stopRequested ? 'stopped' : 'finished'
+    progress.ended = 'finished'
   } catch (error) {
     if (!(error instanceof Refused)) { throw error }
 
-    console.warn('Learning about channels stopped, as YouTube refused a request', error.message)
+    console.warn('Probing channels stopped, as YouTube refused a request', error.message)
     progress.ended = 'refused'
+    queue.length = 0
+    queued.clear()
   } finally {
     progress.running = false
   }
 }
 
-/** Stops after the request in flight, keeping everything learned so far */
-export function stopLearning() {
-  stopRequested = true
+/**
+ * Probes the channels given, after any already waiting. Those already waiting
+ * keep their place.
+ * @param {import('./channelsOverview').Channel[]} channels
+ */
+export function probeChannels(channels) {
+  for (const channel of channels) {
+    if (queued.has(channel.id)) { continue }
+
+    queued.add(channel.id)
+    queue.push(channel)
+  }
+
+  if (!progress.running && queue.length > 0) {
+    run()
+  }
+}
+
+/**
+ * Takes channels back out of the queue. One being probed stops after the
+ * request in flight, with nothing of it kept, and is probed afresh next time.
+ * @param {string[]} channelIds
+ */
+export function stopProbing(channelIds) {
+  const stopping = new Set(channelIds)
+
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (stopping.has(queue[i].id)) {
+      queue.splice(i, 1)
+    }
+  }
+
+  for (const channelId of stopping) {
+    queued.delete(channelId)
+  }
 }

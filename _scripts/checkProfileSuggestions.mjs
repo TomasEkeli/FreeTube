@@ -14,7 +14,7 @@ import {
   addKeep,
   channelCategory,
   channelFit,
-  channelsToLearn,
+  channelsToProbe,
   channelTagsChanged,
   FIT_THRESHOLD,
   hasCharacter,
@@ -584,7 +584,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   check('a placement into a profile that is gone is ignored', idsIn(proposeProfiles({ profileList, watched, placements: { b: { key: 'profile:gone', from: UNASSIGNED } }, collator }), 'category:Comedy') === 'b')
 }
 
-// Learning from a channel's recent videos
+// Probing a channel's recent videos
 {
   const samples = (...videos) => ({ sampledAt: 1, videos: videos.map(([category, keywords = []], i) => ({ videoId: `v${i}`, category, keywords })) })
   const plain = { id: 'c', name: 'Some Channel' }
@@ -618,8 +618,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     profile('p1', 'One', [c, d]),
     profile('p2', 'Two', [d])
   ]
-  const learn = channelsToLearn(profileList, {}, { a: { sampledAt: 1, videos: [] } }, collator)
-  check('learning takes the pool first, then channels in one profile, skipping the rest', learn.map(channel => channel.id).join(',') === 'b,c')
+  const learn = channelsToProbe(profileList, {}, { a: { sampledAt: 1, videos: [] } }, collator)
+  check('probing takes the pool first, then channels in one profile, skipping the rest', learn.map(channel => channel.id).join(',') === 'b,c')
 
   const result = proposeProfiles({
     profileList: [profile(MAIN_PROFILE_ID, 'All Channels', [a, b])],

@@ -138,16 +138,6 @@
         class="coverage"
       >
         {{ t('Channels.Overview.Suggestions.Coverage', suggestions.coverage) }}
-        <!-- The pool's heading has this, but the pool is not always there -->
-        <button
-          v-if="!columns.some(column => column.kind === 'pool') && (learning.running || channelsNeedingLearning.length > 0)"
-          type="button"
-          class="learnButton"
-          :title="learnTitle"
-          @click="toggleLearning"
-        >
-          {{ learnLabel }}
-        </button>
       </p>
       <!-- Opened and closed columns grow in and fade, fade and fold away -->
       <TransitionGroup
@@ -197,13 +187,13 @@
         >
           <template #header-actions>
             <button
-              v-if="column.kind === 'pool' && (learning.running || channelsNeedingLearning.length > 0)"
+              v-if="probeStates.has(column.key)"
               type="button"
-              class="learnButton"
-              :title="learnTitle"
-              @click="toggleLearning"
+              class="probeButton"
+              :title="probeStates.get(column.key).title"
+              @click="toggleProbing(column)"
             >
-              {{ learnLabel }}
+              {{ probeStates.get(column.key).label }}
             </button>
           </template>
         </ChannelsOverviewColumn>
@@ -229,12 +219,9 @@
           <p>{{ t('Channels.Overview.Suggestions.None Seed') }}</p>
           <p>{{ t('Channels.Overview.Suggestions.None Rejected') }}</p>
           <FtButton
-            v-if="learning.running || channelsNeedingLearning.length > 0"
-            :label="learning.running
-              ? learnLabel
-              : t('Channels.Overview.Suggestions.Learn About', { count: channelsNeedingLearning.length }, channelsNeedingLearning.length)"
-            :title="learnTitle"
-            @click="toggleLearning"
+            v-if="channelsNeedingProbing.length > 0"
+            :label="t('Channels.Overview.Suggestions.Probe All', { count: channelsNeedingProbing.length }, channelsNeedingProbing.length)"
+            @click="probeChannels(channelsNeedingProbing)"
           />
         </section>
       </TransitionGroup>
@@ -309,8 +296,8 @@ import { getLocalChannel, parseLocalChannelHeader } from '../../helpers/api/loca
 import { startChannelDrag } from '../../helpers/channelDragAndDrop'
 import { useProfilePaletteEditing } from '../../composables/useProfilePaletteEditing'
 import { useProfileSuggestions } from '../../composables/useProfileSuggestions'
-import { channelLearningProgress, learnAboutChannels, stopLearning } from '../../helpers/channelLearning'
-import { channelsToLearn } from '../../helpers/profileSuggestions'
+import { channelProbingProgress, isProbing, probeChannels, stopProbing } from '../../helpers/channelProbing'
+import { channelsToProbe, needsVideoSamples } from '../../helpers/profileSuggestions'
 import { calculateColorLuminance, colors } from '../../helpers/colors'
 import { ctrlFHandler, deepCopy, showToast } from '../../helpers/utils'
 import {
@@ -471,51 +458,85 @@ const {
   videoSamples
 } = useProfileSuggestions({ profileList, collator })
 
-const learning = channelLearningProgress
-
 /**
- * The channels FreeTube knows too little about, which Learn would look at:
- * the pool first, then those in one profile.
+ * Every channel FreeTube knows too little about, which the Probe on the
+ * no-suggestions text would look at: the pool first, then those in one profile.
  */
-const channelsNeedingLearning = computed(() => {
-  return channelsToLearn(profileList.value, channelTags.value, videoSamples.value, collator.value)
-})
-
-const learnLabel = computed(() => {
-  return learning.running
-    ? t('Channels.Overview.Suggestions.Learning', { done: learning.done, total: learning.total })
-    : t('Channels.Overview.Suggestions.Learn')
-})
-
-const learnTitle = computed(() => {
-  if (learning.running) { return t('Channels.Overview.Suggestions.Learning Hint') }
-
-  const count = channelsNeedingLearning.value.length
-
-  return t('Channels.Overview.Suggestions.Learn Hint', { count }, count)
+const channelsNeedingProbing = computed(() => {
+  return channelsToProbe(profileList.value, channelTags.value, videoSamples.value, collator.value)
 })
 
 /**
- * Starts looking at the recent videos of the channels FreeTube knows too
- * little about, or stops. It goes on in the background, off the page too,
- * and shows what it learns in the suggestions as it goes.
+ * The Probe on each column that has anything to probe, by column key: the
+ * pool's and each profile's, for the channels in it and no others. While any
+ * of them are waiting or being probed, it stops them instead.
+ * @type {import('vue').ComputedRef<Map<string, { label: string, title: string }>>}
  */
-function toggleLearning() {
-  if (learning.running) {
-    stopLearning()
-    return
+const probeStates = computed(() => {
+  const states = new Map()
+
+  for (const column of columns.value) {
+    if (column.kind === 'proposal') { continue }
+
+    const probing = column.allChannels.filter(channel => isProbing(channel.id)).length
+
+    if (probing > 0) {
+      states.set(column.key, {
+        label: t('Channels.Overview.Suggestions.Probing', { count: probing }),
+        title: t('Channels.Overview.Suggestions.Probing Hint')
+      })
+      continue
+    }
+
+    const count = probeCandidates(column).length
+
+    if (count > 0) {
+      states.set(column.key, {
+        label: t('Channels.Overview.Suggestions.Probe'),
+        title: t('Channels.Overview.Suggestions.Probe Hint', { count }, count)
+      })
+    }
   }
 
-  const channels = channelsNeedingLearning.value
+  return states
+})
 
-  learnAboutChannels(channels).then(() => {
-    if (learning.ended === 'refused') {
-      showToast(t('Channels.Overview.Suggestions.Learn Refused'))
-    } else if (learning.ended === 'finished') {
-      showToast(t('Channels.Overview.Suggestions.Learn Finished', { count: learning.done }, learning.done))
-    }
+/**
+ * A column's channels FreeTube knows too little about
+ * @param {Column} column
+ * @returns {Channel[]}
+ */
+function probeCandidates(column) {
+  return column.allChannels.filter(channel => {
+    return needsVideoSamples(channel, channelTags.value[channel.id], videoSamples.value[channel.id])
   })
 }
+
+/**
+ * Starts probing a column's channels, after any already going, or stops them.
+ * It goes on in the background, off the page too, and what it finds shows in
+ * the suggestions as it goes.
+ * @param {Column} column
+ */
+function toggleProbing(column) {
+  const probing = column.allChannels.filter(channel => isProbing(channel.id))
+
+  if (probing.length > 0) {
+    stopProbing(probing.map(channel => channel.id))
+  } else {
+    probeChannels(probeCandidates(column))
+  }
+}
+
+watch(() => channelProbingProgress.running, (running) => {
+  if (running) { return }
+
+  if (channelProbingProgress.ended === 'refused') {
+    showToast(t('Channels.Overview.Suggestions.Probe Refused'))
+  } else if (channelProbingProgress.ended === 'finished' && channelProbingProgress.done > 0) {
+    showToast(t('Channels.Overview.Suggestions.Probe Finished', { count: channelProbingProgress.done }, channelProbingProgress.done))
+  }
+})
 
 /**
  * The pool as drawn: while suggestions are shown, only the channels no
